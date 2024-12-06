@@ -35,7 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 //go:embed hdbbackint.sh
@@ -135,7 +135,7 @@ func (b *InstallBackint) Run(ctx context.Context, runOpts *onetime.RunOptions) s
 		b.SID = os.Getenv("SAPSYSTEMNAME")
 		log.CtxLogger(ctx).Warnf("sid defaulted to $SAPSYSTEMNAME: %q", b.SID)
 		if b.SID == "" {
-			b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", fmt.Errorf("sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:"+b.Usage()))
+			b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", fmt.Errorf("%s", "sid is not defined. Set the sid command line argument, or ensure $SAPSYSTEMNAME is set. Usage:"+b.Usage()))
 			return subcommands.ExitUsageError
 		}
 	}

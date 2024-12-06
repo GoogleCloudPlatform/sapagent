@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {
@@ -204,7 +204,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptionKeyAndKmsKeyDefined",
+			name:   "EncryptionKeyAndKmsKeyDefined",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:        "testUser",
@@ -236,7 +236,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptedParallelBackupEncryptionKey",
+			name:   "EncryptedParallelBackupEncryptionKey",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
@@ -252,7 +252,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptedParallelBackupKmsKey",
+			name:   "EncryptedParallelBackupKmsKey",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:          "testUser",
@@ -284,7 +284,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptedXMLMultipartBackupEncryptionKey",
+			name:   "EncryptedXMLMultipartBackupEncryptionKey",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:             "testUser",
@@ -300,7 +300,7 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptedXMLMultipartBackupKmsKey",
+			name:   "EncryptedXMLMultipartBackupKmsKey",
 			params: defaultParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:             "testUser",
@@ -663,7 +663,7 @@ func TestLegacyParameters(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name:   "EncyptionKeyAndKmsKeyDefined",
+			name:   "EncryptionKeyAndKmsKeyDefined",
 			params: defaultLegacyParameters,
 			want: &bpb.BackintConfiguration{
 				UserId:        "testUser",

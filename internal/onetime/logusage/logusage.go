@@ -27,7 +27,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -68,8 +68,8 @@ func (l *LogUsage) SetFlags(fs *flag.FlagSet) {
 	fs.IntVar(&l.action, "a", 0, "usage action code")
 	fs.IntVar(&l.usageError, "error", 0, "usage error code")
 	fs.IntVar(&l.usageError, "e", 0, "usage error code")
-	fs.StringVar(&l.image, "image", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
-	fs.StringVar(&l.image, "i", "", "the image url of the compute instance(optional), default value is retreived from metadata)")
+	fs.StringVar(&l.image, "image", "", "the image url of the compute instance(optional), default value is retrieved from metadata)")
+	fs.StringVar(&l.image, "i", "", "the image url of the compute instance(optional), default value is retrieved from metadata)")
 	fs.StringVar(&l.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/logusage.log")
 	fs.BoolVar(&l.help, "h", false, "help")
 }
@@ -97,7 +97,7 @@ func (l *LogUsage) logUsageHandler(cloudProps *iipb.CloudProperties) subcommands
 		log.Print("A usage status value is required.")
 		return subcommands.ExitUsageError
 	case l.status == string(usagemetrics.StatusUpdated) && l.agentVersion == "":
-		log.Print("For status UPDATED, either PriorVersion or Agent Version is requried.")
+		log.Print("For status UPDATED, either PriorVersion or Agent Version is required.")
 		return subcommands.ExitUsageError
 	case l.status == string(usagemetrics.StatusError) && l.usageError <= 0:
 		log.Print("For status ERROR, an error code is required.")

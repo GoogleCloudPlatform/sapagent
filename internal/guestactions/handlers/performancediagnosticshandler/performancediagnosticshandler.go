@@ -24,26 +24,27 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the performance diagnostics guest action has been handled.
 const RestartAgent = false
 
 // PerformanceDiagnosticsHandler is the handler for the performance diagnostics command.
-func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	return runCommand(ctx, command, cp, commandlineexecutor.ExecuteCommand)
 }
 
-func runCommand(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
+func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPPerformanceDiagnosticsCommand)
 	d := &performancediagnostics.Diagnose{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), d)
-	message, exitStatus := d.Run(ctx, log.Parameters{}, onetime.CreateRunOptions(cp, true), exec)
+	message, exitStatus := d.Run(ctx, log.Parameters{}, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), exec)
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   message,

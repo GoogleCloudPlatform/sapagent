@@ -25,8 +25,8 @@ import (
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 )
 
 func TestGroupRestore(t *testing.T) {
@@ -324,7 +324,7 @@ func TestCGPath(t *testing.T) {
 		},
 		{
 			name:     "Failure2",
-			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my"},
+			policies: []string{"https://www.googleapis.com/invalid/text/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my"},
 			want:     "",
 		},
 	}

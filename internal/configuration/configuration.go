@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -343,7 +343,7 @@ func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringC
 	err := protojson.Unmarshal(defaultHMQueriesContent, defaultConfig)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedDefaultHANAMonitoringQueriesFile)
-		log.Logger.Errorw("Invalid content in the embeded default_queries.json file", "content", string(defaultHMQueriesContent), "error", err)
+		log.Logger.Errorw("Invalid content in the embedded default_queries.json file", "content", string(defaultHMQueriesContent), "error", err)
 		return nil
 	}
 	if config == nil {

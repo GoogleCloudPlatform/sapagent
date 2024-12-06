@@ -27,23 +27,24 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the gcbdr-discovery guest action has been handled.
 const RestartAgent = false
 
 // GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.
-func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
 	d := &discovery.Discovery{}
-	applications, exitStatus := d.Run(ctx, onetime.CreateRunOptions(cp, true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
+	applications, exitStatus := d.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
 	if exitStatus != subcommands.ExitSuccess {
 		result := &gpb.CommandResult{
 			Command:  command,

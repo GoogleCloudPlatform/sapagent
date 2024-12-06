@@ -25,27 +25,28 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the supportbundle guest action has been handled.
 const RestartAgent = false
 
 // SupportBundleHandler is the handler for support bundle command.
-func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	return runCommand(ctx, command, cp, commandlineexecutor.ExecuteCommand)
 }
 
-func runCommand(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
+func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPSupportBundleCommand)
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := &supportbundle.SupportBundle{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), sb)
-	msg, exitStatus := sb.Run(ctx, onetime.CreateRunOptions(cp, true), exec)
+	msg, exitStatus := sb.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), exec)
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   msg,

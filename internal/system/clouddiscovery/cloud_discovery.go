@@ -30,8 +30,8 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/file/v1"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
 
 const (

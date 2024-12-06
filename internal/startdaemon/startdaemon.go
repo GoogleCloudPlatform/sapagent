@@ -59,11 +59,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/wlm"
+
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -306,7 +308,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		return
 	}
 
-	wlmService, err := gce.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
+	wlmService, err := wlm.NewWLMClient(ctx, d.config.GetCollectionConfiguration().GetDataWarehouseEndpoint())
 	if err != nil {
 		log.Logger.Errorw("Error creating WLM Client", "error", err)
 		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)

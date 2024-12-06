@@ -34,9 +34,9 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
 
 const (
@@ -2128,8 +2128,8 @@ func TestDiscoverHANA(t *testing.T) {
 		},
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
-				StdErr:   "Lanscape error",
-				Error:    errors.New("Lanscape error"),
+				StdErr:   "Landscape error",
+				Error:    errors.New("Landscape error"),
 				ExitCode: 1,
 			}
 		},

@@ -26,8 +26,8 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // ParseBasePath parses the base path from the global.ini file.
@@ -320,5 +320,5 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 			return k.Key, nil
 		}
 	}
-	return "", fmt.Errorf("no matching key for for the disk")
+	return "", fmt.Errorf("no matching key for the disk")
 }

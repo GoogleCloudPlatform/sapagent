@@ -30,8 +30,8 @@ import (
 
 	"github.com/SAP/go-hdb/driver"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 var (
@@ -219,7 +219,7 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 	})
 	if result.Error != nil || result.ExitCode != 0 {
 		usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
-		return nil, fmt.Errorf(result.StdErr)
+		return nil, fmt.Errorf("%s", result.StdErr)
 	}
 
 	result.StdOut = strings.TrimSuffix(result.StdOut, "\n")

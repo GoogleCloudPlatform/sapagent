@@ -26,8 +26,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 )
@@ -664,7 +664,7 @@ func TestEvaluate(t *testing.T) {
 				t.Errorf("Evaluate() returned unexpected value got %s want %s", gotValue, test.wantValue)
 			}
 			if gotResult != test.wantResult {
-				t.Errorf("Evaluate() returned unexpcted result got %t want %t", gotResult, test.wantResult)
+				t.Errorf("Evaluate() returned unexpected result got %t want %t", gotResult, test.wantResult)
 			}
 		})
 	}

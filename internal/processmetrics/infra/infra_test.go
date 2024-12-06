@@ -36,8 +36,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {
@@ -760,7 +760,7 @@ func TestEnumToInt(t *testing.T) {
 		m:    map[string]int64{"item1": 1, "item2": 2},
 		want: 2,
 	}, {
-		s:    "nonexistant",
+		s:    "nonexistent",
 		m:    map[string]int64{"item1": 1, "item2": 2},
 		want: 0,
 	}}

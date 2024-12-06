@@ -34,7 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 )

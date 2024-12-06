@@ -24,7 +24,7 @@ import (
 
 	"github.com/google/subcommands"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 func TestConfigureHandler(t *testing.T) {

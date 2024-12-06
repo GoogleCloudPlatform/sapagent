@@ -38,7 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // HanaChangeDiskType has args for changedisktype subcommands.
@@ -129,7 +129,7 @@ func (c *HanaChangeDiskType) validateParams(os string, cp *ipb.CloudProperties) 
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
 	case c.sid == "" || c.disk == "" || c.diskZone == "":
-		return fmt.Errorf("required arguments not passed. Usage:" + c.Usage())
+		return fmt.Errorf("%s", "required arguments not passed. Usage:"+c.Usage())
 	case c.newdiskName == "":
 		return fmt.Errorf("required arguments not passed. Usage: %s", c.Usage())
 	}

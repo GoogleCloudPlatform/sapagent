@@ -26,18 +26,19 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the configure instance guest action has been handled.
 const RestartAgent = false
 
 // ConfigureInstanceHandler is the handler for configure instance command.
-func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPConfigureInstanceCommand)
 	log.CtxLogger(ctx).Debugw("Configure Instance handler called.", "command", prototext.Format(command))
 	c := &configureinstance.ConfigureInstance{
@@ -46,7 +47,7 @@ func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *ipb
 		ExecuteFunc: commandlineexecutor.ExecuteCommand,
 	}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
-	runOptions := onetime.CreateRunOptions(cp, true)
+	runOptions := onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true)
 	exitStatus, message := c.Run(ctx, runOptions)
 	result := &gpb.CommandResult{
 		Command:  command,

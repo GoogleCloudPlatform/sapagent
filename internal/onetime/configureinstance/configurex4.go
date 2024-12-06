@@ -23,8 +23,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 var (
@@ -109,7 +109,7 @@ func (c *ConfigureInstance) configureX4SLES(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if !strings.Contains(string(osRelease), "SLES") {
-		log.CtxLogger(ctx).Info("SLES OS not detected, skiping specific configurations.")
+		log.CtxLogger(ctx).Info("SLES OS not detected, skipping specific configurations.")
 		return false, nil
 	}
 	log.CtxLogger(ctx).Info("SLES OS detected, continuing with specific configurations.")
@@ -219,7 +219,7 @@ func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if !strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
-		log.CtxLogger(ctx).Info("RHEL OS not detected, skiping specific configurations.")
+		log.CtxLogger(ctx).Info("RHEL OS not detected, skipping specific configurations.")
 		return false, nil
 	}
 	log.CtxLogger(ctx).Info("RHEL OS detected, continuing with specific configurations.")

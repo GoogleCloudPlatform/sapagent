@@ -25,7 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {
@@ -76,7 +76,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	m.SetFlags(fs)
 
-	flags := []string{"sid", "enable", "show",  "h", "loglevel", "log-path"}
+	flags := []string{"sid", "enable", "show", "h", "loglevel", "log-path"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

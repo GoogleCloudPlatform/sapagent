@@ -41,12 +41,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
-	logfake "github.com/GoogleCloudPlatform/sapagent/shared/log/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
 
 const (

@@ -24,22 +24,23 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates if the agent should be restarted after the backint guest action has been handled.
 const RestartAgent = false
 
 // BackintHandler is the handler for the backint command.
-func BackintHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func BackintHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPBackintCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	b := &backint.Backint{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
-	msg, exitStatus := b.Run(ctx, onetime.CreateRunOptions(cp, true))
+	msg, exitStatus := b.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
 	log.CtxLogger(ctx).Debugw("Handled command result", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,

@@ -35,8 +35,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 type (
@@ -208,7 +208,7 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (
 		return subcommands.ExitUsageError, `ConfigureInstance Usage Error: hyperThreading must be one of ["on", "off"]`
 	}
 	if c.MachineType == "" {
-		c.MachineType = opts.CloudProperties.GetMachineType()
+		c.MachineType = opts.CloudProperties.MachineType
 	}
 	c.setDefaults()
 	if c.OverrideVersion != overrideVersionLatest {

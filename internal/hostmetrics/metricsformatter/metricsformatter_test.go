@@ -21,7 +21,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {

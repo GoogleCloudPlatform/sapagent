@@ -35,10 +35,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -327,7 +328,7 @@ func (r *ReadMetrics) sendStatusToMonitoring(ctx context.Context, bo *cloudmonit
 	log.CtxLogger(ctx).Infow("Sending ReadMetrics status to cloud monitoring", "status", r.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  timeseries.ConvertCloudProperties(r.cloudProps),
+			CloudProp:  protostruct.ConvertCloudPropertiesToStruct(r.cloudProps),
 			MetricType: "workload.googleapis.com/sap/agent/" + r.Name(),
 			Timestamp:  tspb.Now(),
 			BoolValue:  r.status,

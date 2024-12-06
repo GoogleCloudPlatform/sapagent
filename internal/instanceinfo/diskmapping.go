@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 /*
@@ -42,7 +42,7 @@ type PhysicalPathReader struct {
 const winPsPath = `C:\\Program Files\Google\google-cloud-sap-agent\google-cloud-sap-agent-diskmapping.ps1`
 
 /*
-ForDeviceName returns the phsyical device name of the disk mapped to "deviceName".
+ForDeviceName returns the physical device name of the disk mapped to "deviceName".
 */
 func (r *PhysicalPathReader) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
 	if r.OS == "windows" {

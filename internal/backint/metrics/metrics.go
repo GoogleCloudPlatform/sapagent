@@ -30,11 +30,12 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"cloud.google.com/go/monitoring/apiv3/v2"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 )
 
 const (
@@ -103,7 +104,7 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 	}
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  timeseries.ConvertCloudProperties(cloudProps),
+			CloudProp:  protostruct.ConvertCloudPropertiesToStruct(cloudProps),
 			MetricType: mtype + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  success,
@@ -125,7 +126,7 @@ func SendToCloudMonitoring(ctx context.Context, operation, fileName string, file
 		}
 		ts := []*mrpb.TimeSeries{
 			timeseries.BuildFloat64(timeseries.Params{
-				CloudProp:    timeseries.ConvertCloudProperties(cloudProps),
+				CloudProp:    protostruct.ConvertCloudPropertiesToStruct(cloudProps),
 				MetricType:   mtype + "/throughput",
 				Timestamp:    tspb.Now(),
 				Float64Value: avgTransferSpeedMBps,

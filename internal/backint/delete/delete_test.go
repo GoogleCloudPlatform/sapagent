@@ -29,9 +29,9 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
-	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
 )
 
 func TestMain(t *testing.M) {

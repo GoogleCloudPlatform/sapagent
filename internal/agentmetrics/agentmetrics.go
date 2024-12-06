@@ -31,11 +31,12 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 )
 
 const (
@@ -264,7 +265,7 @@ func (s *Service) createHealthTimeSeries(healthy bool) []*mrpb.TimeSeries {
 	params := timeseries.Params{
 		BareMetal:  s.config.BareMetal,
 		BoolValue:  healthy,
-		CloudProp:  timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
+		CloudProp:  protostruct.ConvertCloudPropertiesToStruct(s.config.GetCloudProperties()),
 		MetricType: metricURL + agentHealth,
 		Timestamp:  s.now(),
 	}
@@ -277,7 +278,7 @@ func (s *Service) createMetricTimeSeries(u usage) []*mrpb.TimeSeries {
 	now := s.now()
 	params := timeseries.Params{
 		BareMetal:    s.config.BareMetal,
-		CloudProp:    timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(s.config.GetCloudProperties()),
 		Float64Value: u.cpu,
 		MetricType:   metricURL + agentCPU,
 		Timestamp:    now,
@@ -286,7 +287,7 @@ func (s *Service) createMetricTimeSeries(u usage) []*mrpb.TimeSeries {
 
 	params = timeseries.Params{
 		BareMetal:    s.config.BareMetal,
-		CloudProp:    timeseries.ConvertCloudProperties(s.config.GetCloudProperties()),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(s.config.GetCloudProperties()),
 		Float64Value: float64(u.memory),
 		MetricType:   metricURL + agentMemory,
 		Timestamp:    now,

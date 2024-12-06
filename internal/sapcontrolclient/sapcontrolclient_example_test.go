@@ -24,7 +24,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 var (

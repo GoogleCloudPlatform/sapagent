@@ -37,12 +37,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	cmFake "github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	cmFake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {
@@ -1017,7 +1017,7 @@ func TestAbandonPreparedSnapshot(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "NoPreparedSnaphot",
+			name: "NoPreparedSnapshot",
 			run: func(context.Context, *databaseconnector.DBHandle, string) (string, error) {
 				return "", nil
 			},

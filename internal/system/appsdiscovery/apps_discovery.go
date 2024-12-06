@@ -32,9 +32,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )

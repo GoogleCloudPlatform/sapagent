@@ -30,7 +30,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // BackintRFC3339Millis is a reference for timestamps to Backint specifications.
@@ -167,7 +167,7 @@ func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time
 		}
 		numDays, err := strconv.Atoi(matches[1])
 		if err != nil {
-			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime feild will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d", "err", err)
+			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime field will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d", "err", err)
 			return time.Time{}
 		}
 		// Add the specified number of days.
@@ -176,7 +176,7 @@ func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time
 
 	ct, err := time.Parse(time.RFC3339, customTime)
 	if err != nil {
-		log.Logger.Warnw("Could not parse custom_time field. CustomTime feild will not be set.", "err", err, "customTime", customTime, "Expected Format", time.RFC3339)
+		log.Logger.Warnw("Could not parse custom_time field. CustomTime field will not be set.", "err", err, "customTime", customTime, "Expected Format", time.RFC3339)
 	}
 	return ct
 }

@@ -36,9 +36,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/osmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"

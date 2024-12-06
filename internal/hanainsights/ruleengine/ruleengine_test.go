@@ -26,8 +26,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
 )
@@ -82,7 +82,7 @@ func TestAddRow(t *testing.T) {
 func TestCreateColumns(t *testing.T) {
 	cols := createColumns(1)
 	if _, ok := cols[0].(*string); !ok {
-		t.Errorf("createColumns failed to create feilds")
+		t.Errorf("createColumns failed to create fields")
 	}
 }
 
@@ -469,7 +469,7 @@ func TestCompare(t *testing.T) {
 func TestCopy(t *testing.T) {
 	want := make(knowledgeBase)
 	want["sample_query:sample_col"] = []string{"1", "2", "3", "4", "5"}
-	want["sample_quey1:sample_col1"] = []string{"1", "2", "3"}
+	want["sample_query1:sample_col1"] = []string{"1", "2", "3"}
 
 	got := deepCopy(want)
 	if !cmp.Equal(got, want) {

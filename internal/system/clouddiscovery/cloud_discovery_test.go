@@ -29,11 +29,11 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/sapagent/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
 
 func TestMain(t *testing.M) {

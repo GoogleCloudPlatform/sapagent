@@ -26,8 +26,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -188,7 +189,7 @@ func (metricData *demoMetricData) createTimeSeries(ip *DemoInstanceProperties) [
 		startTimestamp = tpb.New(timestamp.AsTime().Add(-1 * time.Second))
 	}
 	tsParams := timeseries.Params{
-		CloudProp:    timeseries.ConvertCloudProperties(ip.Config.CloudProperties),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(ip.Config.CloudProperties),
 		MetricType:   ip.MetricTypePrefix + metricData.name,
 		MetricLabels: metricData.labels,
 		Timestamp:    timestamp,

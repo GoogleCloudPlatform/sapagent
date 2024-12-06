@@ -23,9 +23,10 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // diskRestore creates a new data disk restored from a single snapshot and attaches it to the instance.
@@ -45,7 +46,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 
 	if err := r.restoreFromSnapshot(ctx, exec, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
-		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone); attachErr != nil {
+		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, protostruct.ConvertCloudPropertiesToStruct(cp), r.Project, r.DataDiskZone); attachErr != nil {
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
 		}
 		hanabackup.RescanVolumeGroups(ctx)
@@ -54,13 +55,14 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 
 	dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
 	if r.DataDiskVG != "" {
+		cps := protostruct.ConvertCloudPropertiesToStruct(cp)
 		if err := r.renameLVM(ctx, exec, cp, dev, r.NewdiskName); err != nil {
 			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
-			if detachErr := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.NewdiskName, dev); detachErr != nil {
+			if detachErr := r.gceService.DetachDisk(ctx, cps, r.Project, r.DataDiskZone, r.NewdiskName, dev); detachErr != nil {
 				log.CtxLogger(ctx).Errorw("failed to detach newly attached restored disk", "err", detachErr)
 			}
-			if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp, r.Project, r.DataDiskZone); attachErr != nil {
+			if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cps, r.Project, r.DataDiskZone); attachErr != nil {
 				log.CtxLogger(ctx).Errorw("failed to reattach old disk", "err", attachErr)
 			}
 			return err

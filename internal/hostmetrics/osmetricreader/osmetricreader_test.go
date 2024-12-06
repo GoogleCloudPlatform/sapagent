@@ -23,7 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	mpb "github.com/GoogleCloudPlatform/sapagent/protos/metrics"

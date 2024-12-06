@@ -38,11 +38,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -453,15 +454,15 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
 	case s.Sid == "":
-		return fmt.Errorf("required argument -sid not passed. Usage:" + s.Usage())
+		return fmt.Errorf("%s", "required argument -sid not passed. Usage:"+s.Usage())
 	case s.HDBUserstoreKey == "":
 		switch {
 		case s.HanaDBUser == "":
-			return fmt.Errorf("either -hana-db-user or -hdbuserstore-key is required. Usage:" + s.Usage())
+			return fmt.Errorf("%s", "either -hana-db-user or -hdbuserstore-key is required. Usage:"+s.Usage())
 		case s.Port == "" && s.InstanceID == "":
-			return fmt.Errorf("either -port and -instance-id, or -hdbuserstore-key is required. Usage:" + s.Usage())
+			return fmt.Errorf("%s", "either -port and -instance-id, or -hdbuserstore-key is required. Usage:"+s.Usage())
 		case s.Password == "" && s.PasswordSecret == "":
-			return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + s.Usage())
+			return fmt.Errorf("%s", "either -password, -password-secret or -hdbuserstore-key is required. Usage:"+s.Usage())
 		}
 	}
 
@@ -651,7 +652,7 @@ func (s *Snapshot) sendStatusToMonitoring(ctx context.Context, bo *cloudmonitori
 	log.CtxLogger(ctx).Infow("Optional: sending HANA disk snapshot status to cloud monitoring", "status", s.status)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildBool(timeseries.Params{
-			CloudProp:  timeseries.ConvertCloudProperties(cp),
+			CloudProp:  protostruct.ConvertCloudPropertiesToStruct(cp),
 			MetricType: metricPrefix + s.Name() + "/status",
 			Timestamp:  tspb.Now(),
 			BoolValue:  s.status,
@@ -676,7 +677,7 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	log.CtxLogger(ctx).Infow("Optional: Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    timeseries.ConvertCloudProperties(cp),
+			CloudProp:    protostruct.ConvertCloudPropertiesToStruct(cp),
 			MetricType:   mtype,
 			Timestamp:    tspb.Now(),
 			Float64Value: dur.Seconds(),

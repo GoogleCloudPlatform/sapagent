@@ -27,9 +27,10 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/instancemetadata"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 func emptyAnyInstanceMetadataResponse() *apb.Any {
@@ -82,7 +83,7 @@ func TestInstanceMetadataHandlerHelper(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, gotRestart := instanceMetadataHandlerHelper(ctx, tc.command, tc.cp, tc.trc)
+			got, gotRestart := instanceMetadataHandlerHelper(ctx, tc.command, protostruct.ConvertCloudPropertiesToStruct(tc.cp), tc.trc)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("InstanceMetadataHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.command, tc.cp, diff)
 			}

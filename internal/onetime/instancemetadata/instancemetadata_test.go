@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 var (
@@ -225,5 +225,3 @@ func TestSetDefaults(t *testing.T) {
 		t.Errorf("setDefaults() RC not set")
 	}
 }
-
-

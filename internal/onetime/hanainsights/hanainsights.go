@@ -34,8 +34,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // HANAInsights has args for hanainsights subcommands.
@@ -116,9 +116,9 @@ func (h *HANAInsights) validateParameters(os string) error {
 	case os == "windows":
 		return fmt.Errorf("hanainsights is only supported on Linux systems")
 	case (h.hdbuserstoreKey == "" && (h.host == "" || h.port == "")) || h.sid == "" || h.user == "":
-		return fmt.Errorf("required arguments not passed. Usage:" + h.Usage())
+		return fmt.Errorf("%s", "required arguments not passed. Usage:"+h.Usage())
 	case h.password == "" && h.passwordSecret == "" && h.hdbuserstoreKey == "":
-		return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required. Usage:" + h.Usage())
+		return fmt.Errorf("%s", "either -password, -password-secret or -hdbuserstore-key is required. Usage:"+h.Usage())
 	}
 
 	log.Logger.Info("Parameter validation successful.")

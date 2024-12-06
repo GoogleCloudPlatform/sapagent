@@ -22,8 +22,8 @@ import (
 	"encoding/json"
 
 	"github.com/google/subcommands"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // ParseAgentCommandParameters parses the command parameters from the

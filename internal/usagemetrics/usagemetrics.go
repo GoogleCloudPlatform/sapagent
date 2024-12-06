@@ -17,7 +17,7 @@ limitations under the License.
 // Package usagemetrics provides logging utility for the operational status of Google Cloud Agent for SAP.
 package usagemetrics
 
-import um "github.com/GoogleCloudPlatform/sapagent/shared/usagemetrics"
+import um "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/usagemetrics"
 
 // The following status values are supported.
 const (

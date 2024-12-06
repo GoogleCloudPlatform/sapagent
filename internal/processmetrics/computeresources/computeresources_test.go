@@ -30,9 +30,9 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -56,7 +56,7 @@ var (
 		1 dispstatus: GREEN
 		1 pid: 222`
 
-	defaultABAPGetWPTableOuput = `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
+	defaultABAPGetWPTableOutput = `No, Typ, Pid, Status, Reason, Start, Err, Sem, Cpu, Time, Program, Client, User, Action, Table
 	0, DIA, 7488, Wait, , yes, , , 0:24:54, 4, , , , ,
 	1, BTC, 7489, Wait, , yes, , , 0:33:24, , , , , ,`
 
@@ -604,7 +604,7 @@ func TestCollectMemoryPerProcess(t *testing.T) {
 			wantErr:     true,
 		},
 		{
-			name: "ErrorInMemeoryUsage",
+			name: "ErrorInMemoryUsage",
 			params: Parameters{
 				Config:  defaultConfig,
 				NewProc: newProcessWithContextHelperTest,

@@ -29,12 +29,13 @@ import (
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/api/compute/v0.beta"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/metricevents"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 )
 
 // GCEBetaInterface provides a testable interface to gcebeta.
@@ -338,7 +339,7 @@ func (p *Properties) collectUpcomingMaintenance(ctx context.Context) ([]*mrpb.Ti
 // createMetric creates a mrpb.TimeSeries object for the given metric.
 func (p *Properties) createIntMetric(mPath string, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:  timeseries.ConvertCloudProperties(p.Config.CloudProperties),
+		CloudProp:  protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
 		MetricType: metricURL + mPath,
 		Timestamp:  tspb.Now(),
 		Int64Value: val,
@@ -350,7 +351,7 @@ func (p *Properties) createIntMetric(mPath string, val int64) *mrpb.TimeSeries {
 // createBoolMetric creates a mrpb.TimeSeries object for the given boolean metric.
 func (p *Properties) createBoolMetric(mPath string, val bool) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:  timeseries.ConvertCloudProperties(p.Config.CloudProperties),
+		CloudProp:  protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
 		MetricType: metricURL + mPath,
 		Timestamp:  tspb.Now(),
 		BoolValue:  val,

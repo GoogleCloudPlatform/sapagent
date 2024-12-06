@@ -28,10 +28,10 @@ import (
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
 )
 
 func TestMain(t *testing.M) {
@@ -242,7 +242,7 @@ func TestRunBackint(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "ErrorOpeningOuputFile",
+			name: "ErrorOpeningOutputFile",
 			config: &bpb.BackintConfiguration{
 				InputFile: t.TempDir() + "/input.txt",
 			},

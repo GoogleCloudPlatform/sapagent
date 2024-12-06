@@ -33,8 +33,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 type (
@@ -177,10 +177,10 @@ func SetupOneTimeLogging(params log.Parameters, subcommandName string, level zap
 func NewComputeService(ctx context.Context) (cs *compute.Service, err error) {
 	client, err := google.DefaultClient(ctx, compute.CloudPlatformScope)
 	if err != nil {
-		return nil, fmt.Errorf("%s", "failure creating compute HTTP client" + err.Error())
+		return nil, fmt.Errorf("%s", "failure creating compute HTTP client"+err.Error())
 	}
 	if cs, err = compute.NewService(ctx, option.WithHTTPClient(client)); err != nil {
-		return nil, fmt.Errorf("%s", "failure creating compute service" + err.Error())
+		return nil, fmt.Errorf("%s", "failure creating compute service"+err.Error())
 	}
 	return cs, nil
 }

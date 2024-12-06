@@ -29,7 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 
 	cpb "cloud.google.com/go/aiplatform/apiv1beta1/aiplatformpb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"

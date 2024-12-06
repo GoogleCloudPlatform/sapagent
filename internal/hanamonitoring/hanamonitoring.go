@@ -29,11 +29,12 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -518,7 +519,7 @@ func createQueryResponseTimeMetric(ctx context.Context, dbName, sid string, quer
 		"sid":           sid,
 	}
 	ts := timeseries.Params{
-		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(params.Config.GetCloudProperties()),
 		MetricType:   metricURL + "/" + query.GetName() + "/time_taken_ms",
 		MetricLabels: labels,
 		Timestamp:    timestamp,
@@ -574,7 +575,7 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 	}
 
 	ts := timeseries.Params{
-		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(params.Config.GetCloudProperties()),
 		MetricType:   metricPath,
 		MetricLabels: labels,
 		Timestamp:    timestamp,
@@ -612,7 +613,7 @@ func createCumulativeMetric(ctx context.Context, c *cpb.Column, val any, labels 
 	}
 
 	ts := timeseries.Params{
-		CloudProp:    timeseries.ConvertCloudProperties(params.Config.GetCloudProperties()),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(params.Config.GetCloudProperties()),
 		MetricType:   metricPath,
 		MetricLabels: labels,
 		Timestamp:    timestamp,

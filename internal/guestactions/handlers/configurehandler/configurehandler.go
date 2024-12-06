@@ -25,9 +25,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the configure guest action has been handled.
@@ -39,14 +41,14 @@ func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 }
 
 // ConfigureHandler is the handler for the configure command.
-func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPConfigureCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := &configure.Configure{
 		RestartAgent: noOpRestart,
 	}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
-	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(cp, true))
+	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,

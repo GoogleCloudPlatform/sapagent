@@ -34,11 +34,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -67,8 +69,8 @@ type (
 		ListDisks(project, zone, filter string) (*compute.DiskList, error)
 
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
-		AttachDisk(ctx context.Context, diskName string, cp *ipb.CloudProperties, project, dataDiskZone string) error
-		DetachDisk(ctx context.Context, cp *ipb.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
+		AttachDisk(ctx context.Context, diskName string, cp *metadataserver.CloudProperties, project, dataDiskZone string) error
+		DetachDisk(ctx context.Context, cp *metadataserver.CloudProperties, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
 		WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error
 		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
 		AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
@@ -353,13 +355,14 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	}
 
 	vg, err := r.fetchVG(ctx, cp, exec, r.physicalDataPath)
+	cps := protostruct.ConvertCloudPropertiesToStruct(cp)
 	if err != nil {
 		return err
 	}
 	r.DataDiskVG = vg
 	if !r.isGroupSnapshot {
 		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
-		if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
+		if err := r.gceService.DetachDisk(ctx, cps, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
 			hanabackup.RescanVolumeGroups(ctx)
 			return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -374,11 +377,11 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
 			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.GetMapping()))
-			if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
+			if err := r.gceService.DetachDisk(ctx, cps, r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
 				log.CtxLogger(ctx).Errorf("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
 				for _, disk := range disksDetached {
-					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp, r.Project, r.DataDiskZone); err != nil {
+					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cps, r.Project, r.DataDiskZone); err != nil {
 						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
 					}
 				}
@@ -407,7 +410,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
-	if err := r.gceService.DetachDisk(ctx, cp, r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
+	if err := r.gceService.DetachDisk(ctx, protostruct.ConvertCloudPropertiesToStruct(cp), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
 		hanabackup.RescanVolumeGroups(ctx)
 		return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -458,7 +461,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	if err := r.gceService.AttachDisk(ctx, newDiskName, cp, r.Project, r.DataDiskZone); err != nil {
+	if err := r.gceService.AttachDisk(ctx, newDiskName, protostruct.ConvertCloudPropertiesToStruct(cp), r.Project, r.DataDiskZone); err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 
@@ -641,7 +644,7 @@ func (r *Restorer) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 	log.CtxLogger(ctx).Infow("Sending HANA disk snapshot duration to cloud monitoring", "duration", dur)
 	ts := []*mrpb.TimeSeries{
 		timeseries.BuildFloat64(timeseries.Params{
-			CloudProp:    timeseries.ConvertCloudProperties(cp),
+			CloudProp:    protostruct.ConvertCloudPropertiesToStruct(cp),
 			MetricType:   mtype,
 			Timestamp:    tspb.Now(),
 			Float64Value: dur.Seconds(),

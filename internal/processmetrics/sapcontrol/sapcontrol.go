@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )
@@ -123,7 +123,7 @@ func ExecProcessList(ctx context.Context, exec commandlineexecutor.Execute, para
 //
 // Returns:
 //   - A map[int]*ProcessStatus where key is the process index according to the process position
-//     in the returned process list, and the value is an ProcessStatus struct containing process
+//     in the returned process list, and the value is a ProcessStatus struct containing process
 //     status details.
 //   - Error if sapcontrolclient.GetProcessList fails, nil otherwise.
 func (p *Properties) GetProcessList(ctx context.Context, c ClientInterface) (map[int]*ProcessStatus, error) {

@@ -27,7 +27,7 @@ import (
 	"github.com/googleapis/gax-go/v2"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	"cloud.google.com/go/monitoring/dashboard/apiv1"
 	dashboardpb "cloud.google.com/go/monitoring/dashboard/apiv1/dashboardpb"

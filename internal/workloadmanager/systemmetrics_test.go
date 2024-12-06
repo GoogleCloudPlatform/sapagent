@@ -38,7 +38,7 @@ import (
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 )
 
 var (

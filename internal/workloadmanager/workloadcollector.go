@@ -30,17 +30,18 @@ import (
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 )
 
 /*
@@ -500,7 +501,7 @@ func createTimeSeries(t string, l map[string]string, v float64, c *cnfpb.Configu
 
 	p := timeseries.Params{
 		BareMetal:    c.BareMetal,
-		CloudProp:    timeseries.ConvertCloudProperties(c.CloudProperties),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(c.CloudProperties),
 		MetricType:   t,
 		MetricLabels: l,
 		Timestamp:    now,

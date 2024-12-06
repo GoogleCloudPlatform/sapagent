@@ -24,20 +24,21 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the hanadiskbackup guest action has been handled.
 const RestartAgent = false
 
 // HANADiskBackupHandler is the handler for the hanadiskbackup command.
-func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
 	s := &hanadiskbackup.Snapshot{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
-	message, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, true))
+	message, exitStatus := s.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
 	result := &gpb.CommandResult{
 		Command:  command,
 		Stdout:   message,

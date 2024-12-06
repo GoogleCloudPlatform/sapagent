@@ -35,13 +35,15 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
-	"github.com/GoogleCloudPlatform/sapagent/shared/uap"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/uap"
 )
 
 const (
@@ -58,7 +60,7 @@ type GuestActions struct {
 	Restarter  Restarter
 }
 
-type guestActionHandler func(context.Context, *gpb.Command, *ipb.CloudProperties) (*gpb.CommandResult, bool)
+type guestActionHandler func(context.Context, *gpb.Command, *metadataserver.CloudProperties) (*gpb.CommandResult, bool)
 
 // Restarter is an interface for restarting the agent services.
 type Restarter interface {
@@ -119,7 +121,7 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 	}
 }
 
-func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
 	handler, ok := guestActionsHandlers[agentCommand]
 	if !ok {
@@ -151,10 +153,10 @@ func errorResult(errMsg string) *gpb.CommandResult {
 	}
 }
 
-func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *ipb.CloudProperties) *gpb.GuestActionResponse {
+func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *metadataserver.CloudProperties) *gpb.GuestActionResponse {
 	requiresRestart := false
 	var results []*gpb.CommandResult
-	log.CtxLogger(ctx).Debugw("received GuestActionReqest to handle", "gar", prototext.Format(gar))
+	log.CtxLogger(ctx).Debugw("received GuestActionRequest to handle", "gar", prototext.Format(gar))
 	for _, command := range gar.GetCommands() {
 		log.CtxLogger(ctx).Debugw("processing command.", "command", prototext.Format(command))
 		pr := command.ProtoReflect()
@@ -191,7 +193,7 @@ func (g *GuestActions) start(ctx context.Context, a any) {
 		log.CtxLogger(ctx).Warn("args is not of type guestActionsArgs")
 		return
 	}
-	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, g.messageHandler, args.cloudProperties)
+	uap.CommunicateWithUAP(ctx, args.endpoint, args.channel, g.messageHandler, protostruct.ConvertCloudPropertiesToStruct(args.cloudProperties))
 }
 
 // StartUAPCommunication establishes communication with UAP Highway.

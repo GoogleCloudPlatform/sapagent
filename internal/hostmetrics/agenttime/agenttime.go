@@ -20,7 +20,7 @@ package agenttime
 import (
 	"time"
 
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 // TimeSource can be faked by tests to ensure repeatable results.

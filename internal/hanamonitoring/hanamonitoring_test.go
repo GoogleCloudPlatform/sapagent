@@ -29,9 +29,9 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -41,7 +41,7 @@ import (
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	gcefake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	gcefake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 )
 
 func TestMain(t *testing.M) {
@@ -259,7 +259,7 @@ func TestStart(t *testing.T) {
 			}, want: true,
 		},
 		{
-			name: "SuceedsWithQueriesToRunDefined_WithRunAllTrue",
+			name: "SucceedsWithQueriesToRunDefined_WithRunAllTrue",
 			params: Parameters{
 				Config: &configpb.Configuration{
 					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
@@ -282,7 +282,7 @@ func TestStart(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "SuceedsWithQueriesToRunDefined_WithRunAllFalse",
+			name: "SucceedsWithQueriesToRunDefined_WithRunAllFalse",
 			params: Parameters{
 				Config: &configpb.Configuration{
 					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{

@@ -27,24 +27,25 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 // RestartAgent indicates if the agent should be restarted after the gcbdr-backup guest action has been handled.
 const RestartAgent = false
 
 // GCBDRBackupHandler is the handler for gcbdr-backup command.
-func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *ipb.CloudProperties) (*gpb.CommandResult, bool) {
+func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
 	usagemetrics.Action(usagemetrics.UAPGCBDRBackupCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-backup handler called.", "command", prototext.Format(command))
 	b := &backup.Backup{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
-	backupResponse, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(cp, true))
+	backupResponse, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
 	anyBackupResponse, err := apb.New(backupResponse)
 	if err != nil {
 		failureMessage := fmt.Sprintf("failed to marshal response to any. Error: %v", err)

@@ -28,8 +28,8 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -37,10 +37,10 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	dwpb "github.com/GoogleCloudPlatform/sapagent/protos/datawarehouse"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	wlmfake "github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
 )
 
 var (

@@ -33,10 +33,11 @@ import (
 	"strconv"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/metricevents"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -196,7 +197,7 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		labels["sid"] = sid
 		log.CtxLogger(ctx).Debugw("MaintenanceMode metric for SID", "sid", sid, "maintenancemode", mntmode)
 		params := timeseries.Params{
-			CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
+			CloudProp:    protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
 			MetricType:   metricURL + mntmodePath,
 			MetricLabels: labels,
 			Timestamp:    tspb.Now(),

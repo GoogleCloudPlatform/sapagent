@@ -49,9 +49,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/storage"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
 
 	s "cloud.google.com/go/storage"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
@@ -183,7 +183,7 @@ func (*Diagnose) Usage() string {
 
 // SetFlags implements the subcommand interface for features.
 func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&d.Type, "type", "all", "Sets the type for the diagnostic operations. It must be a comma seperated string of values. (optional) Values: <backup|io|all|compute>. Default: all")
+	fs.StringVar(&d.Type, "type", "all", "Sets the type for the diagnostic operations. It must be a comma separated string of values. (optional) Values: <backup|io|all|compute>. Default: all")
 	fs.StringVar(&d.TestBucket, "test-bucket", "", "Sets the bucket name used to run backup operation. (optional)")
 	fs.StringVar(&d.BackintConfigFile, "backint-config-file", "", "Sets the path to backint parameters file. Must be present if type includes backup operation. (optional)")
 	fs.StringVar(&d.OutputBucket, "output-bucket", "", "Sets the bucket name to upload the final zipped report to. (optional)")

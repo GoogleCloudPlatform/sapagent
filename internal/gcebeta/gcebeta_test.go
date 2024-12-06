@@ -28,8 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gce/fakehttp"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fakehttp"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 
 func TestMain(t *testing.M) {
@@ -90,10 +90,10 @@ func TestGetInstance(t *testing.T) {
 			Zone: "testZone",
 		},
 	}, {
-		name:         "NonexistantInstance",
+		name:         "NonexistentInstance",
 		project:      "testProject",
 		zone:         "testZone",
-		instance:     "nonexistant",
+		instance:     "nonexistent",
 		responsePath: "/projects/testProject/zones/testZone/instances/testInstance",
 		wantErr:      &googleapi.Error{Code: http.StatusNotFound},
 	}}

@@ -31,8 +31,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
@@ -274,7 +274,7 @@ func Load(ctx context.Context, opts LoadOptions) (*cdpb.CollectionDefinition, er
 // definition.
 //
 // Said another way, Merge returns a result that is similar to the secondary
-// definition overlayed by the primary definition. The dimension of uniqueness
+// definition overlaid by the primary definition. The dimension of uniqueness
 // that will be used to compare metrics between the primary and secondary
 // definitions is the composite value of metric type and label. In the event
 // that a particular type + label combination exists in both the primary and

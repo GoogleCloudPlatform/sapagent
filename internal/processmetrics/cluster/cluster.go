@@ -30,10 +30,11 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
-	"github.com/GoogleCloudPlatform/sapagent/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
-	"github.com/GoogleCloudPlatform/sapagent/shared/metricevents"
-	"github.com/GoogleCloudPlatform/sapagent/shared/timeseries"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/metricevents"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
@@ -295,7 +296,7 @@ func collectFailCount(ctx context.Context, p *InstanceProperties, read readPacem
 // createMetricsInt creates mrpb.TimeSeries for the given metric.
 func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
 	params := timeseries.Params{
-		CloudProp:    timeseries.ConvertCloudProperties(p.Config.CloudProperties),
+		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
 		MetricType:   metricURL + mPath,
 		MetricLabels: metricLabels(p, extraLabels),
 		Timestamp:    now,

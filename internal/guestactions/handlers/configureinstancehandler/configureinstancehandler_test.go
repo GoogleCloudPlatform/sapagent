@@ -21,9 +21,10 @@ import (
 	"testing"
 
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 
-	gpb "github.com/GoogleCloudPlatform/sapagent/protos/guestactions"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 )
 
 func TestConfigureInstanceHandler(t *testing.T) {
@@ -136,7 +137,7 @@ func TestConfigureInstanceHandler(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, _ := ConfigureInstanceHandler(context.Background(), tc.command, tc.cloudProperties)
+			result, _ := ConfigureInstanceHandler(context.Background(), tc.command, protostruct.ConvertCloudPropertiesToStruct(tc.cloudProperties))
 			if result.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("ConfigureInstanceHandler(%v) = %v, want: %v", tc.command, result.ExitCode, tc.wantExitStatus)
 			}

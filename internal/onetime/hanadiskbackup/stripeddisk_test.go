@@ -29,7 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 )
 
 // TODO: Replace mocks with real implementations using httptest
@@ -914,7 +914,7 @@ func TestCGPath(t *testing.T) {
 		},
 		{
 			name:     "Failure2",
-			policies: []string{"https://www.googleapis.com/invlaid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
+			policies: []string{"https://www.googleapis.com/invalid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
 			want:     "",
 		},
 	}

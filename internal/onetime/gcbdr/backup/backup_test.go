@@ -26,8 +26,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/sapagent/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -302,7 +302,7 @@ func TestFreezeHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "VersionSucessButFreezeFailure",
+			name: "VersionSuccessButFreezeFailure",
 			b: Backup{
 				OperationType:   "freeze",
 				SID:             "sid",
@@ -365,7 +365,7 @@ func TestUnfreezeHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "VersionSucessButUnfreezeFailure",
+			name: "VersionSuccessButUnfreezeFailure",
 			b: Backup{
 				OperationType:   "unfreeze",
 				SID:             "sid",
@@ -469,7 +469,7 @@ func TestLogpurgeHandler(t *testing.T) {
 			want: subcommands.ExitFailure,
 		},
 		{
-			name: "VersionSucessButLogpurgeFailure",
+			name: "VersionSuccessButLogpurgeFailure",
 			b: Backup{
 				OperationType:   "logpurge",
 				SID:             "sid",
