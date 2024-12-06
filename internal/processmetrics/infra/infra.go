@@ -183,6 +183,9 @@ func collectScheduledMigration(ctx context.Context, p *Properties, f func() (str
 		Path:    metricURL + migrationPath,
 		Message: "Scheduled Migration",
 		Value:   strconv.FormatInt(scheduledMigration, 10),
+		Labels: map[string]string{
+			"instance_name": p.Config.CloudProperties.InstanceName,
+		},
 	})
 	return []*mrpb.TimeSeries{p.createIntMetric(migrationPath, scheduledMigration)}, nil
 }

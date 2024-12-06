@@ -775,7 +775,7 @@ func TestEnumToInt(t *testing.T) {
 
 func TestCollectWithRetry(t *testing.T) {
 	c := context.Background()
-	p := New(&cpb.Configuration{}, nil, nil, nil, defaultBOPolicy(c))
+	p := New(&cpb.Configuration{CloudProperties: defaultCloudProperties}, nil, nil, nil, defaultBOPolicy(c))
 	_, err := p.CollectWithRetry(c)
 	if err == nil {
 		t.Error("CollectWithRetry() got success expected error")
