@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/sapagent
 
-go 1.21
+go 1.23
 
 replace github.com/GoogleCloudPlatform/sapagent/internal => ./internal
 
@@ -26,7 +26,7 @@ require (
   github.com/google/safetext v0.0.0-20240104143208-7a7d9b3d812f
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
-  github.com/jonboulle/clockwork v0.3.0
+  github.com/jonboulle/clockwork v0.4.1-0.20230717050334-b1209715e43c
   github.com/natefinch/lumberjack v0.0.0-20230119042236-215739b3bcdc
   github.com/pkg/errors v0.9.1
   github.com/shirou/gopsutil/v3 v3.22.12
@@ -38,7 +38,7 @@ require (
   google.golang.org/api v0.168.0
   google.golang.org/genproto v0.0.0-20240205150955-31a09d347014
   google.golang.org/genproto/googleapis/api v0.0.0-20240205150955-31a09d347014
-  google.golang.org/protobuf v1.32.0
+  google.golang.org/protobuf v1.34.3-0.20240708074925-b46f280f9725
 )
 
 require (
@@ -47,6 +47,7 @@ require (
   cloud.google.com/go/compute/metadata v0.2.3 // indirect
   cloud.google.com/go/longrunning v0.5.5 // indirect
   cloud.google.com/go/pubsub v1.36.1 // indirect
+  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241206140426-05c9bb5240c5 // indirect
   github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
   github.com/felixge/httpsnoop v1.0.4 // indirect
   github.com/gammazero/deque v0.2.0 // indirect
