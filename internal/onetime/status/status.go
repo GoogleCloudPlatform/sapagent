@@ -39,7 +39,7 @@ import (
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/status"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
 )
 
 const (
