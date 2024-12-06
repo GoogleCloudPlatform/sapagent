@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 13,
+    "version": 14,
     "validation_system": {
       "system_metrics": [
         {
@@ -950,6 +950,14 @@
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_instance",
+              "min_version": "3.7"
+            },
+            "value": "ERS_INSTANCE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
               "label": "enqueue_server",
               "min_version": "3.7"
             },
@@ -978,6 +986,14 @@
               "min_version": "3.7"
             },
             "value": "ASCS_RESOURCE_STICKINESS"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "is_ers",
+              "min_version": "3.7"
+            },
+            "value": "IS_ERS"
           }
         ],
         "op_option_metrics": [

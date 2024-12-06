@@ -38,8 +38,8 @@ import (
 )
 
 var (
-	ascsInstanceRegex = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
-	sapstartsrvRegex  = regexp.MustCompile("sapstartsrv pf=/sapmnt/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/")
+	sapInstanceRegex = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
+	sapstartsrvRegex = regexp.MustCompile("sapstartsrv pf=/sapmnt/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/")
 )
 
 type (
@@ -104,10 +104,12 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"saphanatopology_monitor_interval": true,
 		"saphanatopology_monitor_timeout":  true,
 		"ascs_instance":                    true,
+		"ers_instance":                     true,
 		"enqueue_server":                   true,
 		"ascs_failure_timeout":             true,
 		"ascs_migration_threshold":         true,
 		"ascs_resource_stickiness":         true,
+		"is_ers":                           true,
 		"op_timeout":                       true,
 		"stonith_enabled":                  true,
 		"stonith_timeout":                  true,
@@ -232,6 +234,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	collectASCSInstance(ctx, l, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, l, params.Execute)
 	setASCSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
+	setERSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ers"))
 
 	// sets the OP options from the pacemaker configuration.
 	setOPOptions(l, pacemakerDocument.Configuration.OPDefaults)
@@ -552,9 +555,10 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 	return token, err
 }
 
-// collectASCSInstance determines the VM instance serving as the ASCS resource group.
+// collectASCSInstance determines the VM instances serving as the ASCS/ERS resource group.
 func collectASCSInstance(ctx context.Context, l map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
 	l["ascs_instance"] = ""
+	l["ers_instance"] = ""
 
 	var command string
 	switch {
@@ -575,23 +579,33 @@ func collectASCSInstance(ctx context.Context, l map[string]string, exists comman
 		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Failed to get %s status. Skipping ascs_instance metric collection.", command), "error", result.Error)
 	}
 
-	inASCSResourceGroup := false
 	lines := strings.Split(result.StdOut, "\n")
-Loop:
+	inASCSResourceGroup, inERSResourceGroup := false, false
 	for _, line := range lines {
 		switch {
 		case strings.Contains(line, "Resource Group: ascs"):
 			inASCSResourceGroup = true
+			inERSResourceGroup = false
+		case strings.Contains(line, "Resource Group: ers"):
+			inERSResourceGroup = true
+			inASCSResourceGroup = false
+		case strings.Contains(line, "Resource Group:"):
+			inASCSResourceGroup = false
+			inERSResourceGroup = false
 		case inASCSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
-			match := ascsInstanceRegex.FindStringSubmatch(line)
+			match := sapInstanceRegex.FindStringSubmatch(line)
 			if len(match) != 2 {
 				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
-				break Loop
+				continue
 			}
 			l["ascs_instance"] = match[1]
-			break Loop
-		case inASCSResourceGroup && strings.Contains(line, "Resource Group:"):
-			break Loop
+		case inERSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
+			match := sapInstanceRegex.FindStringSubmatch(line)
+			if len(match) != 2 {
+				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ERS instance name.", command), "line", line)
+				continue
+			}
+			l["ers_instance"] = match[1]
 		}
 	}
 }
@@ -656,6 +670,20 @@ func setASCSConfigMetrics(l map[string]string, group Group) {
 			if _, ok := metaAttributesKeys[nvPair.Name]; ok {
 				key := "ascs_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 				l[key] = nvPair.Value
+			}
+		}
+	}
+}
+
+// setERSConfigMetrics sets the metrics collected from the ERS resource group.
+func setERSConfigMetrics(l map[string]string, group Group) {
+	for _, primitive := range group.Primitives {
+		if primitive.ClassType != "SAPInstance" {
+			continue
+		}
+		for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+			if nvPair.Name == "IS_ERS" {
+				l["is_ers"] = nvPair.Value
 			}
 		}
 	}

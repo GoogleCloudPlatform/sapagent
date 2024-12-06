@@ -112,6 +112,8 @@ enum ASCSVariable {
   ASCS_RESOURCE_STICKINESS = 3;
   ASCS_INSTANCE = 4;
   ENQUEUE_SERVER = 5;
+  ERS_INSTANCE = 6;
+  IS_ERS = 7;
 }
 
 enum CIBBootstrapOptionVariable {
