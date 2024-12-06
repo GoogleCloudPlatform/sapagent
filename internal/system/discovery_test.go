@@ -218,6 +218,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					VirtualHostname: "some-db-host",
 				}},
+				// DBInstance: &sappb.SAPInstance{},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -1606,6 +1607,618 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DatabaseLayer: &spb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "multiTargetReplication",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
+						},
+					},
+				},
+				DBHosts: []string{"some-db-host"},
+				DBInstance: &sappb.SAPInstance{
+					Sapsid:         "ABC",
+					InstanceNumber: "00",
+					HanaReplicationTree: &sappb.HANAReplicaSite{
+						Name: "primary-site",
+						Targets: []*sappb.HANAReplicaSite{
+							{
+								Name: "secondary-site",
+							},
+							{
+								Name: "tertiary-site",
+							},
+						},
+					},
+				},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}},
+				{}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "secondary/site/resource",
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "tertiary/site/resource",
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-shared-nfs-uri"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"primary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"secondary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"tertiary-site"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}},
+				HostProject: "12345",
+				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+					SourceSite: "primary-site",
+					Component: &spb.SapDiscovery_Component{
+						Sid: "ABC",
+						Resources: []*spb.SapDiscovery_Resource{{
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceUri:  "secondary/site/resource",
+							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							},
+						}},
+					},
+				}, {
+					SourceSite: "primary-site",
+					Component: &spb.SapDiscovery_Component{
+						Sid: "ABC",
+						Resources: []*spb.SapDiscovery_Resource{{
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceUri:  "tertiary/site/resource",
+							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							},
+						}},
+					},
+				}},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "multiTierReplication",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
+						},
+					},
+				},
+				DBHosts: []string{"some-db-host"},
+				DBInstance: &sappb.SAPInstance{
+					Sapsid:         "ABC",
+					InstanceNumber: "00",
+					HanaReplicationTree: &sappb.HANAReplicaSite{
+						Name: "primary-site",
+						Targets: []*sappb.HANAReplicaSite{
+							{
+								Name: "secondary-site",
+								Targets: []*sappb.HANAReplicaSite{
+									{
+										Name: "tertiary-site",
+									}},
+							}},
+					},
+				},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}},
+				{}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "secondary/site/resource",
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "tertiary/site/resource",
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-shared-nfs-uri"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"primary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"secondary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"tertiary-site"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}},
+				HostProject: "12345",
+				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+					SourceSite: "primary-site",
+					Component: &spb.SapDiscovery_Component{
+						Sid: "ABC",
+						Resources: []*spb.SapDiscovery_Resource{{
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceUri:  "secondary/site/resource",
+							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							},
+						}},
+						ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+							SourceSite: "secondary-site",
+							Component: &spb.SapDiscovery_Component{
+								Sid: "ABC",
+								Resources: []*spb.SapDiscovery_Resource{{
+									ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+									ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+									ResourceUri:  "tertiary/site/resource",
+									InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+										InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+									},
+								}},
+							}},
+						},
+					},
+				}},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "hostIsNotPrimary",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
+						},
+					},
+				},
+				DBHosts: []string{"some-db-host"},
+				DBInstance: &sappb.SAPInstance{
+					Sapsid:         "ABC",
+					InstanceNumber: "00",
+					HanaReplicationTree: &sappb.HANAReplicaSite{
+						Name: "primary-site",
+						Targets: []*sappb.HANAReplicaSite{
+							{
+								Name: "secondary-site",
+								Targets: []*sappb.HANAReplicaSite{
+									{
+										Name: "tertiary-site",
+									}},
+							}},
+					},
+				},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}},
+				{}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "tertiary/site/resource",
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-shared-nfs-uri"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"primary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"secondary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"tertiary-site"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id",
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+				}},
+				HostProject: "12345",
+				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+					SourceSite: "primary-site",
+					Component: &spb.SapDiscovery_Component{
+						Sid: "ABC",
+						Resources: []*spb.SapDiscovery_Resource{{
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceUri:  defaultInstanceURI,
+							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							},
+						}, {
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+							ResourceUri:  "some-shared-nfs-uri",
+						}},
+						ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+							SourceSite: "secondary-site",
+							Component: &spb.SapDiscovery_Component{
+								Sid: "ABC",
+								Resources: []*spb.SapDiscovery_Resource{{
+									ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+									ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+									ResourceUri:  "tertiary/site/resource",
+									InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+										InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+									},
+								}},
+							}},
+						},
+					},
+				}},
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "primaryIsInCluster",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
+						},
+					},
+				},
+				DBOnHost: true,
+				DBHosts:  []string{"some-db-host"},
+				DBInstance: &sappb.SAPInstance{
+					Sapsid:         "ABC",
+					InstanceNumber: "00",
+					HanaReplicationTree: &sappb.HANAReplicaSite{
+						Name: "primary-site",
+						Targets: []*sappb.HANAReplicaSite{
+							{
+								Name: "secondary-site",
+								Targets: []*sappb.HANAReplicaSite{
+									{
+										Name: "tertiary-site",
+									}},
+							}},
+					},
+				},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}}, {
+				{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceUri:      "some-backend-service-uri",
+					RelatedResources: []string{"primary-instance-group", "secondary-instance-group"},
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceUri:      "primary-instance-group",
+					RelatedResources: []string{defaultInstanceURI},
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceUri:      "secondary-instance-group",
+					RelatedResources: []string{"projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id"},
+				}, {
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  "projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id",
+				},
+			}, {{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}}, {{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceUri:  "some-shared-nfs-uri",
+			}}, {{
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceUri:  "projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id",
+			}}, {{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+			}}, {{
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceUri:  "tertiary/site/resource",
+			}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"1.2.3.4"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-shared-nfs-uri"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"primary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"secondary-site"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"tertiary-site"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{"1.2.3.4"}},
+		},
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceUri:  defaultInstanceURI,
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  "projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id",
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceUri:      "some-backend-service-uri",
+					RelatedResources: []string{"primary-instance-group", "secondary-instance-group"},
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceUri:      "primary-instance-group",
+					RelatedResources: []string{defaultInstanceURI},
+				}, {
+					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceUri:      "secondary-instance-group",
+					RelatedResources: []string{"projects/test-project-id/zones/test-zone-a/instances/secondary-instance-id"},
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}},
+				HostProject: "12345",
+				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+					SourceSite: "secondary-site",
+					Component: &spb.SapDiscovery_Component{
+						Sid: "ABC",
+						Resources: []*spb.SapDiscovery_Resource{{
+							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceUri:  "tertiary/site/resource",
+							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							},
+						}},
+					}},
+				},
 			},
 			ProjectNumber: "12345",
 		}},
