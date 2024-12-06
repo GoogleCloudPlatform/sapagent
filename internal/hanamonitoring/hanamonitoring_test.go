@@ -603,6 +603,7 @@ func TestConnectToDatabases(t *testing.T) {
 		name         string
 		params       Parameters
 		connectedDBs map[string]bool
+		authErrorDBs map[string]bool
 		want         int
 		wantErr      error
 	}{
@@ -619,6 +620,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         3,
 		},
 		{
@@ -634,6 +636,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: map[string]bool{"fakeHost1:fakeUser1:fakePort1": true, "fakeHost2:fakeUser2:fakePort2": true, "fakeHost3:fakeUser3:fakePort3": true, "fakeHost4:fakeUser4:fakePort4": true},
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 		{
@@ -648,6 +651,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 		{
@@ -667,6 +671,27 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
+			want:         0,
+		},
+		{
+			name: "PreExistingAuthErrorDBs",
+			params: Parameters{
+				Config: &configpb.Configuration{
+					HanaMonitoringConfiguration: &configpb.HANAMonitoringConfiguration{
+						HanaInstances: []*configpb.HANAInstance{
+							&configpb.HANAInstance{
+								User:     "fakeUser",
+								Password: "fakePassword",
+								Host:     "fakeHost",
+								Port:     "fakePort",
+							},
+						},
+					},
+				},
+			},
+			connectedDBs: make(map[string]bool),
+			authErrorDBs: map[string]bool{"fakeHost:fakeUser:fakePort": true},
 			want:         0,
 		},
 		{
@@ -690,6 +715,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 		{
@@ -710,6 +736,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 		{
@@ -733,6 +760,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         3,
 		},
 		{
@@ -746,6 +774,7 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 		{
@@ -759,13 +788,14 @@ func TestConnectToDatabases(t *testing.T) {
 				},
 			},
 			connectedDBs: make(map[string]bool),
+			authErrorDBs: make(map[string]bool),
 			want:         0,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := connectToDatabases(context.Background(), test.params, test.connectedDBs)
+			got := connectToDatabases(context.Background(), test.params, test.connectedDBs, test.authErrorDBs)
 
 			if len(got) != test.want {
 				t.Errorf("ConnectToDatabases(%#v) returned unexpected database count, got: %d, want: %d", test.params, len(got), test.want)

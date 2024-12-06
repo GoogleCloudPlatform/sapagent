@@ -174,8 +174,9 @@ func createWorkerPool(ctx context.Context, params Parameters) {
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())] = false
 	}
+	authErrorDBs := map[string]bool{}
 	wp := workerpool.New(int(params.Config.GetHanaMonitoringConfiguration().GetExecutionThreads()))
-	databases := connectToDatabases(ctx, params, connectedDBs)
+	databases := connectToDatabases(ctx, params, connectedDBs, authErrorDBs)
 	invokeSubmitQueriesToWorkerPool(ctx, params, wp, databases)
 	for {
 		select {
@@ -183,7 +184,7 @@ func createWorkerPool(ctx context.Context, params Parameters) {
 			log.CtxLogger(ctx).Info("HANA Monitoring context cancelled, exiting")
 			return
 		case <-ticker.C:
-			databases := connectToDatabases(ctx, params, connectedDBs)
+			databases := connectToDatabases(ctx, params, connectedDBs, authErrorDBs)
 			paramsCopy := params
 			wpCopy := wp
 			invokeSubmitQueriesToWorkerPool(ctx, paramsCopy, wpCopy, databases)
@@ -459,10 +460,14 @@ func queryDatabase(ctx context.Context, queryFunc queryFunc, query *cpb.Query) (
 }
 
 // connectToDatabases attempts to create a DB handle for each HANAInstance.
-func connectToDatabases(ctx context.Context, params Parameters, connectedDBs map[string]bool) []*database {
+func connectToDatabases(ctx context.Context, params Parameters, connectedDBs map[string]bool, authErrorDBs map[string]bool) []*database {
 	var databases []*database
 	for _, i := range params.Config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		if connected, ok := connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())]; connected && ok {
+			continue
+		}
+		if _, ok := authErrorDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())]; ok {
+			log.CtxLogger(ctx).Debugw("Instance is misconfigured with wrong credentials, not retrying to connect to the instance", "name", i.GetName())
 			continue
 		}
 		hanaMonitoringConfig := params.Config.GetHanaMonitoringConfiguration()
@@ -494,6 +499,10 @@ func connectToDatabases(ctx context.Context, params Parameters, connectedDBs map
 		if err != nil {
 			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
 			usagemetrics.Error(usagemetrics.HANAMonitoringCollectionFailure)
+			if databaseconnector.IsAuthError(err) {
+				authErrorDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())] = true
+				log.CtxLogger(ctx).Errorw("Auth error connecting to database, not retrying to connect to the instance", "name", i.GetName(), "error", err.Error())
+			}
 			continue
 		}
 		connectedDBs[fmt.Sprintf("%s:%s:%s", i.GetHost(), i.GetUser(), i.GetPort())] = true
