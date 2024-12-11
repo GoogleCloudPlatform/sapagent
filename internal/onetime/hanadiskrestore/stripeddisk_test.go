@@ -177,6 +177,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			name: "RestoreFromSnapshotErr",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
+				NewDiskPrefix: "test-prefix",
 				disks: []*ipb.Disk{
 					&ipb.Disk{
 						DiskName: "test-disk-1",
@@ -189,7 +190,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 								Name:       "test-snapshot-1",
 								SourceDisk: "test-disk-1",
 								Labels: map[string]string{
-									"isg": "test-group-snapshot",
+									"goog-sapagent-isg": "test-group-snapshot",
 								},
 							},
 						},

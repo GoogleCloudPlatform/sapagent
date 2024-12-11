@@ -85,6 +85,9 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
 			timestamp := time.Now().Unix()
 			sourceDiskName := truncateName(ctx, snapshot.Name, fmt.Sprintf("%d", timestamp))
+			if r.NewDiskPrefix != "" {
+				sourceDiskName = fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", numOfDisksRestored+1))
+			}
 			lastDiskName = sourceDiskName
 
 			if err := r.restoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, snapshot.Name); err != nil {

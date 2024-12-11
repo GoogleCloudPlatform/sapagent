@@ -109,6 +109,7 @@ type Restorer struct {
 	ForceStopHANA                                              bool
 	isGroupSnapshot                                            bool
 	NewdiskName                                                string
+	NewDiskPrefix                                              string
 	CSEKKeyFile                                                string
 	ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 	IIOTEParams                                                *onetime.InternallyInvokedOTE
@@ -135,7 +136,7 @@ func (*Restorer) Usage() string {
   [-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
 
 	For single disk restore:
-	hanadiskrestore -sid=<HANA SID> -source-snapshot=<snapshot-name> -data-disk-name=<disk-name> -data-disk-zone=<disk-zone>
+	hanadiskrestore -sid=<HANA SID> -new-disk-name=<name-less-than-63-chars> -source-snapshot=<snapshot-name> -data-disk-name=<disk-name> -data-disk-zone=<disk-zone>
 
 	For multi-disk restore:
 	hanadiskrestore -sid=<HANA SID> -group-snapshot-name=<group-snapshot-name>
@@ -150,6 +151,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.GroupSnapshot, "group-snapshot-name", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
+	fs.StringVar(&r.NewDiskPrefix, "new-disk-prefix", "", "Prefix for the new disks created for multi-disk restore. (optional) must be less than 61 characters long")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.HanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
@@ -213,6 +215,9 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	}
 	if len(r.NewdiskName) > 63 {
 		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
+	}
+	if len(r.NewDiskPrefix) > 61 {
+		return fmt.Errorf("the new-disk-prefix is longer than 61 chars which is not supported, please provide a shorter prefix")
 	}
 
 	if r.Project == "" {

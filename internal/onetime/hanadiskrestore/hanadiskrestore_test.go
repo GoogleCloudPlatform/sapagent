@@ -269,6 +269,36 @@ func TestValidateParameters(t *testing.T) {
 			},
 			want: cmpopts.AnyError,
 		},
+		{
+			name: "InvalidNewDiskPrefix",
+			restorer: Restorer{
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewdiskName:    "new-disk-name",
+				NewDiskPrefix:  "invalid-new-disk-prefix-which-is-much-much-longer-than-sixty-one-charecters",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			restorer: Restorer{
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewdiskName:    "new-disk-name",
+				NewDiskPrefix:  "new-disk-prefix",
+			},
+			want: nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1431,7 +1461,7 @@ func TestSynopsisForRestorer(t *testing.T) {
 func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Restorer{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot-name"}
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot-name", "new-disk-prefix"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
