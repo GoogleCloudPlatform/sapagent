@@ -1376,7 +1376,7 @@ func TestCollectRoleMetrics(t *testing.T) {
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
-		name: "justASCS",
+		name: "justASCSMsEnq",
 		p:    defaultASCSInstanceProperties,
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
@@ -1399,7 +1399,30 @@ tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST
 			},
 		},
 	}, {
-		name: "justERS",
+		name: "justASCSMsEq",
+		p:    defaultASCSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 eq.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "true",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
+		name: "justERSEnqr",
 		p:    defaultERSInstanceProperties,
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
@@ -1421,12 +1444,34 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_ASCS12 pf=/usr/sap/T
 			},
 		},
 	}, {
+		name: "justERSEr",
+		p:    defaultERSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 er.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":           "true",
+					"ascs":          "false",
+					"app":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
 		name: "justAppJava",
 		p:    defaultAppInstanceProperties,
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 jstart.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 jc.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{

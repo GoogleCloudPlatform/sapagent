@@ -95,7 +95,7 @@ var (
 	// 8. Instance type
 	// 9. Instance number
 	// 10. Instance name
-	appProcessRegex = regexp.MustCompile(`(enq|enqr|ms|dw|jstart).sap([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2}) pf=/(usr/sap|sapmnt)/([A-Za-z][A-Za-z0-9]{2})/SYS/profile/([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2})_(.*)`)
+	appProcessRegex = regexp.MustCompile(`(dw|enq|eq|enqr|er|jc|ms)\.sap([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2}) pf=/(usr/sap|sapmnt)/([A-Za-z][A-Za-z0-9]{2})/SYS/profile/([A-Za-z][A-Za-z0-9]{2})_(D|ASCS|ERS)([0-9]{2})_(.*)`)
 )
 
 // Collect is Netweaver implementation of Collector interface from processmetrics.go.
@@ -619,20 +619,20 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 			continue
 		}
 		switch bin {
-		case "enqr":
-			log.CtxLogger(ctx).Debugw("Found enqr", "bin", bin)
+		case "enqr", "er":
+			log.CtxLogger(ctx).Debugw("Found enqr or er", "bin", bin)
 			roles["ers"] = "true"
 			hasRole = true
 		case "ms":
 			log.CtxLogger(ctx).Debugw("Found ms", "bin", bin)
 			hasMS = true
 			hasRole = true
-		case "enq":
-			log.CtxLogger(ctx).Debugw("Found enq", "bin", bin)
+		case "enq", "eq":
+			log.CtxLogger(ctx).Debugw("Found enq or eq", "bin", bin)
 			hasEnq = true
 			hasRole = true
-		case "dw", "jstart":
-			log.CtxLogger(ctx).Debugw("Found dw or jstart", "bin", bin)
+		case "dw", "jc":
+			log.CtxLogger(ctx).Debugw("Found dw or jc", "bin", bin)
 			roles["app"] = "true"
 			hasRole = true
 		}
