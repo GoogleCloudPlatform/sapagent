@@ -219,11 +219,11 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:                      "Backint",
-						State:                     spb.State_UNSPECIFIED_STATE,
-						EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
-						IamPermissions:            defaultBackintIAMPermissions,
-						ConfigValues:              []*spb.ConfigValue{},
+						Name:                    "Backint",
+						State:                   spb.State_UNSPECIFIED_STATE,
+						UnspecifiedStateMessage: "Backint parameters file not specified / Disabled",
+						IamPermissions:          defaultBackintIAMPermissions,
+						ConfigValues:            []*spb.ConfigValue{},
 					},
 					{
 						Name:           "Disk Snapshot",
@@ -410,11 +410,11 @@ func TestBackintStatusFailures(t *testing.T) {
 				},
 			},
 			want: &spb.ServiceStatus{
-				Name:                      "Backint",
-				State:                     spb.State_UNSPECIFIED_STATE,
-				EnabledUnspecifiedMessage: "Backint parameters file not specified / Disabled",
-				IamPermissions:            defaultBackintIAMPermissions,
-				ConfigValues:              []*spb.ConfigValue{},
+				Name:                    "Backint",
+				State:                   spb.State_UNSPECIFIED_STATE,
+				UnspecifiedStateMessage: "Backint parameters file not specified / Disabled",
+				IamPermissions:          defaultBackintIAMPermissions,
+				ConfigValues:            []*spb.ConfigValue{},
 			},
 		},
 		{

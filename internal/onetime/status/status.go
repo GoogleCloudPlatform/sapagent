@@ -305,7 +305,7 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		},
 	}
 	if s.BackintParametersPath == "" {
-		status.EnabledUnspecifiedMessage = "Backint parameters file not specified / Disabled"
+		status.UnspecifiedStateMessage = "Backint parameters file not specified / Disabled"
 		return status
 	}
 	p := backintconfiguration.Parameters{
