@@ -61,7 +61,7 @@ mkdir -p "${pb_dest}"
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 echo "**************  Compiling protobufs"
-protoc --go_opt=paths=source_relative protos/**/*.proto --go_out=.
+protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/integration/common/shared/protos/**/*.proto --go_out=.
 
 mkdir -p buildoutput
 echo "**************  Generating the latest go.mod and go.sum dependencies"

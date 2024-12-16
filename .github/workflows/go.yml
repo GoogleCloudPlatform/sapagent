@@ -16,6 +16,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Checkout submodules
+      run: git submodule update --init --recursive
+
     - name: Set up Go
       uses: actions/setup-go@v3
       with:
@@ -31,7 +34,7 @@ jobs:
     - name: Compile protocol buffers
       run: |
         export PATH=${PATH}:`go env GOPATH`/bin
-        protoc --go_opt=paths=source_relative protos/**/*.proto --go_out=.
+        protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/integration/common/shared/protos/**/*.proto --go_out=.
 
     - name: Get the latest dependency versions
       run: |
