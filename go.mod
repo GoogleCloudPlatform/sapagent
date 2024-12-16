@@ -15,10 +15,9 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
-  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15
+  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241216220000-e80b9b366dbe
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
-  github.com/fatih/color v1.17.0
   github.com/fsouza/fake-gcs-server v1.45.2
   github.com/gammazero/workerpool v1.1.3
   github.com/go-yaml/yaml v2.1.0+incompatible
@@ -27,7 +26,6 @@ require (
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
   github.com/jonboulle/clockwork v0.4.1-0.20230717050334-b1209715e43c
-  github.com/natefinch/lumberjack v0.0.0-20230119042236-215739b3bcdc
   github.com/pkg/errors v0.9.1
   github.com/shirou/gopsutil/v3 v3.22.12
   github.com/zieckey/goini v0.0.0-20180118150432-0da17d361d26
@@ -47,8 +45,9 @@ require (
   cloud.google.com/go/compute/metadata v0.2.3 // indirect
   cloud.google.com/go/longrunning v0.5.5 // indirect
   cloud.google.com/go/pubsub v1.36.1 // indirect
-  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241206140426-05c9bb5240c5 // indirect
+  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15 // indirect
   github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
+  github.com/fatih/color v1.17.0 // indirect
   github.com/felixge/httpsnoop v1.0.4 // indirect
   github.com/gammazero/deque v0.2.0 // indirect
   github.com/go-logr/logr v1.4.1 // indirect
@@ -65,6 +64,7 @@ require (
   github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
   github.com/mattn/go-colorable v0.1.13 // indirect
   github.com/mattn/go-isatty v0.0.20 // indirect
+  github.com/natefinch/lumberjack v0.0.0-20230119042236-215739b3bcdc // indirect
   github.com/pkg/xattr v0.4.9 // indirect
   github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
   github.com/sirupsen/logrus v1.9.2 // indirect

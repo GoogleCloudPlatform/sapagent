@@ -32,14 +32,13 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/statushelper"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
-
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/statushelper"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
 )
 
 const (
@@ -53,17 +52,16 @@ const (
 type Status struct {
 	ConfigFilePath        string
 	BackintParametersPath string
-
-	verbose           bool
-	help              bool
-	logLevel, logPath string
-	oteLogger         *onetime.OTELogger
-	cloudProps        *iipb.CloudProperties
-	readFile          configuration.ReadConfigFile
-	backintReadFile   backintconfiguration.ReadConfigFile
-	exec              commandlineexecutor.Execute
-	exists            commandlineexecutor.Exists
-	backintClient     storage.Client
+	verbose               bool
+	help                  bool
+	logLevel, logPath     string
+	oteLogger             *onetime.OTELogger
+	cloudProps            *iipb.CloudProperties
+	readFile              configuration.ReadConfigFile
+	backintReadFile       backintconfiguration.ReadConfigFile
+	exec                  commandlineexecutor.Execute
+	exists                commandlineexecutor.Exists
+	backintClient         storage.Client
 }
 
 // Name implements the subcommand interface for status.
@@ -105,7 +103,6 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		return exitStatus
 	}
 	s.cloudProps = cp
-
 	// Run the status checks.
 	agentStatus, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if exitStatus == subcommands.ExitFailure {
@@ -244,10 +241,8 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 	if config.GetCollectionConfiguration().GetCollectProcessMetrics() {
 		status.State = spb.State_SUCCESS_STATE
 	}
-
 	return status
 }
-
 func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "HANA Monitoring Metrics",
@@ -305,7 +300,7 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		},
 	}
 	if s.BackintParametersPath == "" {
-		status.EnabledUnspecifiedMessage = "Backint parameters file not specified / Disabled"
+		status.UnspecifiedStateMessage = "Backint parameters file not specified / Disabled"
 		return status
 	}
 	p := backintconfiguration.Parameters{
