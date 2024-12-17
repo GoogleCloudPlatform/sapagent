@@ -1384,6 +1384,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleWorkloadProperties,
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "javaNetweaver",
@@ -1446,6 +1447,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleJavaWorkloadProperties,
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "justNetweaverConnectedToScaleoutDB",
@@ -1502,6 +1504,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance", "test-instance2"},
 			WorkloadProperties: exampleWorkloadProperties,
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "notHA",
@@ -1556,6 +1559,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "ascsErr",
@@ -1607,6 +1611,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "nfsErr",
@@ -1658,6 +1663,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "noDBSID",
@@ -1710,6 +1716,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			AppHosts:           []string{"fs1-nw-node2", "fs1-nw-node1"},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "noDBHosts",
@@ -1768,6 +1775,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 				Sid: "DEH",
 			},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}, {
 		name: "workloadDiscoveryDisabled",
@@ -1825,6 +1833,7 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
 		},
 	}}
 	ctx := context.Background()
@@ -1905,6 +1914,11 @@ func TestDiscoverHANA(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}},
 	}, {
 		name: "scaleout",
@@ -1957,6 +1971,11 @@ func TestDiscoverHANA(t *testing.T) {
 					Name:    "SAP HANA",
 					Version: "2.12 SPS05 Rev56.34",
 				}},
+			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
 			},
 		}},
 	}, {
@@ -2017,6 +2036,11 @@ func TestDiscoverHANA(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEF",
@@ -2037,8 +2061,12 @@ func TestDiscoverHANA(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
-		},
-		},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
+		}},
 	}, {
 		name: "multiTenantScaleout",
 		app: &sappb.SAPInstance{
@@ -2097,6 +2125,11 @@ func TestDiscoverHANA(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEF",
@@ -2117,8 +2150,12 @@ func TestDiscoverHANA(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
-		},
-		},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
+		}},
 	}, {
 		name: "errGettingNodes",
 		app: &sappb.SAPInstance{
@@ -2438,6 +2475,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}},
 	}, {
 		name: "justNetweaver",
@@ -2535,6 +2577,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Number: "12",
 				}},
 			}},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid: "abc",
+				Type:   sappb.InstanceType_NETWEAVER,
+			},
 		}},
 	}, {
 		name: "twoNetweaver",
@@ -2661,6 +2707,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Number: "12",
 				}},
 			}},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid: "abc",
+				Type:   sappb.InstanceType_NETWEAVER,
+			},
 		}, {
 			AppComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -2702,6 +2752,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Number: "12",
 				}},
 			}},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid: "def",
+				Type:   sappb.InstanceType_NETWEAVER,
+			},
 		}},
 	}, {
 		name: "twoHANA",
@@ -2767,6 +2821,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "def",
@@ -2787,6 +2846,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Name:    "SAP HANA",
 					Version: "2.12 SPS05 Rev56.34",
 				}},
+			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "def",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
 			},
 		}},
 	}, {
@@ -2926,6 +2990,16 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Number: "12",
 				}},
 			}},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_NETWEAVER,
+				InstanceNumber: "11",
+			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "DEH",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}},
 	}, {
 		name: "hanaThenNetweaverConnected",
@@ -3062,6 +3136,16 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Version: "2.12 SPS05 Rev56.34",
 				}},
 			},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_NETWEAVER,
+				InstanceNumber: "11",
+			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "DEH",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
+			},
 		}},
 	}, {
 		name: "netweaverThenHANANotConnected",
@@ -3184,6 +3268,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Number: "12",
 				}},
 			}},
+			AppInstance: &sappb.SAPInstance{
+				Sapsid:         "abc",
+				Type:           sappb.InstanceType_NETWEAVER,
+				InstanceNumber: "11",
+			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DB2",
@@ -3204,6 +3293,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 					Name:    "SAP HANA",
 					Version: "2.12 SPS05 Rev56.34",
 				}},
+			},
+			DBInstance: &sappb.SAPInstance{
+				Sapsid:         "DB2",
+				Type:           sappb.InstanceType_HANA,
+				InstanceNumber: "00",
 			},
 		}},
 	}}

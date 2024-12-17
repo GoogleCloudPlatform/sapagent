@@ -99,8 +99,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-				return 0, nil, 10, nil, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+				return 0, 10, nil, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{{
@@ -132,7 +132,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
 				log.Logger.Info("fakeReplicationConfig")
 				site1 := &sapb.HANAReplicaSite{
 					Name: "gce-1",
@@ -141,7 +141,7 @@ func TestInstances(t *testing.T) {
 					Name: "gce-2",
 				}
 				site1.Targets = []*sapb.HANAReplicaSite{site2}
-				return 1, []string{"gce-1", "gce-2"}, 15, site1, nil
+				return 1, 15, site1, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -149,7 +149,6 @@ func TestInstances(t *testing.T) {
 					InstanceNumber: "00",
 					Type:           sapb.InstanceType_HANA,
 					Site:           sapb.InstanceSite_HANA_PRIMARY,
-					HanaHaMembers:  []string{"gce-1", "gce-2"},
 					SapcontrolPath: "/usr/sap/HDB/SYS/exe/sapcontrol",
 					User:           "hdbadm",
 					InstanceId:     "HDB00",
@@ -180,8 +179,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-				return 1, []string{"gce-1", "gce-2"}, 15, nil, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+				return 1, 15, nil, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -189,7 +188,6 @@ func TestInstances(t *testing.T) {
 					InstanceNumber: "00",
 					Type:           sapb.InstanceType_HANA,
 					Site:           sapb.InstanceSite_HANA_PRIMARY,
-					HanaHaMembers:  []string{"gce-1", "gce-2"},
 					SapcontrolPath: "/usr/sap/HSE/SYS/exe/sapcontrol",
 					User:           "hseadm",
 					InstanceId:     "HDB00",
@@ -259,8 +257,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-				return 0, nil, 0, nil, cmpopts.AnyError
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+				return 0, 0, nil, cmpopts.AnyError
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -292,8 +290,8 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-				return -1, nil, 0, nil, nil
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+				return -1, 0, nil, nil
 			},
 			want: &sapb.SAPInstances{
 				Instances: []*sapb.SAPInstance{&sapb.SAPInstance{
@@ -694,16 +692,13 @@ func TestReadReplicationConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMode, gotHAMembers, gotExitStatus, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
+			gotMode, gotExitStatus, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("readReplicationConfig(%s,%s,%s) error, got: %v want: %v.", test.user, test.sid, test.instanceID, err, test.wantErr)
 			}
 			if test.wantMode != gotMode {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect mode, got: %d want: %d.", test.user, test.sid, test.instanceID, gotMode, test.wantMode)
-			}
-			if diff := cmp.Diff(test.wantHAMembers, gotHAMembers, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect haMembers, diff (-want +got):\n%s.", test.user, test.sid, test.instanceID, diff)
 			}
 			if diff := cmp.Diff(test.wantSite, gotSite, cmpopts.SortSlices(func(a, b *sapb.HANAReplicaSite) bool { return a.Name < b.Name }), protocmp.Transform()); diff != "" {
 				t.Errorf("readReplicationConfig(%s,%s,%s) returned incorrect site, diff (-want +got):\n%s.", test.user, test.sid, test.instanceID, diff)

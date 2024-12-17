@@ -74,7 +74,8 @@ type gceInterface interface {
 	GetSubnetwork(name, project, region string) (*compute.Subnetwork, error)
 }
 
-func extractFromURI(uri, field string) string {
+// ExtractFromURI attempts to extract the value of a field from a URI. This expects the format of the string to be "/<field>/<value>".
+func ExtractFromURI(uri, field string) string {
 	parts := strings.Split(uri, "/")
 	for i, s := range parts {
 		if s == field && i+1 < len(parts) {
@@ -253,7 +254,7 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 		}
 
 		if host.parent != nil {
-			project = extractFromURI(host.parent.ResourceUri, projectsURIPart)
+			project = ExtractFromURI(host.parent.ResourceUri, projectsURIPart)
 		}
 
 		var err error
@@ -296,7 +297,6 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 			d.resourceCache[host.name] = c
 			d.resourceCache[addr] = c
 			if now.Sub(c.res.UpdateTime.AsTime()) < (10 * time.Minute) {
-				log.CtxLogger(ctx).Debugw("discoverResource cache hit", "name", host.name, "now", now, "res", c.res, "related", c.related)
 				return c.res, c.related, nil
 			}
 		}
@@ -319,13 +319,13 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 	}
 	c := cacheEntry{res, toAdd}
 	d.resourceCache[host.name] = c
+	d.resourceCache[res.ResourceUri] = c
 	if host.name != uri {
 		d.resourceCache[uri] = c
 	}
 	if addr != "" && addr != host.name {
 		d.resourceCache[addr] = c
 	}
-	log.CtxLogger(ctx).Debugw("discoverResource result", "res", res, "toAdd", toAdd, "err", err)
 	return res, toAdd, err
 }
 
@@ -347,9 +347,9 @@ func (d *CloudDiscovery) discoverResourceForURI(ctx context.Context, uri string)
 
 func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverAddress", "addressURI", addressURI)
-	project := extractFromURI(addressURI, projectsURIPart)
-	region := extractFromURI(addressURI, regionsURIPart)
-	ca, err := d.GceService.GetAddress(project, region, extractFromURI(addressURI, addressesURIPart))
+	project := ExtractFromURI(addressURI, projectsURIPart)
+	region := ExtractFromURI(addressURI, regionsURIPart)
+	ca, err := d.GceService.GetAddress(project, region, ExtractFromURI(addressURI, addressesURIPart))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -361,13 +361,15 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 	}
 
 	toAdd := []toDiscover{{
-		name:   ca.Subnetwork,
-		region: region,
-		parent: ar,
+		name:    ca.Subnetwork,
+		region:  region,
+		network: ca.Network,
+		parent:  ar,
 	}, {
-		name:   ca.Network,
-		region: region,
-		parent: ar,
+		name:    ca.Network,
+		region:  region,
+		network: ca.Network,
+		parent:  ar,
 	}}
 	for _, u := range ca.Users {
 		toAdd = append(toAdd, toDiscover{
@@ -383,10 +385,10 @@ func (d *CloudDiscovery) discoverAddress(ctx context.Context, addressURI string)
 
 func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverInstance", "instanceURI", instanceURI)
-	project := extractFromURI(instanceURI, projectsURIPart)
-	zone := extractFromURI(instanceURI, zonesURIPart)
+	project := ExtractFromURI(instanceURI, projectsURIPart)
+	zone := ExtractFromURI(instanceURI, zonesURIPart)
 	region := regionFromZone(zone)
-	instanceName := extractFromURI(instanceURI, instancesURIPart)
+	instanceName := ExtractFromURI(instanceURI, instancesURIPart)
 	ci, err := d.GceService.GetInstance(project, zone, instanceName)
 	if err != nil {
 		return nil, nil, err
@@ -414,19 +416,22 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 	for _, net := range ci.NetworkInterfaces {
 		toAdd = append(toAdd,
 			toDiscover{
-				name:   net.Network,
-				region: region,
-				parent: ir,
+				name:    net.Network,
+				region:  region,
+				network: net.Network,
+				parent:  ir,
 			},
 			toDiscover{
-				name:   net.Subnetwork,
-				region: region,
-				parent: ir,
+				name:    net.Subnetwork,
+				region:  region,
+				network: net.Network,
+				parent:  ir,
 			},
 			toDiscover{
-				name:   net.NetworkIP,
-				region: region,
-				parent: ir,
+				name:    net.NetworkIP,
+				region:  region,
+				network: net.Network,
+				parent:  ir,
 			})
 	}
 
@@ -435,9 +440,9 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 
 func (d *CloudDiscovery) discoverDisk(ctx context.Context, diskURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverDisk", "diskURI", diskURI)
-	diskName := extractFromURI(diskURI, disksURIPart)
-	diskZone := extractFromURI(diskURI, zonesURIPart)
-	projectID := extractFromURI(diskURI, projectsURIPart)
+	diskName := ExtractFromURI(diskURI, disksURIPart)
+	diskZone := ExtractFromURI(diskURI, zonesURIPart)
+	projectID := ExtractFromURI(diskURI, projectsURIPart)
 	cd, err := d.GceService.GetDisk(projectID, diskZone, diskName)
 	if err != nil {
 		return nil, nil, err
@@ -453,9 +458,9 @@ func (d *CloudDiscovery) discoverDisk(ctx context.Context, diskURI string) (*spb
 
 func (d *CloudDiscovery) discoverForwardingRule(ctx context.Context, fwrURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverForwardingRule", "fwrURI", fwrURI)
-	project := extractFromURI(fwrURI, projectsURIPart)
-	region := extractFromURI(fwrURI, regionsURIPart)
-	fwrName := extractFromURI(fwrURI, forwardingRulesURIPart)
+	project := ExtractFromURI(fwrURI, projectsURIPart)
+	region := ExtractFromURI(fwrURI, regionsURIPart)
+	fwrName := ExtractFromURI(fwrURI, forwardingRulesURIPart)
 	fwr, err := d.GceService.GetForwardingRule(project, region, fwrName)
 	if err != nil {
 		return nil, nil, err
@@ -488,10 +493,10 @@ func (d *CloudDiscovery) discoverForwardingRule(ctx context.Context, fwrURI stri
 }
 
 func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
-	log.CtxLogger(ctx).Debug("Discovering instance group", "groupURI", groupURI)
-	project := extractFromURI(groupURI, projectsURIPart)
-	zone := extractFromURI(groupURI, zonesURIPart)
-	name := extractFromURI(groupURI, instanceGroupsURIPart)
+	log.CtxLogger(ctx).Debugw("Discovering instance group", "groupURI", groupURI)
+	project := ExtractFromURI(groupURI, projectsURIPart)
+	zone := ExtractFromURI(groupURI, zonesURIPart)
+	name := ExtractFromURI(groupURI, instanceGroupsURIPart)
 	ig, err := d.GceService.GetInstanceGroup(project, zone, name)
 	if err != nil {
 		return nil, nil, err
@@ -518,15 +523,16 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 			network: ig.Network,
 			parent:  igr,
 		})
+		igr.RelatedResources = append(igr.RelatedResources, inst)
 	}
 	return igr, toAdd, nil
 }
 
 func (d *CloudDiscovery) discoverInstanceGroupInstances(ctx context.Context, groupURI string) ([]string, error) {
 	log.CtxLogger(ctx).Debug("discoverInstanceGroupInstances", "groupURI", groupURI)
-	project := extractFromURI(groupURI, projectsURIPart)
-	zone := extractFromURI(groupURI, zonesURIPart)
-	name := extractFromURI(groupURI, instanceGroupsURIPart)
+	project := ExtractFromURI(groupURI, projectsURIPart)
+	zone := ExtractFromURI(groupURI, zonesURIPart)
+	name := ExtractFromURI(groupURI, instanceGroupsURIPart)
 	list, err := d.GceService.ListInstanceGroupInstances(project, zone, name)
 	if err != nil {
 		return nil, err
@@ -542,9 +548,9 @@ func (d *CloudDiscovery) discoverInstanceGroupInstances(ctx context.Context, gro
 
 func (d *CloudDiscovery) discoverFilestore(ctx context.Context, filestoreURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverFilestore", "filestoreURI", filestoreURI)
-	project := extractFromURI(filestoreURI, projectsURIPart)
-	location := extractFromURI(filestoreURI, locationsURIPart)
-	name := extractFromURI(filestoreURI, filestoresURIPart)
+	project := ExtractFromURI(filestoreURI, projectsURIPart)
+	location := ExtractFromURI(filestoreURI, locationsURIPart)
+	name := ExtractFromURI(filestoreURI, filestoresURIPart)
 	f, err := d.GceService.GetFilestore(project, location, name)
 	if err != nil {
 		return nil, nil, err
@@ -560,8 +566,8 @@ func (d *CloudDiscovery) discoverFilestore(ctx context.Context, filestoreURI str
 
 func (d *CloudDiscovery) discoverHealthCheck(ctx context.Context, healthCheckURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverHealthCheck", "healthCheckURI", healthCheckURI)
-	project := extractFromURI(healthCheckURI, projectsURIPart)
-	name := extractFromURI(healthCheckURI, healthChecksURIPart)
+	project := ExtractFromURI(healthCheckURI, projectsURIPart)
+	name := ExtractFromURI(healthCheckURI, healthChecksURIPart)
 	hc, err := d.GceService.GetHealthCheck(project, name)
 	if err != nil {
 		return nil, nil, err
@@ -576,9 +582,9 @@ func (d *CloudDiscovery) discoverHealthCheck(ctx context.Context, healthCheckURI
 
 func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServiceURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverBackendService", "backendServiceURI", backendServiceURI)
-	project := extractFromURI(backendServiceURI, projectsURIPart)
-	region := extractFromURI(backendServiceURI, regionsURIPart)
-	name := extractFromURI(backendServiceURI, backendServicesURIPart)
+	project := ExtractFromURI(backendServiceURI, projectsURIPart)
+	region := ExtractFromURI(backendServiceURI, regionsURIPart)
+	name := ExtractFromURI(backendServiceURI, backendServicesURIPart)
 	bes, err := d.GceService.GetRegionalBackendService(project, region, name)
 	if err != nil {
 		return nil, nil, err
@@ -593,17 +599,19 @@ func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServ
 	for _, gs := range bes.Backends {
 		if gs.Group != "" {
 			toAdd = append(toAdd, toDiscover{
-				name:   gs.Group,
-				region: region,
-				parent: bsr,
+				name:    gs.Group,
+				region:  region,
+				parent:  bsr,
+				network: bes.Network,
 			})
 		}
 	}
 	for _, hc := range bes.HealthChecks {
 		toAdd = append(toAdd, toDiscover{
-			name:   hc,
-			region: region,
-			parent: bsr,
+			name:    hc,
+			region:  region,
+			parent:  bsr,
+			network: bes.Network,
 		})
 	}
 	return bsr, toAdd, nil
@@ -617,12 +625,12 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 	cloudNet, ok := d.networks[networkURI]
 	if !ok {
 		cloudNet = &CloudNetwork{
-			name:    extractFromURI(networkURI, networksURIPart),
-			project: extractFromURI(networkURI, projectsURIPart),
+			name:    ExtractFromURI(networkURI, networksURIPart),
+			project: ExtractFromURI(networkURI, projectsURIPart),
 		}
 	}
 
-	cn, err := d.GceService.GetNetwork(extractFromURI(networkURI, networksURIPart), extractFromURI(networkURI, projectsURIPart))
+	cn, err := d.GceService.GetNetwork(ExtractFromURI(networkURI, networksURIPart), ExtractFromURI(networkURI, projectsURIPart))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -637,9 +645,9 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 	cloudNet.subnets = []*CloudSubnetwork{}
 	for _, s := range cn.Subnetworks {
 		log.CtxLogger(ctx).Debugw("discoverNetwork subnetwork", "subnetwork", s)
-		cs, err := d.GceService.GetSubnetwork(extractFromURI(s, subnetworksURIPart),
-			extractFromURI(s, projectsURIPart),
-			extractFromURI(s, regionsURIPart))
+		cs, err := d.GceService.GetSubnetwork(ExtractFromURI(s, subnetworksURIPart),
+			ExtractFromURI(s, projectsURIPart),
+			ExtractFromURI(s, regionsURIPart))
 		if err != nil {
 			log.CtxLogger(ctx).Infow("discoverNetwork subnetwork error", "err", err, "subnetwork", s)
 			continue

@@ -693,7 +693,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "test-network",
+			name:    "test-network",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -703,7 +704,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "test-network2",
+			name:    "test-network2",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -713,7 +715,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "test-subnetwork",
+			name:    "test-subnetwork",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -723,7 +726,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "test-subnetwork2",
+			name:    "test-subnetwork2",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -733,7 +737,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "1.2.3.4",
+			name:    "1.2.3.4",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -743,7 +748,8 @@ func TestDiscoverResource(t *testing.T) {
 				},
 			},
 		}, {
-			name: "5.6.7.8",
+			name:    "5.6.7.8",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -770,8 +776,9 @@ func TestDiscoverResource(t *testing.T) {
 			GetURIForIPResp: []string{"projects/test-project/zones/test-zone/disks/test-disk"},
 			GetURIForIPErr:  []error{nil},
 			GetURIForIPArgs: []*fake.GetURIForIPArguments{{
-				Project: "parent-project",
-				IP:      "1.2.3.4",
+				Project:    "parent-project",
+				Subnetwork: "",
+				IP:         "1.2.3.4",
 			}},
 			GetDiskResp: []*compute.Disk{{SelfLink: "test-disk"}},
 			GetDiskErr:  []error{nil},
@@ -815,7 +822,7 @@ func TestDiscoverResource(t *testing.T) {
 		},
 		wantErr: cmpopts.AnyError,
 	}, {
-		name: "usesSubnetwork",
+		name: "usesNetwork",
 		host: toDiscover{
 			name:    "projects/test-project/zones/test-zone/filestores/test-filestore",
 			network: "test-network",
@@ -931,7 +938,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-network",
+			name:    "test-network",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -939,7 +947,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-network2",
+			name:    "test-network2",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -947,7 +956,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-subnetwork",
+			name:    "test-subnetwork",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -955,7 +965,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-subnetwork2",
+			name:    "test-subnetwork2",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -963,7 +974,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "1.2.3.4",
+			name:    "1.2.3.4",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -971,7 +983,8 @@ func TestDiscoverResourceForURI(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "5.6.7.8",
+			name:    "5.6.7.8",
+			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1026,14 +1039,16 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ResourceUri:  "projects/test-project/regions/test-region/addresses/test-address",
 		},
 		wantToDiscover: []toDiscover{{
-			name: "test-network",
+			name:    "test-network",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 				ResourceUri:  "projects/test-project/regions/test-region/addresses/test-address",
 			},
 		}, {
-			name: "test-subnetwork",
+			name:    "test-subnetwork",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -1117,9 +1132,10 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ListInstanceGroupInstancesErr: []error{nil},
 		},
 		wantResource: &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "test-instance-group",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "test-instance-group",
+			RelatedResources: []string{"test-instance", "test-instance2"},
 		},
 		wantToDiscover: []toDiscover{{
 			name:   "test-instance",
@@ -1316,16 +1332,18 @@ func TestDiscoverAddress(t *testing.T) {
 			ResourceUri:  "test-address",
 		},
 		wantToDiscover: []toDiscover{{
-			name:   "test-network",
-			region: defaultRegion,
+			name:    "test-network",
+			region:  defaultRegion,
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
 				ResourceUri:  "test-address",
 			},
 		}, {
-			name:   "test-subnet",
-			region: defaultRegion,
+			name:    "test-subnet",
+			region:  defaultRegion,
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
@@ -1406,7 +1424,8 @@ func TestDiscoverInstance(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-network",
+			name:    "test-network",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1414,7 +1433,8 @@ func TestDiscoverInstance(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-subnet",
+			name:    "test-subnet",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1422,7 +1442,8 @@ func TestDiscoverInstance(t *testing.T) {
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
 			},
 		}, {
-			name: "test-network-ip",
+			name:    "test-network-ip",
+			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
@@ -1617,27 +1638,28 @@ func TestDiscoverInstanceGroup(t *testing.T) {
 			GetInstanceGroupErr: []error{nil},
 			ListInstanceGroupInstancesResp: []*compute.InstanceGroupsListInstances{{
 				Items: []*compute.InstanceWithNamedPorts{{
-					Instance: "some/instance",
+					Instance: "test/instance",
 				}, {
-					Instance: "some/other/instance",
+					Instance: "test/other/instance",
 				}},
 			}},
 			ListInstanceGroupInstancesErr: []error{nil},
 		},
 		wantResource: &spb.SapDiscovery_Resource{
-			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
-			ResourceUri:  "test-group-name",
+			ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+			ResourceUri:      "test-group-name",
+			RelatedResources: []string{"test/instance", "test/other/instance"},
 		},
 		wantToDiscover: []toDiscover{{
-			name: "some/instance",
+			name: "test/instance",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 				ResourceUri:  "test-group-name",
 			},
 		}, {
-			name: "some/other/instance",
+			name: "test/other/instance",
 			parent: &spb.SapDiscovery_Resource{
 				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
