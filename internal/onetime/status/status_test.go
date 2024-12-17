@@ -22,6 +22,9 @@ package status
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"flag"
@@ -33,9 +36,17 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
+	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+
+	dpb "google.golang.org/protobuf/types/known/durationpb"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
+	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
 )
 
@@ -122,15 +133,572 @@ func TestExecuteStatus(t *testing.T) {
 			args: []any{
 				"test",
 				log.Parameters{},
-				&ipb.CloudProperties{},
+				&iipb.CloudProperties{},
 			},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			got := test.s.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.s, test.args, got, test.want)
+			}
+		})
+	}
+}
+
+func TestHostMetricsStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		s      Status
+		config *cpb.Configuration
+		want   *spb.ServiceStatus
+	}{
+		{
+			name: "HostMetricsDisabled",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return nil, nil
+				},
+				config: &cpb.Configuration{
+					ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: false},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:  "Host Metrics",
+				State: spb.State_FAILURE_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "provide_sap_host_agent_metrics", Value: "false", IsDefault: false},
+				},
+			},
+		},
+		{
+			name: "PermissionsNotGranted",
+			config: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": false,
+						"monitoring.timeSeries.list":   true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId:  "test-project",
+					InstanceId: "test-instance",
+					Zone:       "test-zone",
+					Scopes:     []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Host Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_FAILURE_STATE,
+					},
+					{
+						Name:    "monitoring.timeSeries.list",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
+				},
+				ErrorMessage: "IAM permissions not granted",
+			},
+		},
+		{
+			name: "EndpointFailure",
+			config: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId:  "test-project",
+					InstanceId: "test-instance",
+					Zone:       "test-zone",
+					Scopes:     []string{requiredScope},
+				},
+				httpGet: httpGetFailure,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Host Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_ERROR_STATE,
+				ErrorMessage:    "Error verifying endpoint",
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "ErrorResponseFromEndpoint",
+			config: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId:  "test-project",
+					InstanceId: "test-instance",
+					Zone:       "test-zone",
+					Scopes:     []string{requiredScope},
+				},
+				httpGet: httpGetError,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Host Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Endpoint verification failed with code: 500",
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "Success",
+			config: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId:  "test-project",
+					InstanceId: "test-instance",
+					Zone:       "test-zone",
+					Scopes:     []string{requiredScope},
+				},
+				httpGet: httpGetSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Host Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := tc.s.hostMetricsStatus(context.Background(), tc.config)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("hostMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestProcessMetricsStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       Status
+		config  *cpb.Configuration
+		want    *spb.ServiceStatus
+		wantErr error
+	}{
+		{
+			name: "ProcessMetricsDisabled",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return nil, nil
+				},
+				config: &cpb.Configuration{
+					CollectionConfiguration: &cpb.CollectionConfiguration{
+						CollectProcessMetrics: false,
+					},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:           "Process Metrics",
+				State:          spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "false", IsDefault: true},
+					{Name: "process_metrics_frequency", Value: "0", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[]", IsDefault: true},
+					{Name: "slow_process_metrics_frequency", Value: "0", IsDefault: false},
+				},
+			},
+		},
+		{
+			name: "PermissionsNotGranted",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					ProcessMetricsFrequency:     10,
+					ProcessMetricsToSkip:        []string{"test1", "test2"},
+					SlowProcessMetricsFrequency: 20,
+				},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": false,
+						"monitoring.timeSeries.list":   true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Process Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_FAILURE_STATE,
+					},
+					{
+						Name:    "monitoring.timeSeries.list",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "true", IsDefault: false},
+					{Name: "process_metrics_frequency", Value: "10", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[test1 test2]", IsDefault: false},
+					{Name: "slow_process_metrics_frequency", Value: "20", IsDefault: false},
+				},
+				ErrorMessage: "IAM permissions not granted",
+			},
+		},
+		{
+			name: "ProcessMetricsEnabled",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					ProcessMetricsFrequency:     10,
+					ProcessMetricsToSkip:        []string{"test1", "test2"},
+					SlowProcessMetricsFrequency: 20,
+				},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				cloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Process Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "true", IsDefault: false},
+					{Name: "process_metrics_frequency", Value: "10", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[test1 test2]", IsDefault: false},
+					{Name: "slow_process_metrics_frequency", Value: "20", IsDefault: false},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := tc.s.processMetricsStatus(context.Background(), tc.config)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("processMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestHanaMonitoringMetricsStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       Status
+		want    *spb.ServiceStatus
+		wantErr error
+	}{
+		{
+			name: "HanaMonitoringDisabled",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return nil, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               false,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+					},
+				},
+				createDBHandle: dbConnectorSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:  "HANA Monitoring Metrics",
+				State: spb.State_FAILURE_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "false", IsDefault: true},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "PermissionsNotGranted",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.list":   false,
+						"monitoring.timeSeries.create": false,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "host1",
+								Port: "1234",
+							},
+							{
+								Name: "instance2",
+								User: "user2",
+								Host: "host2",
+								Port: "5678",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1", "password2"},
+					GetSecretErr:  []error{nil, nil},
+				},
+				createDBHandle: dbConnectorSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				ErrorMessage: "IAM permissions not granted",
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_FAILURE_STATE,
+					},
+					{
+						Name:    "monitoring.timeSeries.list",
+						Granted: spb.State_FAILURE_STATE,
+					},
+				},
+			},
+		},
+		{
+			name: "HanaMonitoringEnabled",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "host1",
+								Port: "1234",
+							},
+							{
+								Name: "instance2",
+								User: "user2",
+								Host: "host2",
+								Port: "5678",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1", "password2"},
+					GetSecretErr:  []error{nil, nil},
+				},
+				createDBHandle: dbConnectorSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+			},
+		},
+		{
+			name: "HanaMonitoringConnectionFailure",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "host1",
+								Port: "1234",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorFailure,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to connect to HANA instances: instance1",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := tc.s.hanaMonitoringMetricsStatus(context.Background(), tc.s.config)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("hanaMonitoringMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -158,8 +726,16 @@ func TestStatusHandler(t *testing.T) {
 				exists: func(string) bool {
 					return true
 				},
-				cloudProps: &ipb.CloudProperties{
+				cloudProps: &iipb.CloudProperties{
 					Scopes: []string{requiredScope},
+				},
+				httpGet:        httpGetSuccess,
+				createDBHandle: dbConnectorSuccess,
+				iamService:     &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
 				},
 			},
 			want: &spb.AgentStatus{
@@ -173,10 +749,11 @@ func TestStatusHandler(t *testing.T) {
 				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
 				Services: []*spb.ServiceStatus{
 					{
-						Name:  "Host Metrics",
-						State: spb.State_SUCCESS_STATE,
+						Name:            "Host Metrics",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
-							{Name: "example.compute.viewer"},
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
@@ -263,7 +840,16 @@ func TestStatusHandler(t *testing.T) {
     "enable_discovery": true
   },
   "hana_monitoring_configuration": {
-    "enabled": true
+    "enabled": true,
+		"hana_instances": [
+			{
+				"name": "instance1",
+				"user": "user1",
+				"host": "host1",
+				"port": "1234",
+				"secret_name": "secret1"
+			}
+		]
   }
 }
 `), nil
@@ -283,13 +869,21 @@ func TestStatusHandler(t *testing.T) {
 					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
 				},
 				exists: func(string) bool {
-					return false
+					return true
 				},
-				cloudProps: &ipb.CloudProperties{
+				cloudProps: &iipb.CloudProperties{
 					Scopes: []string{},
 				},
 				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
 				backintClient:         defaultStorageClient,
+				httpGet:               httpGetSuccess,
+				createDBHandle:        dbConnectorSuccess,
+				iamService:            &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
 			},
 			want: &spb.AgentStatus{
 				AgentName:                       agentPackageName,
@@ -302,19 +896,23 @@ func TestStatusHandler(t *testing.T) {
 				CloudApiAccessFullScopesGranted: spb.State_FAILURE_STATE,
 				Services: []*spb.ServiceStatus{
 					{
-						Name:  "Host Metrics",
-						State: spb.State_SUCCESS_STATE,
+						Name:            "Host Metrics",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
-							{Name: "example.compute.viewer"},
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "provide_sap_host_agent_metrics", Value: "true", IsDefault: true},
 						},
 					},
 					{
-						Name:           "Process Metrics",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:            "Process Metrics",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "true", IsDefault: false},
 							{Name: "process_metrics_frequency", Value: "5", IsDefault: true},
@@ -323,9 +921,12 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "HANA Monitoring Metrics",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:            "HANA Monitoring Metrics",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "120", IsDefault: true},
 							{Name: "enabled", Value: "true", IsDefault: false},
@@ -382,9 +983,16 @@ func TestStatusHandler(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:    "StatusStructNotInitialized",
+			s:       Status{},
+			want:    nil,
+			wantErr: cmpopts.AnyError,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			got, gotErr := test.s.statusHandler(context.Background())
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("statusHandler() returned unexpected diff (-want +got):\n%s", diff)
@@ -469,10 +1077,37 @@ func TestBackintStatusFailures(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			got := test.s.backintStatus(context.Background())
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("backintStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}
+}
+
+func httpGetFailure(url string) (*http.Response, error) {
+	return nil, fmt.Errorf("endpoint failure")
+}
+
+func httpGetError(url string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: 500,
+		Body:       io.NopCloser(strings.NewReader("internal error")),
+	}, nil
+}
+
+func httpGetSuccess(url string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("{\"metrics\": [\"test\"]}")),
+	}, nil
+}
+
+func dbConnectorSuccess(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
+	return &databaseconnector.DBHandle{}, nil
+}
+
+func dbConnectorFailure(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
+	return nil, fmt.Errorf("connection failure")
 }

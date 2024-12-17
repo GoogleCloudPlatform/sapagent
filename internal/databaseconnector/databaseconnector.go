@@ -60,6 +60,9 @@ type (
 
 	pingImpl func(ctx context.Context, db *DBHandle) error
 
+	// DBHandleFunc defines the database handle çreation function for testing.
+	DBHandleFunc func(ctx context.Context, p Params) (db *DBHandle, err error)
+
 	// PingSpec is a struct which holds values for establishing an open connection to a database.
 	PingSpec struct {
 		MaxRetries int           // The total number of ping attempts will be MaxRetries + 1.

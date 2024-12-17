@@ -29,41 +29,46 @@ import (
 //go:embed iam-permissions.yaml
 var iamPermissionsYAML []byte
 
-type yamlFeatures struct {
-	Features []servicePermissions `yaml:"features"`
-}
+type (
+	yamlFeatures struct {
+		Features []servicePermissions `yaml:"features"`
+	}
 
-// ServicePermissions is a struct to hold the permissions for a service.
-type servicePermissions struct {
-	Name            string              `yaml:"name"`
-	PermissionsList []EntityPermissions `yaml:"permissionsList"`
-}
+	// ServicePermissions is a struct to hold the permissions for a service.
+	servicePermissions struct {
+		Name            string              `yaml:"name"`
+		PermissionsList []EntityPermissions `yaml:"permissionsList"`
+	}
 
-// EntityPermissions is a struct to hold the permissions for an entity.
-type EntityPermissions struct {
-	Type        string   `yaml:"type"`
-	Permissions []string `yaml:"permissions"`
-}
+	// EntityPermissions is a struct to hold the permissions for an entity.
+	EntityPermissions struct {
+		Type        string   `yaml:"type"`
+		Permissions []string `yaml:"permissions"`
+	}
 
-// ResourceDetails is a struct to hold the details of the resources
-// (project/disk etc) on which the permissions are checked.
-type ResourceDetails struct {
-	ProjectID    string
-	Zone         string
-	BucketName   string
-	DiskName     string
-	InstanceName string
-	SecretName   string
-}
+	// ResourceDetails is a struct to hold the details of the resources
+	// (project/disk etc) on which the permissions are checked.
+	ResourceDetails struct {
+		ProjectID    string
+		Zone         string
+		BucketName   string
+		DiskName     string
+		InstanceName string
+		SecretName   string
+	}
 
-// IAMService is an interface for an IAM service.
-type IAMService interface {
-	CheckIAMPermissionsOnProject(ctx context.Context, projectID string, permissions []string) ([]string, error)
-	CheckIAMPermissionsOnBucket(ctx context.Context, bucketName string, permissions []string) ([]string, error)
-	CheckIAMPermissionsOnDisk(ctx context.Context, projectID, zone, diskName string, permissions []string) ([]string, error)
-	CheckIAMPermissionsOnInstance(ctx context.Context, projectID, zone, instanceName string, permissions []string) ([]string, error)
-	CheckIAMPermissionsOnSecret(ctx context.Context, projectID, secretName string, permissions []string) ([]string, error)
-}
+	// IAMService is an interface for an IAM service.
+	IAMService interface {
+		CheckIAMPermissionsOnProject(ctx context.Context, projectID string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnBucket(ctx context.Context, bucketName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnDisk(ctx context.Context, projectID, zone, diskName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnInstance(ctx context.Context, projectID, zone, instanceName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnSecret(ctx context.Context, projectID, secretName string, permissions []string) ([]string, error)
+	}
+
+	// FetchStatusFunc is a function to check the IAM permissions for a service.
+	FetchStatusFunc func (ctx context.Context, iamService IAMService, serviceName string, r *ResourceDetails) (map[string]bool, error)
+)
 
 // permissionsMap stores the permissions for each feature.
 var permissionsMap map[string][]EntityPermissions

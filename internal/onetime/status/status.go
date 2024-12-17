@@ -20,20 +20,28 @@ package status
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"slices"
+	"sort"
+	"strings"
+	"time"
 
 	"flag"
 	store "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
@@ -43,25 +51,60 @@ import (
 
 const (
 	agentPackageName        = "google-cloud-sap-agent"
+	agentRepoName           = "google-cloud-sap-agent"
 	fetchLatestVersionError = "Error: could not fetch latest version"
 	// TODO: Implement status OTE check for WIF based authentications access to scopes.
-	requiredScope = "https://www.googleapis.com/auth/cloud-platform"
+	requiredScope       = "https://www.googleapis.com/auth/cloud-platform"
+	hostMetricsEndpoint = "http://localhost:18181"
+	// Below outline the names of the services as defined in the iam permissions file.
+	hanaMonitoringLabel       = "HANA_MONITORING"
+	processMetricsLabel       = "PROCESS_METRICS"
+	cloudLoggingLabel         = "CLOUD_LOGGING"
+	hostMetricsLabel          = "HOST_METRICS"
+	backintLabel              = "BACKINT"
+	backintMultipartLabel     = "BACKINT_MULTIPART"
+	diskBackupLabel           = "DISKBACKUP"
+	diskBackupStripedLabel    = "DISKBACKUP_STRIPED"
+	sapSystemDiscoveryLabel   = "SAP_SYSTEM_DISCOVERY"
+	workloadEvaluationMELabel = "WORKLOAD_EVALUATION_METRICS"
+	secretManagerLabel        = "SECRET_MANAGER"
+	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
+)
+
+type (
+	// IAMService is an interface for the IAM service.
+	IAMService interface {
+		CheckIAMPermissionsOnBucket(ctx context.Context, bucketName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnDisk(ctx context.Context, project, zone, diskName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnInstance(ctx context.Context, project, zone, instanceName string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnProject(ctx context.Context, projectID string, permissions []string) ([]string, error)
+		CheckIAMPermissionsOnSecret(ctx context.Context, projectID, secretID string, permissions []string) ([]string, error)
+	}
+
+	httpGetter func(url string) (resp *http.Response, err error)
 )
 
 // Status stores the status subcommand parameters.
 type Status struct {
 	ConfigFilePath        string
 	BackintParametersPath string
-	verbose               bool
-	help                  bool
-	logLevel, logPath     string
-	oteLogger             *onetime.OTELogger
-	cloudProps            *iipb.CloudProperties
-	readFile              configuration.ReadConfigFile
-	backintReadFile       backintconfiguration.ReadConfigFile
-	exec                  commandlineexecutor.Execute
-	exists                commandlineexecutor.Exists
-	backintClient         storage.Client
+
+	verbose           bool
+	help              bool
+	logLevel, logPath string
+	config            *cpb.Configuration
+	gceService        onetime.GCEInterface
+	iamService        IAMService
+	oteLogger         *onetime.OTELogger
+	cloudProps        *iipb.CloudProperties
+	readFile          configuration.ReadConfigFile
+	backintReadFile   backintconfiguration.ReadConfigFile
+	exec              commandlineexecutor.Execute
+	exists            commandlineexecutor.Exists
+	backintClient     storage.Client
+	permissionsStatus permissions.FetchStatusFunc
+	httpGet           httpGetter
+	createDBHandle    databaseconnector.DBHandleFunc
 }
 
 // Name implements the subcommand interface for status.
@@ -117,12 +160,21 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 
 // Run executes the command and returns the status.
 func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
+	var err error
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	s.readFile = os.ReadFile
 	s.backintReadFile = os.ReadFile
 	s.exec = commandlineexecutor.ExecuteCommand
 	s.exists = commandlineexecutor.CommandExists
 	s.backintClient = store.NewClient
+	s.iamService, err = iam.NewIAMClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
+		return nil, subcommands.ExitFailure
+	}
+	s.permissionsStatus = permissions.GetServicePermissionsStatus
+	s.httpGet = http.Get
+	s.createDBHandle = databaseconnector.CreateDBHandle
 	status, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
@@ -133,6 +185,9 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
 func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
+	if s.permissionsStatus == nil || s.httpGet == nil || s.createDBHandle == nil {
+		return nil, fmt.Errorf("status struct has not been initialized")
+	}
 	log.CtxLogger(ctx).Info("Status starting")
 	agentStatus, config := s.agentStatus(ctx)
 	agentStatus.Services = append(agentStatus.Services, s.hostMetricsStatus(ctx, config))
@@ -211,25 +266,47 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:  "Host Metrics",
-		State: spb.State_FAILURE_STATE,
-		IamPermissions: []*spb.IAMPermission{
-			{Name: "example.compute.viewer"},
-		},
+		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("provide_sap_host_agent_metrics", config.GetProvideSapHostAgentMetrics().GetValue(), true),
 		},
 	}
-	if config.GetProvideSapHostAgentMetrics().GetValue() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetProvideSapHostAgentMetrics().GetValue() {
+		status.State = spb.State_FAILURE_STATE
+		return status
 	}
 
+	status.State = spb.State_SUCCESS_STATE
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, hostMetricsLabel, &permissions.ResourceDetails{
+		ProjectID:    s.cloudProps.GetProjectId(),
+		InstanceName: s.cloudProps.GetInstanceId(),
+		Zone:         s.cloudProps.GetZone(),
+	})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+	resp, err := s.httpGet(hostMetricsEndpoint)
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error verifying endpoint", spb.State_ERROR_STATE)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Endpoint verification failed with code: %d", resp.StatusCode), spb.State_FAILURE_STATE)
+	}
+
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
 func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:           "Process Metrics",
-		State:          spb.State_FAILURE_STATE,
+		State:          spb.State_UNSPECIFIED_STATE,
 		IamPermissions: []*spb.IAMPermission{},
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
@@ -238,16 +315,27 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 			configValue("slow_process_metrics_frequency", config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency(), 30),
 		},
 	}
-	if config.GetCollectionConfiguration().GetCollectProcessMetrics() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetCollectionConfiguration().GetCollectProcessMetrics() {
+		status.State = spb.State_FAILURE_STATE
+		return status
 	}
+
+	status.State = spb.State_SUCCESS_STATE
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "HANA Monitoring Metrics",
-		State:          spb.State_FAILURE_STATE,
-		IamPermissions: []*spb.IAMPermission{},
+		Name:  "HANA Monitoring Metrics",
+		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("connection_timeout", config.GetHanaMonitoringConfiguration().GetConnectionTimeout().GetSeconds(), 120),
 			configValue("enabled", config.GetHanaMonitoringConfiguration().GetEnabled(), false),
@@ -258,11 +346,51 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 			configValue("send_query_response_time", config.GetHanaMonitoringConfiguration().GetSendQueryResponseTime(), false),
 		},
 	}
-	if config.GetHanaMonitoringConfiguration().GetEnabled() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetHanaMonitoringConfiguration().GetEnabled() {
+		status.State = spb.State_FAILURE_STATE
+		return status
 	}
-	// TODO: Do we need to include instances and queries in configuration?
 
+	status.State = spb.State_SUCCESS_STATE
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+	failedInstances := []string{}
+	for _, i := range s.config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		// Note: We ignore timeout params here.
+		dbp := databaseconnector.Params{
+			Username:       i.GetUser(),
+			Host:           i.GetHost(),
+			Password:       i.GetPassword(),
+			PasswordSecret: i.GetSecretName(),
+			Port:           i.GetPort(),
+			EnableSSL:      i.GetEnableSsl(),
+			HostNameInCert: i.GetHostNameInCertificate(),
+			RootCAFile:     i.GetTlsRootCaFile(),
+			HDBUserKey:     i.GetHdbuserstoreKey(),
+			SID:            i.GetSid(),
+			GCEService:     s.gceService,
+			Project:        s.config.GetCloudProperties().GetProjectId(),
+			PingSpec: &databaseconnector.PingSpec{
+				Timeout:    1 * time.Second,
+				MaxRetries: 0,
+			},
+		}
+		if _, err := s.createDBHandle(ctx, dbp); err != nil {
+			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
+			failedInstances = append(failedInstances, i.GetName())
+			continue
+		}
+	}
+	if len(failedInstances) > 0 {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Failed to connect to HANA instances: %s", strings.Join(failedInstances, ", ")), spb.State_FAILURE_STATE)
+	}
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
@@ -369,9 +497,7 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 	}
 	_, ok := storage.ConnectToBucket(ctx, connectParams)
 	if !ok {
-		status.FullyFunctional = spb.State_FAILURE_STATE
-		status.ErrorMessage = "Failed to connect to bucket"
-		return status
+		return logCheckFailureAndReturnStatus(ctx, status, "Failed to connect to bucket", spb.State_FAILURE_STATE)
 	}
 	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
@@ -415,4 +541,39 @@ func configValue(name string, value any, defaultValue any) *spb.ConfigValue {
 		Value:     fmt.Sprint(value),
 		IsDefault: fmt.Sprint(value) == fmt.Sprint(defaultValue),
 	}
+}
+
+func (s *Status) fetchPermissionsStatus(ctx context.Context, functionalityName string, resourceProps *permissions.ResourceDetails) ([]*spb.IAMPermission, bool, error) {
+	permissions, err := s.permissionsStatus(ctx, s.iamService, functionalityName, resourceProps)
+	if err != nil {
+		return nil, false, err
+	}
+	allGranted := true
+	var permissionsStatus []*spb.IAMPermission
+	for permission, granted := range permissions {
+		var permissionState spb.State
+		if granted {
+			permissionState = spb.State_SUCCESS_STATE
+		} else {
+			allGranted = false
+			permissionState = spb.State_FAILURE_STATE
+		}
+		permissionsStatus = append(permissionsStatus, &spb.IAMPermission{
+			Name:    permission,
+			Granted: permissionState,
+		})
+
+		// Sort the permissions by name for consistency.
+		sort.Slice(permissionsStatus, func(i, j int) bool {
+			return permissionsStatus[i].GetName() < permissionsStatus[j].GetName()
+		})
+	}
+	return permissionsStatus, allGranted, nil
+}
+
+func logCheckFailureAndReturnStatus(ctx context.Context, status *spb.ServiceStatus, msg string, fullyFunctional spb.State) *spb.ServiceStatus {
+	log.CtxLogger(ctx).Errorw(msg)
+	status.FullyFunctional = fullyFunctional
+	status.ErrorMessage = msg
+	return status
 }
