@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
@@ -145,6 +146,11 @@ type HostDiscoveryInterface interface {
 // SapDiscoveryInterface is exported to be used by the system discovery OTE.
 type SapDiscoveryInterface interface {
 	DiscoverSAPApps(ctx context.Context, sapApps *sappb.SAPInstances, conf *cpb.DiscoveryConfiguration) []appsdiscovery.SapSystemDetails
+}
+
+type loadBalancerGroup struct {
+	lbRes        *spb.SapDiscovery_Resource
+	instanceURIs []string
 }
 
 func removeDuplicates(res []*spb.SapDiscovery_Resource) []*spb.SapDiscovery_Resource {
@@ -359,7 +365,9 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			break
 		}
 	}
-
+	if instanceResource == nil {
+		log.CtxLogger(ctx).Debug("No instance resource found")
+	}
 	if fileInfo, err := d.OSStatReader(systemDiscoveryOverride); fileInfo != nil && err == nil {
 		log.CtxLogger(ctx).Info("Discovering system from override file")
 		return d.discoverOverrideSystem(ctx, systemDiscoveryOverride, instanceResource)
@@ -378,9 +386,6 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 	log.CtxLogger(ctx).Info("Starting SAP Discovery")
 	sapDetails := d.SapDiscoveryInterface.DiscoverSAPApps(ctx, d.GetSAPInstances(), config.GetDiscoveryConfiguration())
 	log.CtxLogger(ctx).Debugw("SAP Details", "details", sapDetails)
-	if instanceResource == nil {
-		log.CtxLogger(ctx).Debug("No instance resource found")
-	}
 	for _, s := range sapDetails {
 		system := &spb.SapDiscovery{}
 		if s.AppComponent != nil {
@@ -429,8 +434,42 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			dbRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceNetwork, s.DBHosts, cp)
 			log.CtxLogger(ctx).Debugw("Database Resources", "res", dbRes)
 			if s.DBOnHost {
-				dbRes = append(dbRes, hostResources...)
+				dbRes = removeDuplicates(append(dbRes, hostResources...))
 			}
+			// Make a resource map for quicker lookup
+			resourcesByType := make(map[spb.SapDiscovery_Resource_ResourceKind][]*spb.SapDiscovery_Resource)
+			resourceByURI := make(map[string]*spb.SapDiscovery_Resource)
+			for _, r := range dbRes {
+				resourcesByType[r.GetResourceKind()] = append(resourcesByType[r.GetResourceKind()], r)
+				resourceByURI[r.GetResourceUri()] = r
+			}
+			log.CtxLogger(ctx).Debugw("Resources by type", "resources", resourcesByType)
+			log.CtxLogger(ctx).Debugw("Resources by URI", "resources", resourceByURI)
+			// Find the load balancer groups
+			var lbGroups []loadBalancerGroup
+			for _, lb := range resourcesByType[spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE] {
+				log.CtxLogger(ctx).Debugw("LB", "lb", lb)
+				lbGroup := loadBalancerGroup{lbRes: lb, instanceURIs: []string{}}
+				for _, related := range lb.RelatedResources {
+					rr := resourceByURI[related]
+					if rr.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+						log.CtxLogger(ctx).Debugw("LB Instance", "instance", rr)
+						lbGroup.instanceURIs = append(lbGroup.instanceURIs, related)
+					} else if rr.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP {
+						log.CtxLogger(ctx).Debugw("LB Instance Group", "instanceGroup", rr)
+						for _, igr := range rr.RelatedResources {
+							igres := resourceByURI[igr]
+							if igres.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+								log.CtxLogger(ctx).Debugw("LB Instance in Group", "instance", igres)
+								lbGroup.instanceURIs = append(lbGroup.instanceURIs, igr)
+							}
+						}
+					}
+				}
+				log.CtxLogger(ctx).Debugw("LB Group", "group", lbGroup)
+				lbGroups = append(lbGroups, lbGroup)
+			}
+			log.CtxLogger(ctx).Debugw("LB Groups", "groups", lbGroups)
 			if s.DBComponent.GetDatabaseProperties().GetSharedNfsUri() != "" {
 				log.CtxLogger(ctx).Debug("Discovering cloud resources for database NFS")
 				nfsRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceNetwork, []string{s.DBComponent.GetDatabaseProperties().GetSharedNfsUri()}, cp)
@@ -439,20 +478,17 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 					s.DBComponent.GetDatabaseProperties().SharedNfsUri = nfsRes[0].GetResourceUri()
 				}
 			}
-			if len(s.DBComponent.GetHaHosts()) > 0 {
-				log.CtxLogger(ctx).Debug("Discovering cloud resources for database HA")
-				haRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceNetwork, s.DBComponent.GetHaHosts(), cp)
-				// Find the instances
-				var haURIs []string
-				for _, res := range haRes {
-					if res.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
-						haURIs = append(haURIs, res.GetResourceUri())
-					}
-				}
-				dbRes = append(dbRes, haRes...)
-				s.DBComponent.HaHosts = haURIs
+			s.DBComponent.Resources = removeDuplicates(dbRes)
+			if s.DBInstance != nil && s.DBInstance.HanaReplicationTree != nil {
+				log.CtxLogger(ctx).Debug("Discovering cloud resources for database replication sites")
+				primarySite := d.discoverReplicationSite(ctx, s.DBInstance.HanaReplicationTree, s.DBComponent.GetSid(), instanceResource, instanceNetwork, lbGroups, cp)
+				primarySite.Component.Properties = s.DBComponent.Properties
+				s.DBComponent = primarySite.Component
+
+				// Find the site this instance belongs to.
+				addHostResourcesforSite(ctx, s.DBComponent, dbRes, cp)
 			}
-			for _, r := range dbRes {
+			for _, r := range s.DBComponent.GetResources() {
 				if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 					if r.InstanceProperties == nil {
 						r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
@@ -460,9 +496,9 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 					r.InstanceProperties.InstanceRole |= spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE
 				}
 			}
+
 			log.CtxLogger(ctx).Debug("Done discovering DB")
 			s.DBComponent.HostProject = cp.GetNumericProjectId()
-			s.DBComponent.Resources = removeDuplicates(dbRes)
 			system.DatabaseLayer = s.DBComponent
 		}
 		if len(s.InstanceProperties) > 0 {
@@ -519,6 +555,82 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 	return sapSystems
 }
 
+func (d *Discovery) discoverReplicationSite(ctx context.Context, site *sappb.HANAReplicaSite, sid string, instanceResource *spb.SapDiscovery_Resource, instanceSubnetwork string, lbGroups []loadBalancerGroup, cp *ipb.CloudProperties) *spb.SapDiscovery_Component_ReplicationSite {
+	siteRes := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceSubnetwork, []string{site.Name}, cp)
+	log.CtxLogger(ctx).Debugw("Site Resources", "site", site.Name, "resources", siteRes)
+	repComp := &spb.SapDiscovery_Component{
+		Resources: removeDuplicates(siteRes),
+		Sid:       sid,
+	}
+
+	// Find the region of the instance that the site name corresponds to.
+	for _, r := range repComp.Resources {
+		if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+			if r.InstanceProperties == nil {
+				r.InstanceProperties = &spb.SapDiscovery_Resource_InstanceProperties{}
+			}
+			r.InstanceProperties.InstanceRole |= spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE
+			if r.GetInstanceProperties().GetVirtualHostname() == site.Name {
+				instanceZone := clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones")
+				regionParts := strings.Split(instanceZone, "-")
+				instanceRegion := strings.Join([]string{regionParts[0], regionParts[1]}, "-")
+				repComp.Region = instanceRegion
+			}
+		}
+	}
+
+	// Check if this site is part of a known load balancer group
+	var lbGroup *loadBalancerGroup
+resLoop:
+	for _, r := range siteRes {
+		if r.ResourceKind != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+			continue
+		}
+		for _, lb := range lbGroups {
+			if slices.Contains(lb.instanceURIs, r.GetResourceUri()) {
+				log.CtxLogger(ctx).Debugw("Site is part of a load balancer group", "site", site.Name, "lbGroup", lb.lbRes.GetResourceUri())
+				lbGroup = &lb
+				break resLoop
+			}
+		}
+	}
+	if lbGroup == nil {
+		log.CtxLogger(ctx).Debugw("Site not part of existing LB group", "site", site.Name)
+	}
+	for _, childSite := range site.Targets {
+		childRepSite := d.discoverReplicationSite(ctx, childSite, sid, instanceResource, instanceSubnetwork, lbGroups, cp)
+		inLbGroup := false
+		if lbGroup != nil {
+			// Check if the child site is part of the same load balancer group
+			for _, r := range childRepSite.Component.Resources {
+				if r.ResourceKind != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+					continue
+				}
+				if slices.Contains(lbGroup.instanceURIs, r.GetResourceUri()) {
+					log.CtxLogger(ctx).Debugw("Child site is part of the same LB group", "site", childSite.Name, "lbGroup", lbGroup.lbRes.GetResourceUri())
+					inLbGroup = true
+					// Child is part of the same load balancer group, therefore belongs in the same component.
+					repComp.Resources = removeDuplicates(append(repComp.Resources, childRepSite.Component.Resources...))
+					// Add the child site's replication sites to this component.
+					repComp.ReplicationSites = append(repComp.ReplicationSites, childRepSite.Component.ReplicationSites...)
+					break
+				}
+			}
+		}
+		if !inLbGroup {
+			log.CtxLogger(ctx).Debugw("Child site not part of the same LB group", "site", childSite.Name)
+			// Child is not part of the same load balancer group, therefore belongs in a separate component.
+			childRepSite.SourceSite = site.Name
+
+			repComp.ReplicationSites = append(repComp.ReplicationSites, childRepSite)
+		}
+	}
+	log.CtxLogger(ctx).Debugw("Site", "site", site.Name, "component", repComp)
+	return &spb.SapDiscovery_Component_ReplicationSite{
+		Component: repComp,
+	}
+}
+
 func (d *Discovery) writeToCloudLogging(sys *spb.SapDiscovery) error {
 	s, err := protojson.Marshal(sys)
 	if err != nil {
@@ -538,4 +650,20 @@ func (d *Discovery) writeToCloudLogging(sys *spb.SapDiscovery) error {
 	})
 
 	return nil
+}
+
+func addHostResourcesforSite(ctx context.Context, site *spb.SapDiscovery_Component, hostResources []*spb.SapDiscovery_Resource, cp *ipb.CloudProperties) {
+	for _, r := range site.Resources {
+		instanceName := clouddiscovery.ExtractFromURI(r.GetResourceUri(), "instances")
+		if instanceName == cp.GetInstanceName() {
+			// Add the host resources to this site.
+			log.CtxLogger(ctx).Debugw("Adding host resources to site", "resources", hostResources)
+			site.Resources = removeDuplicates(append(site.Resources, hostResources...))
+			return
+		}
+	}
+	// Host is not in the site, check children
+	for _, rep := range site.ReplicationSites {
+		addHostResourcesforSite(ctx, rep.Component, hostResources, cp)
+	}
 }

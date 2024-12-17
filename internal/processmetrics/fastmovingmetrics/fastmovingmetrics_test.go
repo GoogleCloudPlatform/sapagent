@@ -808,8 +808,8 @@ func TestRefreshHAReplicationConfig(t *testing.T) {
 			Sapsid:     "test",
 			InstanceId: "test",
 		},
-		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-			return 1, []string{"test"}, 1, &sapb.HANAReplicaSite{}, nil
+		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			return 1, 1, &sapb.HANAReplicaSite{}, nil
 		},
 		wantStatus: 1,
 	}, {
@@ -819,8 +819,8 @@ func TestRefreshHAReplicationConfig(t *testing.T) {
 			Sapsid:     "test",
 			InstanceId: "test",
 		},
-		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, []string, int64, *sapb.HANAReplicaSite, error) {
-			return 1, []string{"test"}, 1, &sapb.HANAReplicaSite{}, errors.New("replication read error")
+		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			return 1, 1, &sapb.HANAReplicaSite{}, errors.New("replication read error")
 		},
 		wantStatus: 0,
 		wantErr:    cmpopts.AnyError,

@@ -312,7 +312,7 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 }
 
 func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int64, error) {
-	mode, haMembers, replicationStatus, _, err := p.ReplicationConfig(
+	mode, replicationStatus, _, err := p.ReplicationConfig(
 		ctx,
 		p.SAPInstance.GetUser(),
 		p.SAPInstance.GetSapsid(),
@@ -325,7 +325,6 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int
 	}
 
 	p.SAPInstance.Site = sapdiscovery.HANASite(mode)
-	p.SAPInstance.HanaHaMembers = haMembers
 	return int64(replicationStatus), nil
 }
 
