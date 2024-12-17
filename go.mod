@@ -8,6 +8,8 @@ replace github.com/GoogleCloudPlatform/sapagent/shared => ./shared
 
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
+replace github.com/GoogleCloudPlatform/workloadagentplatform/integration/common => ./workloadagentplatform/integration/common
+
 require (
   cloud.google.com/go/aiplatform v1.58.2
   cloud.google.com/go/iam v1.1.6

@@ -19,7 +19,7 @@ package workloadmanager
 import (
 	"context"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 )
 

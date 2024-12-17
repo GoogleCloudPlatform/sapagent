@@ -43,12 +43,12 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
-	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/configurablemetrics"
 	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
 )
 

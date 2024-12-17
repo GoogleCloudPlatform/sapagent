@@ -28,9 +28,9 @@ import (
 
 	"github.com/google/safetext/shsprintf"
 	"golang.org/x/exp/slices"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"

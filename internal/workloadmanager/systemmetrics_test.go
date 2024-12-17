@@ -34,11 +34,11 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
-	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/configurablemetrics"
 )
 
 var (

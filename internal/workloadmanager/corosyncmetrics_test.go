@@ -39,8 +39,8 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
-	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/configurablemetrics"
 )
 
 func TestMain(t *testing.M) {

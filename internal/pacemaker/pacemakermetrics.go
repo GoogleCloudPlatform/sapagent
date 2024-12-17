@@ -28,9 +28,9 @@ import (
 
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
-	"github.com/GoogleCloudPlatform/sapagent/internal/configurablemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

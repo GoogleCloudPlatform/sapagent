@@ -26,8 +26,8 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
-	cmpb "github.com/GoogleCloudPlatform/sapagent/protos/configurablemetrics"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/configurablemetrics"
 )
 
 // versionPattern matches version strings of type: MAJOR.MINOR or MAJOR.MINOR.RELEASE.
