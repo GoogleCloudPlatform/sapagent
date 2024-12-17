@@ -55,13 +55,13 @@ var (
 	// See the following for more information: https://g3doc.corp.google.com/monitoring/monarch/mql/g3doc/user/how_to.md?cl=head#the-project-id-column.
 	defaultQueries = []queryInfo{
 		{
-			query:      "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/ha/availability' | map rename [resource.project_number: resource.project_id] | group_by drop [resource.zone, metric.instance_nr] | every 1s | within 2h",
+			query:      "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/ha/availability' | map rename [resource.project_number: resource.project_id] | group_by drop [resource.zone, metric.instance_nr, metric.instance_name] | every 1s | within 2h",
 			identifier: "hana_ha_availability",
 			headers:    []string{"project_id", "instance_id", "sid", "value", "start_time", "end_time"},
 			wantLabels: []string{"project_id", "instance_id", "sid"},
 		},
 		{
-			query:      "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/availability' | map rename [resource.project_number: resource.project_id] | group_by drop [resource.zone, metric.instance_nr] | every 1s | within 2h",
+			query:      "fetch gce_instance | metric 'workload.googleapis.com/sap/hana/availability' | map rename [resource.project_number: resource.project_id] | group_by drop [resource.zone, metric.instance_nr, metric.instance_name] | every 1s | within 2h",
 			identifier: "hana_availability",
 			headers:    []string{"project_id", "instance_id", "sid", "value", "start_time", "end_time"},
 			wantLabels: []string{"project_id", "instance_id", "sid"},
