@@ -93,7 +93,7 @@ func TestSynopsisForStatus(t *testing.T) {
 func TestSetFlagsForStatus(t *testing.T) {
 	s := Status{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"config", "c", "v", "h"}
+	flags := []string{"config", "c", "backint", "b", "compact", "h"}
 	s.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

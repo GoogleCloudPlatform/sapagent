@@ -89,7 +89,7 @@ type Status struct {
 	ConfigFilePath        string
 	BackintParametersPath string
 
-	verbose           bool
+	compact           bool
 	help              bool
 	logLevel, logPath string
 	config            *cpb.Configuration
@@ -116,7 +116,7 @@ func (*Status) Synopsis() string { return "get the status of the agent and its s
 // Usage implements the subcommand interface for status.
 func (*Status) Usage() string {
 	return `status [-config <path-to-agent-config-file>]
-       [-backint <path-to-backint-parameters-file>] [-v]
+       [-backint <path-to-backint-parameters-file>] [-compact]
 
   Get the status of the agent and its services.
 `
@@ -128,7 +128,7 @@ func (s *Status) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.ConfigFilePath, "c", "", "Configuration path override")
 	fs.StringVar(&s.BackintParametersPath, "backint", "", "Backint parameters path")
 	fs.StringVar(&s.BackintParametersPath, "b", "", "Backint parameters path")
-	fs.BoolVar(&s.verbose, "v", false, "Display verbose status information")
+	fs.BoolVar(&s.compact, "compact", false, "Display a compact status (no configuration or IAM)")
 	fs.BoolVar(&s.help, "h", false, "Display help")
 }
 
@@ -153,7 +153,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 	}
 	log.CtxLogger(ctx).Infow("Agent Status", "status", agentStatus)
-	statushelper.PrintStatus(ctx, agentStatus)
+	statushelper.PrintStatus(ctx, agentStatus, s.compact)
 	log.CtxLogger(ctx).Info("Status finished")
 	return exitStatus
 }
