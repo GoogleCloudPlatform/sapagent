@@ -1381,8 +1381,8 @@ func TestCollectRoleMetrics(t *testing.T) {
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11
-tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1399,13 +1399,59 @@ tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST
 			},
 		},
 	}, {
-		name: "justASCSMsEq",
+		name: "justASCSMsEnq",
 		p:    defaultASCSInstanceProperties,
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 eq.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11
-tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "true",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
+		name: "justSCSMsEnq",
+		p:    defaultASCSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 en.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "true",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
+		name: "justSCSMsEq",
+		p:    defaultASCSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 en.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1427,7 +1473,7 @@ tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS12 pf=/usr/sap/TST
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1449,7 +1495,51 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_ASCS12 pf=/usr/sap/T
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 er.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 er.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":           "true",
+					"ascs":          "false",
+					"app":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
+		name: "justJERSEnqr",
+		p:    defaultERSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enqr.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11`,
+			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"ers":           "true",
+					"ascs":          "false",
+					"app":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
+	}, {
+		name: "justJERSEr",
+		p:    defaultERSInstanceProperties,
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 er.sapTST_SCS00 pf=/usr/sap/TST/SYS/profile/TST_SCS00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1471,7 +1561,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 er.sapTST_ASCS12 pf=/usr/sap/TST
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 jc.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 /usr/sap/PTJ/J00/work/jc.sapTST_J02 pf=/usr/sap/TST/SYS/profile/TST_J00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1493,7 +1583,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 jc.sapTST_ASCS12 pf=/usr/sap/TST
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 dw.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11`,
+tstadm   13448 13436  0 Apr26 ?        00:10:50 dw.sapTST_D00 pf=/usr/sap/TST/SYS/profile/TST_D00_alidascs11`,
 			}
 		},
 		want: &mrpb.TimeSeries{
@@ -1515,7 +1605,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 dw.sapTST_ASCS12 pf=/usr/sap/TST
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 ms.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11
+tstadm   13448 13436  0 Apr26 ?        00:10:50 ms.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11
 		`,
 			}
 		},
@@ -1538,7 +1628,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 ms.sapTST_ASCS12 pf=/usr/sap/TST
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: `
-tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS12 pf=/usr/sap/TST/SYS/profile/TST_ASCS12_alidascs11
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11
 		`,
 			}
 		},
