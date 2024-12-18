@@ -39,6 +39,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/computeresources"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
@@ -92,10 +93,9 @@ var (
 		NumericProjectId: "13102003",
 	}
 
-	defaultOteLogger = onetime.CreateOTELogger(false)
-	defaultRunOpts   = onetime.CreateRunOptions(defaultCloudProperties, false)
-
-	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
+	defaultOteLogger     = onetime.CreateOTELogger(false)
+	defaultRunOpts       = onetime.CreateRunOptions(defaultCloudProperties, false)
+	defaultAppsDiscovery = func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
 		return &sappb.SAPInstances{
 			Instances: []*sappb.SAPInstance{
 				{
@@ -2149,7 +2149,7 @@ func TestRunSystemDiscoveryOTE(t *testing.T) {
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
-				appsDiscovery: func(context.Context) *sappb.SAPInstances {
+				appsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
 					return &sappb.SAPInstances{}
 				},
 			},

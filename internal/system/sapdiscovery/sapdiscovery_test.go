@@ -28,13 +28,23 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
+
+type fakeSapSystemInterface struct {
+	systems []*spb.SapDiscovery
+}
+
+func (f fakeSapSystemInterface) GetSAPSystems() []*spb.SapDiscovery {
+	return f.systems
+}
 
 func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
@@ -59,6 +69,10 @@ var (
 	multiTargetHANAOutput string
 	//go:embed testdata/multiTierHANAOutput.txt
 	multiTierHANAOutput string
+	//go:embed testdata/multiTierHANAOutputSecondary.txt
+	multiTierHANAOutputSecondary string
+	//go:embed testdata/multiTierHANAOutputDR.txt
+	multiTierHANAOutputDR string
 	//go:embed testdata/multiTierMultiTargetHANAOutput.txt
 	multiTierMultiTargetHANAOutput string
 	//go:embed testdata/defaultInstancesListOutput.txt
@@ -99,7 +113,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 				return 0, 10, nil, nil
 			},
 			want: &sapb.SAPInstances{
@@ -132,7 +146,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 				log.Logger.Info("fakeReplicationConfig")
 				site1 := &sapb.HANAReplicaSite{
 					Name: "gce-1",
@@ -179,7 +193,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 				return 1, 15, nil, nil
 			},
 			want: &sapb.SAPInstances{
@@ -257,7 +271,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 				return 0, 0, nil, cmpopts.AnyError
 			},
 			want: &sapb.SAPInstances{
@@ -290,7 +304,7 @@ func TestInstances(t *testing.T) {
 			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{}
 			},
-			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string) (int, int64, *sapb.HANAReplicaSite, error) {
+			fakeReplicationConfig: func(ctx context.Context, user string, sid string, instanceID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 				return -1, 0, nil, nil
 			},
 			want: &sapb.SAPInstances{
@@ -311,7 +325,7 @@ func TestInstances(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := instances(context.Background(), test.fakeReplicationConfig, test.fakeList, test.fakeExec, nil)
+			got := instances(context.Background(), test.fakeReplicationConfig, test.fakeList, test.fakeExec, nil, nil)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("instances() unexpected diff: (-want +got):\n%s", diff)
 			}
@@ -321,16 +335,17 @@ func TestInstances(t *testing.T) {
 
 func TestReadReplicationConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		user           string
-		sid            string
-		instanceID     string
-		fakeExec       commandlineexecutor.Execute
-		wantMode       int
-		wantHAMembers  []string
-		wantExitStatus int64
-		wantSite       *sapb.HANAReplicaSite
-		wantErr        error
+		name                string
+		user                string
+		sid                 string
+		instanceID          string
+		fakeExec            commandlineexecutor.Execute
+		fakeSystemInterface fakeSapSystemInterface
+		wantMode            int
+		wantHAMembers       []string
+		wantExitStatus      int64
+		wantSite            *sapb.HANAReplicaSite
+		wantErr             error
 	}{{
 		name:       "HANAPrimary",
 		user:       "hdbadm",
@@ -341,9 +356,10 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: hanaHAPrimaryOutput,
 			}
 		},
-		wantMode:      1,
-		wantHAMembers: []string{"gce-1", "gce-2"},
-		wantErr:       nil,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantHAMembers:       []string{"gce-1", "gce-2"},
+		wantErr:             nil,
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-1",
 			Targets: []*sapb.HANAReplicaSite{
@@ -362,8 +378,9 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: hanaHASecondaryOutput,
 			}
 		},
-		wantMode:      2,
-		wantHAMembers: []string{"gce-2", "gce-1"},
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            2,
+		wantHAMembers:       []string{"gce-2", "gce-1"},
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-1",
 			Targets: []*sapb.HANAReplicaSite{
@@ -383,9 +400,10 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: hanaSingleNodeOutput,
 			}
 		},
-		wantMode:      0,
-		wantHAMembers: nil,
-		wantErr:       nil,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            0,
+		wantHAMembers:       nil,
+		wantErr:             nil,
 	}, {
 		name:       "HANAMultiTarget",
 		user:       "hdbadm",
@@ -396,8 +414,9 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: multiTargetHANAOutput,
 			}
 		},
-		wantMode:      1,
-		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantHAMembers:       []string{"gce-2", "gce-1", "gce-3"},
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-1",
 			Targets: []*sapb.HANAReplicaSite{{
@@ -417,8 +436,9 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: multiTierHANAOutput,
 			}
 		},
-		wantMode:      1,
-		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantHAMembers:       []string{"gce-2", "gce-1", "gce-3"},
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-1",
 			Targets: []*sapb.HANAReplicaSite{{
@@ -439,8 +459,9 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: multiTierMultiTargetHANAOutput,
 			}
 		},
-		wantMode:      1,
-		wantHAMembers: []string{"gce-2", "gce-1", "gce-3", "gce-4"},
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantHAMembers:       []string{"gce-2", "gce-1", "gce-3", "gce-4"},
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-1",
 			Targets: []*sapb.HANAReplicaSite{{
@@ -506,8 +527,9 @@ func TestReadReplicationConfig(t *testing.T) {
 					done.`,
 			}
 		},
-		wantMode:      1,
-		wantHAMembers: []string{"gce-1", "gce-2"},
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantHAMembers:       []string{"gce-1", "gce-2"},
 		wantSite: &sapb.HANAReplicaSite{
 			Name: "gce-2",
 			Targets: []*sapb.HANAReplicaSite{
@@ -524,8 +546,9 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: "site name:",
 			}
 		},
-		wantMode:      0,
-		wantHAMembers: nil,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            0,
+		wantHAMembers:       nil,
 	}, {
 		name: "NoHostMap",
 		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -533,9 +556,10 @@ func TestReadReplicationConfig(t *testing.T) {
 				StdOut: "site name: gce-1",
 			}
 		},
-		wantMode:      0,
-		wantHAMembers: nil,
-		wantErr:       cmpopts.AnyError,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            0,
+		wantHAMembers:       nil,
+		wantErr:             cmpopts.AnyError,
 	}, {
 		name: "NoReplicationMode",
 		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -546,9 +570,10 @@ func TestReadReplicationConfig(t *testing.T) {
 					`,
 			}
 		},
-		wantMode:      0,
-		wantHAMembers: nil,
-		wantErr:       cmpopts.AnyError,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            0,
+		wantHAMembers:       nil,
+		wantErr:             cmpopts.AnyError,
 	}, {
 		name:       "NoSiteMappings",
 		user:       "hdbadm",
@@ -601,7 +626,8 @@ func TestReadReplicationConfig(t *testing.T) {
 					done.`,
 			}
 		},
-		wantMode: 1,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
 	}, {
 		name:       "primaryOffline",
 		user:       "hdbadm",
@@ -628,7 +654,8 @@ func TestReadReplicationConfig(t *testing.T) {
 				done.`,
 			}
 		},
-		wantMode: 1,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
 	}, {
 		name:       "secondaryOffline",
 		user:       "hdbadm",
@@ -655,7 +682,8 @@ func TestReadReplicationConfig(t *testing.T) {
 					done.`,
 			}
 		},
-		wantMode: 2,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            2,
 	}, {
 		name:       "primaryWithNoReplication",
 		user:       "hdbadm",
@@ -686,13 +714,122 @@ func TestReadReplicationConfig(t *testing.T) {
 				}
 			}
 		},
-		wantMode:       1,
-		wantExitStatus: 12,
+		fakeSystemInterface: fakeSapSystemInterface{},
+		wantMode:            1,
+		wantExitStatus:      12,
+	}, {
+		name:       "siteIsSecondary",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: multiTierHANAOutputSecondary,
+			}
+		},
+		fakeSystemInterface: fakeSapSystemInterface{
+			systems: []*spb.SapDiscovery{{
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid: "HDB",
+					Resources: []*spb.SapDiscovery_Resource{{
+						ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+						InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							VirtualHostname: "gce-1",
+						},
+					}, {
+						ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+						InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							VirtualHostname: "gce-2",
+						},
+					}},
+					ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+						SourceSite: "gce-2",
+						Component: &spb.SapDiscovery_Component{
+							Resources: []*spb.SapDiscovery_Resource{{
+								ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+								ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+								InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+									VirtualHostname: "gce-3",
+								},
+							}},
+						},
+					}},
+				},
+			}},
+		},
+		wantMode:      2,
+		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{{
+				Name: "gce-2",
+				Targets: []*sapb.HANAReplicaSite{{
+					Name: "gce-3",
+				}},
+			}},
+		},
+		wantErr: nil,
+	}, {
+		name:       "siteIsDR",
+		user:       "hdbadm",
+		sid:        "HDB",
+		instanceID: "00",
+		fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: multiTierHANAOutputDR,
+			}
+		},
+		fakeSystemInterface: fakeSapSystemInterface{
+			systems: []*spb.SapDiscovery{{
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid: "HDB",
+					Resources: []*spb.SapDiscovery_Resource{{
+						ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+						InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							VirtualHostname: "gce-1",
+						},
+					}, {
+						ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+						InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							VirtualHostname: "gce-2",
+						},
+					}},
+					ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+						SourceSite: "gce-2",
+						Component: &spb.SapDiscovery_Component{
+							Resources: []*spb.SapDiscovery_Resource{{
+								ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+								ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+								InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+									VirtualHostname: "gce-3",
+								},
+							}},
+						},
+					}},
+				},
+			}},
+		},
+		wantMode:      3,
+		wantHAMembers: []string{"gce-2", "gce-1", "gce-3"},
+		wantSite: &sapb.HANAReplicaSite{
+			Name: "gce-1",
+			Targets: []*sapb.HANAReplicaSite{{
+				Name: "gce-2",
+				Targets: []*sapb.HANAReplicaSite{{
+					Name: "gce-3",
+				}},
+			}},
+		},
+		wantErr: nil,
 	}}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMode, gotExitStatus, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec)
+			gotMode, gotExitStatus, gotSite, err := readReplicationConfig(context.Background(), test.user, test.sid, test.instanceID, test.fakeExec, test.fakeSystemInterface)
 
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("readReplicationConfig(%s,%s,%s) error, got: %v want: %v.", test.user, test.sid, test.instanceID, err, test.wantErr)

@@ -171,7 +171,7 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 			DiscoverCurrentHostResp: [][]string{{}},
 		},
-		AppsDiscovery:     func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+		AppsDiscovery:     func(context.Context, SapSystemDiscoveryInterface) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 		OSStatReader:      func(string) (os.FileInfo, error) { return nil, nil },
 	}
@@ -2470,7 +2470,7 @@ func TestUpdateSAPInstances(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			discoverCalls := 0
 			d := &Discovery{
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances {
+				AppsDiscovery: func(context.Context, SapSystemDiscoveryInterface) *sappb.SAPInstances {
 					defer func() {
 						discoverCalls++
 					}()

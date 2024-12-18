@@ -28,6 +28,7 @@ import (
 
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
@@ -75,7 +76,7 @@ type (
 	queryFunc func(ctx context.Context, query string, exec commandlineexecutor.Execute) (*databaseconnector.QueryResults, error)
 
 	// hanaReplicationConfig provides an easily testable translation to invoking the sapdiscovery package function HANAReplicationConfig.
-	hanaReplicationConfig func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error)
+	hanaReplicationConfig func(ctx context.Context, user, sid, instID string, systemDiscoveryInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error)
 
 	// Parameters hold the parameters necessary to invoke Start().
 	Parameters struct {
@@ -86,6 +87,7 @@ type (
 		dailyMetricsRoutine     *recovery.RecoverableRoutine
 		createWorkerPoolRoutine *recovery.RecoverableRoutine
 		HRC                     hanaReplicationConfig
+		SystemDiscovery         system.SapSystemDiscoveryInterface
 		ConnectionRetryInterval time.Duration
 	}
 
@@ -374,7 +376,7 @@ func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
 		return true
 	}
 	sidUser := fmt.Sprintf("%sadm", strings.ToLower(instance.Sid))
-	site, _, _, err := opts.params.HRC(ctx, sidUser, instance.Sid, instance.InstanceNum)
+	site, _, _, err := opts.params.HRC(ctx, sidUser, instance.Sid, instance.InstanceNum, opts.params.SystemDiscovery)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error getting HANA replication config", "sidUser", sidUser, "instanceNum", instance.InstanceNum, "error", err)
 		return false

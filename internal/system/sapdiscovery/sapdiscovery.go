@@ -26,11 +26,13 @@ import (
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
 )
 
 var (
@@ -86,7 +88,7 @@ var (
 type (
 	listInstances func(context.Context, commandlineexecutor.Execute) ([]*instanceInfo, error)
 	// ReplicationConfig is a function that returns the replication configuration information.
-	ReplicationConfig func(context.Context, string, string, string) (int, int64, *sapb.HANAReplicaSite, error)
+	ReplicationConfig func(context.Context, string, string, string, system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error)
 	instanceInfo      struct {
 		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath string
 	}
@@ -100,21 +102,21 @@ type (
 // SAPApplications Discovers the SAP Application instances.
 //
 //	Returns a sapb.SAPInstances which is an array of SAP instances running on the given machine.
-func SAPApplications(ctx context.Context) *sapb.SAPInstances {
+func SAPApplications(ctx context.Context, sapSystemInterface system.SapSystemDiscoveryInterface) *sapb.SAPInstances {
 	data, err := pacemaker.Data(ctx)
 	if err != nil {
 		// could not collect data from crm_mon
 		log.CtxLogger(ctx).Debugw("Failure in reading crm_mon data from pacemaker", "err", err)
 	}
-	return instances(ctx, HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data)
+	return instances(ctx, HANAReplicationConfig, listSAPInstances, commandlineexecutor.ExecuteCommand, data, sapSystemInterface)
 }
 
 // instances is a testable version of SAPApplications.
-func instances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon) *sapb.SAPInstances {
+func instances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute, crmdata *pacemaker.CRMMon, sapSystemInterface system.SapSystemDiscoveryInterface) *sapb.SAPInstances {
 	log.CtxLogger(ctx).Debug("Discovering SAP Applications.")
 	var sapInstances []*sapb.SAPInstance
 
-	hana, err := hanaInstances(ctx, hrc, list, exec)
+	hana, err := hanaInstances(ctx, hrc, list, exec, sapSystemInterface)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Unable to discover HANA instances", "err", err)
 	} else {
@@ -136,7 +138,7 @@ func instances(ctx context.Context, hrc ReplicationConfig, list listInstances, e
 
 // hanaInstances returns list of SAP HANA Instances present on the machine.
 // Returns error in case of failures.
-func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute) ([]*sapb.SAPInstance, error) {
+func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstances, exec commandlineexecutor.Execute, sapSystemInterface system.SapSystemDiscoveryInterface) ([]*sapb.SAPInstance, error) {
 	log.CtxLogger(ctx).Debug("Discovering SAP HANA instances.")
 
 	sapServicesEntries, err := list(ctx, exec)
@@ -155,7 +157,7 @@ func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstance
 
 		instanceID := entry.InstanceName + entry.Snr
 		user := strings.ToLower(entry.Sid) + "adm"
-		siteID, _, replicationSites, err := hrc(ctx, user, entry.Sid, instanceID)
+		siteID, _, replicationSites, err := hrc(ctx, user, entry.Sid, instanceID, sapSystemInterface)
 		if err != nil {
 			log.CtxLogger(ctx).Debugw("Failed to get HANA HA configuration for instance", "instanceid", instanceID, "error", err)
 			siteID = -1 // INSTANCE_SITE_UNDEFINED
@@ -191,12 +193,12 @@ func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstance
 //	 3 == HANA DR
 //
 // Exit status of systemReplicationStatus.py as int64.
-func HANAReplicationConfig(ctx context.Context, user, sid, instID string) (site int, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
-	return readReplicationConfig(ctx, user, sid, instID, commandlineexecutor.ExecuteCommand)
+func HANAReplicationConfig(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (site int, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
+	return readReplicationConfig(ctx, user, sid, instID, commandlineexecutor.ExecuteCommand, sapSystemInterface)
 }
 
 // readReplicationConfig is a testable version of HANAReplicationConfig.
-func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute) (mode int, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
+func readReplicationConfig(ctx context.Context, user, sid, instID string, exec commandlineexecutor.Execute, sapSystemInterface system.SapSystemDiscoveryInterface) (mode int, exitStatus int64, replicationSites *sapb.HANAReplicaSite, err error) {
 	cmd := "sudo"
 	args := "" +
 		fmt.Sprintf("-i -u %sadm /usr/sap/%s/%s/HDBSettings.sh ", strings.ToLower(sid), sid, instID) +
@@ -235,8 +237,16 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 		return 0, 0, nil, nil
 	}
 	site := match[1]
+	systems := sapSystemInterface.GetSAPSystems()
+	var sys *spb.SapDiscovery
+	for _, s := range systems {
+		if s.GetDatabaseLayer().GetSid() == sid {
+			sys = s
+			break
+		}
+	}
 
-	mode, err = readMode(ctx, result.StdOut, site)
+	mode, err = readMode(ctx, result.StdOut, site, sys)
 	if err != nil {
 		return 0, exitStatus, nil, err
 	}
@@ -306,7 +316,7 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	return mode, exitStatus, primarySite, nil
 }
 
-func readMode(ctx context.Context, stdOut, site string) (mode int, err error) {
+func readMode(ctx context.Context, stdOut, site string, sys *spb.SapDiscovery) (mode int, err error) {
 	log.CtxLogger(ctx).Debugw("Reading SAP HANA Replication Mode for instance", "siteID", site)
 	match := modePattern.FindStringSubmatch(stdOut)
 	if len(match) < 2 {
@@ -318,7 +328,21 @@ func readMode(ctx context.Context, stdOut, site string) (mode int, err error) {
 		mode = 1
 		log.CtxLogger(ctx).Debug("Current SAP HANA node is primary")
 	} else {
+		// How do we determine if this is secondary or DR?
+		// Node is DR if tier >= 3 or if it is not in the same load balancer group as the primary.
 		mode = 2
+		if sys.GetDatabaseLayer().GetReplicationSites() != nil {
+			// If this site is not part of the primary DB component, it is DR.
+			log.CtxLogger(ctx).Debugw("Checking if site is part of primary DB component")
+			mode = 3
+			for _, r := range sys.GetDatabaseLayer().GetResources() {
+				if r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE &&
+					r.GetInstanceProperties().GetVirtualHostname() == site {
+					mode = 2
+					break
+				}
+			}
+		}
 		log.CtxLogger(ctx).Debug("Current SAP HANA node is secondary")
 	}
 
@@ -351,6 +375,7 @@ func HANASite(mode int) sapb.InstanceSite {
 		0: sapb.InstanceSite_HANA_STANDALONE,
 		1: sapb.InstanceSite_HANA_PRIMARY,
 		2: sapb.InstanceSite_HANA_SECONDARY,
+		3: sapb.InstanceSite_HANA_DR,
 	}
 	if site, ok := sites[mode]; ok {
 		return site

@@ -29,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
@@ -48,13 +49,14 @@ type (
 	// InstanceProperties has necessary context for Metrics collection.
 	// InstanceProperties implements Collector interface for HANA and Netweaver.
 	InstanceProperties struct {
-		SAPInstance       *sapb.SAPInstance
-		Config            *cnfpb.Configuration
-		Client            cloudmonitoring.TimeSeriesCreator
-		SkippedMetrics    map[string]bool
-		PMBackoffPolicy   backoff.BackOffContext
-		ReliabilityMetric bool
-		ReplicationConfig sapdiscovery.ReplicationConfig
+		SAPInstance        *sapb.SAPInstance
+		Config             *cnfpb.Configuration
+		Client             cloudmonitoring.TimeSeriesCreator
+		SkippedMetrics     map[string]bool
+		PMBackoffPolicy    backoff.BackOffContext
+		ReliabilityMetric  bool
+		ReplicationConfig  sapdiscovery.ReplicationConfig
+		SapSystemInterface system.SapSystemDiscoveryInterface
 	}
 )
 
@@ -76,6 +78,7 @@ const (
 	primaryHasError                       int64 = 2
 	primaryOnlineReplicationNotFunctional int64 = 3
 	primaryOnlineReplicationRunning       int64 = 4
+	currentNodeDR                         int64 = 5
 )
 
 // SAP control results.
@@ -228,6 +231,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 			log.CtxLogger(ctx).Debugw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
 			return nil, err
 		}
+		log.CtxLogger(ctx).Debugw("HA availability for sapcontrol", "haReplicationValue", haReplicationValue, "sapControlResult", sapControlResult, "sapinstance", ip.SAPInstance)
 		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
@@ -276,9 +280,12 @@ func hanaAvailability(p *InstanceProperties, processes map[int]*sapcontrol.Proce
 }
 
 func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicationStatus int64) int64 {
+	log.Logger.Debugw("HANA HA availability for sapcontrol", "replicationStatus", replicationStatus, "sapControlResult", sapControlResult, "sapInstance", p.SAPInstance)
 	var value int64 = unknownState
 	if p.SAPInstance.GetSite() == sapb.InstanceSite_HANA_SECONDARY {
 		return currentNodeSecondary
+	} else if p.SAPInstance.GetSite() == sapb.InstanceSite_HANA_DR {
+		return currentNodeDR
 	}
 	switch replicationStatus {
 	case replicationActive:
@@ -294,8 +301,6 @@ func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicat
 			} else {
 				value = primaryHasError
 			}
-		} else {
-			value = currentNodeSecondary
 		}
 	case replicationOff, replicationConnectionError, replicationInitialization, replicationSyncing:
 		if sapControlResult == sapControlAllProcessesRunning {
@@ -316,7 +321,8 @@ func refreshHAReplicationConfig(ctx context.Context, p *InstanceProperties) (int
 		ctx,
 		p.SAPInstance.GetUser(),
 		p.SAPInstance.GetSapsid(),
-		p.SAPInstance.GetInstanceId())
+		p.SAPInstance.GetInstanceId(),
+		p.SapSystemInterface)
 
 	// This is not in-band error handling. Metric should be zero in case of failures.
 	if err != nil {

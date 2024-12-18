@@ -30,6 +30,7 @@ enum InstanceSite {
   HANA_PRIMARY = 1;
   HANA_SECONDARY = 2;
   HANA_STANDALONE = 3;
+  HANA_DR = 4;
 }
 
 enum InstanceKind {

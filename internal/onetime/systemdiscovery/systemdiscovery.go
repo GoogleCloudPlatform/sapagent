@@ -52,7 +52,7 @@ type SystemDiscovery struct {
 	CloudDiscoveryInterface       system.CloudDiscoveryInterface
 	HostDiscoveryInterface        system.HostDiscoveryInterface
 	SapDiscoveryInterface         system.SapDiscoveryInterface
-	AppsDiscovery                 func(context.Context) *sappb.SAPInstances
+	AppsDiscovery                 func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances
 	ConfigPath, LogLevel, LogPath string
 	help                          bool
 	IIOTEParams                   *onetime.InternallyInvokedOTE

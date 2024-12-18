@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
@@ -178,6 +179,7 @@ func TestHaAvailabilityValue(t *testing.T) {
 	tests := []struct {
 		name              string
 		sapControlResult  int64
+		p                 *InstanceProperties
 		replicationStatus int64
 		want              int64
 	}{
@@ -223,12 +225,30 @@ func TestHaAvailabilityValue(t *testing.T) {
 			replicationStatus: replicationUnknown,
 			want:              primaryHasError,
 		},
+		{
+			name: "DRSite",
+			p: &InstanceProperties{
+				SAPInstance: &sapb.SAPInstance{
+					Site: sapb.InstanceSite_HANA_DR,
+				},
+				Config: &cpb.Configuration{
+					CloudProperties: &iipb.CloudProperties{
+						InstanceName: "test-instance-dr",
+					},
+				},
+			},
+			sapControlResult:  sapControlAllProcessesRunning,
+			replicationStatus: replicationActive,
+			want:              currentNodeDR,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-
-			got := haAvailabilityValue(defaultInstanceProperties, test.sapControlResult, test.replicationStatus)
+			if test.p == nil {
+				test.p = defaultInstanceProperties
+			}
+			got := haAvailabilityValue(test.p, test.sapControlResult, test.replicationStatus)
 			if got != test.want {
 				t.Errorf("haAvailabilityValue(), got: %d want: %d.", got, test.want)
 			}
@@ -808,7 +828,7 @@ func TestRefreshHAReplicationConfig(t *testing.T) {
 			Sapsid:     "test",
 			InstanceId: "test",
 		},
-		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+		replicationConfig: func(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 			return 1, 1, &sapb.HANAReplicaSite{}, nil
 		},
 		wantStatus: 1,
@@ -819,7 +839,7 @@ func TestRefreshHAReplicationConfig(t *testing.T) {
 			Sapsid:     "test",
 			InstanceId: "test",
 		},
-		replicationConfig: func(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+		replicationConfig: func(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 			return 1, 1, &sapb.HANAReplicaSite{}, errors.New("replication read error")
 		},
 		wantStatus: 0,

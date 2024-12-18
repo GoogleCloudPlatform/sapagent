@@ -49,6 +49,16 @@ import (
 
 const systemDiscoveryOverride = "/etc/google-cloud-sap-agent/system.json"
 
+// SapSystemDiscoveryInterface is an interface for retrieving the list of SAP systems.
+type SapSystemDiscoveryInterface interface {
+	GetSAPSystems() []*spb.SapDiscovery
+}
+
+// SapAppDiscoveryInterface is an interface for retrieving the list of SAP instances.
+type SapAppDiscoveryInterface interface {
+	GetSAPInstances() *sappb.SAPInstances
+}
+
 // Discovery is a type used to perform SAP System discovery operations.
 type Discovery struct {
 	WlmService              WlmInterface
@@ -56,7 +66,7 @@ type Discovery struct {
 	CloudDiscoveryInterface CloudDiscoveryInterface
 	HostDiscoveryInterface  HostDiscoveryInterface
 	SapDiscoveryInterface   SapDiscoveryInterface
-	AppsDiscovery           func(context.Context) *sappb.SAPInstances
+	AppsDiscovery           func(context.Context, SapSystemDiscoveryInterface) *sappb.SAPInstances
 	OSStatReader            workloadmanager.OSStatReader
 	FileReader              workloadmanager.ConfigFileReader
 	systems                 []*spb.SapDiscovery
@@ -225,7 +235,7 @@ func updateSAPInstances(ctx context.Context, a any) {
 	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
 	for {
 		log.CtxLogger(ctx).Info("Updating SAP Instances")
-		sapInst := args.d.AppsDiscovery(ctx)
+		sapInst := args.d.AppsDiscovery(ctx, args.d)
 		args.d.sapMu.Lock()
 		args.d.sapInstances = sapInst
 		args.d.sapMu.Unlock()

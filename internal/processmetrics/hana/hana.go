@@ -83,6 +83,7 @@ const (
 	primaryHasError                       int64 = 2
 	primaryOnlineReplicationNotFunctional int64 = 3
 	primaryOnlineReplicationRunning       int64 = 4
+	currentNodeDRSite                     int64 = 5
 )
 
 // SAP control results.

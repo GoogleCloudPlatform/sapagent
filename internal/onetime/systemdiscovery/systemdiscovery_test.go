@@ -41,6 +41,7 @@ import (
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
@@ -122,7 +123,7 @@ var (
 		},
 	}
 
-	defaultAppsDiscovery = func(context.Context) *sappb.SAPInstances {
+	defaultAppsDiscovery = func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
 		return defaultSAPInstances
 	}
 
@@ -201,8 +202,10 @@ func TestExecute(t *testing.T) {
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
-				ConfigPath:    createTestConfigFile(t, testConfigFileJSON).Name(),
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
+				ConfigPath: createTestConfigFile(t, testConfigFileJSON).Name(),
 			},
 			args: []any{
 				"anything",
@@ -224,7 +227,9 @@ func TestExecute(t *testing.T) {
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			args: []any{
 				"anything",
@@ -322,7 +327,9 @@ func TestInitDefaults(t *testing.T) {
 				CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			lp: &log.Parameters{},
 		},
@@ -335,14 +342,18 @@ func TestInitDefaults(t *testing.T) {
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
 					DiscoverCurrentHostResp: [][]string{{}},
 				},
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			lp: &log.Parameters{},
 		},
 		{
 			name: "CloudDiscoveryInterfaceMissing",
 			sd: &SystemDiscovery{
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			lp:         &log.Parameters{},
@@ -350,7 +361,9 @@ func TestInitDefaults(t *testing.T) {
 		{
 			name: "ErrorCreatingGCE",
 			sd: &SystemDiscovery{
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, fmt.Errorf("error creating GCE") },
 			lp:         &log.Parameters{},
@@ -368,7 +381,9 @@ func TestInitDefaults(t *testing.T) {
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 				},
-				AppsDiscovery: func(context.Context) *sappb.SAPInstances { return &sappb.SAPInstances{} },
+				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
+					return &sappb.SAPInstances{}
+				},
 			},
 			lp: &log.Parameters{
 				CloudLoggingClient: &logging.Client{},

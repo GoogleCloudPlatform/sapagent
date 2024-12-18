@@ -397,11 +397,12 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 
 			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:       instance,
-				Config:            p.Config,
-				Client:            p.Client,
-				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
-				ReplicationConfig: sapdiscovery.HANAReplicationConfig,
+				SAPInstance:        instance,
+				Config:             p.Config,
+				Client:             p.Client,
+				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				ReplicationConfig:  sapdiscovery.HANAReplicationConfig,
+				SapSystemInterface: params.Discovery,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -430,11 +431,12 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 
 			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:     instance,
-				Config:          p.Config,
-				Client:          p.Client,
-				SkippedMetrics:  skippedMetrics,
-				PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				SAPInstance:        instance,
+				Config:             p.Config,
+				Client:             p.Client,
+				SkippedMetrics:     skippedMetrics,
+				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
+				SapSystemInterface: params.Discovery,
 			}
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
@@ -636,23 +638,25 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, sapInst
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:       instance,
-				Config:            p.Config,
-				Client:            p.Client,
-				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
-				ReliabilityMetric: true,
-				ReplicationConfig: sapdiscovery.HANAReplicationConfig,
+				SAPInstance:        instance,
+				Config:             p.Config,
+				Client:             p.Client,
+				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
+				ReliabilityMetric:  true,
+				ReplicationConfig:  sapdiscovery.HANAReplicationConfig,
+				SapSystemInterface: params.Discovery,
 			}
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
 			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for Netweaver", "instance", instance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
-				SAPInstance:       instance,
-				Config:            p.Config,
-				Client:            p.Client,
-				PMBackoffPolicy:   cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
-				ReliabilityMetric: true,
+				SAPInstance:        instance,
+				Config:             p.Config,
+				Client:             p.Client,
+				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(minimumFrequencyForReliability)*time.Second, 3, time.Minute, 35*time.Second),
+				ReliabilityMetric:  true,
+				SapSystemInterface: params.Discovery,
 			}
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
 		}

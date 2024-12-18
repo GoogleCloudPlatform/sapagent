@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
@@ -120,19 +121,19 @@ func newDefaultCumulativeMetric(st, et int64) *mrpb.TimeSeries {
 	}
 }
 
-func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+func fakeHRCSucessPrimary(ctx context.Context, user, sid, instID string, sys system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 	return 1, 1, nil, nil
 }
 
-func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+func fakeHRCSucessSecondary(ctx context.Context, user, sid, instID string, sys system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 	return 2, 2, nil, nil
 }
 
-func fakeHRCSucessError(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+func fakeHRCSucessError(ctx context.Context, user, sid, instID string, sys system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 	return 0, 0, nil, errors.New("fake error")
 }
 
-func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string) (int, int64, *sapb.HANAReplicaSite, error) {
+func fakeHRCSuccessForStandAlone(ctx context.Context, user, sid, instID string, sys system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
 	return 0, 1, nil, nil
 }
 

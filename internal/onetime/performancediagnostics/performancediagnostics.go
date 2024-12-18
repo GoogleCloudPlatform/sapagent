@@ -124,7 +124,7 @@ type options struct {
 	cp                      *ipb.CloudProperties
 	config                  *bpb.BackintConfiguration
 	cloudDiscoveryInterface system.CloudDiscoveryInterface
-	appsDiscovery           func(context.Context) *sappb.SAPInstances
+	appsDiscovery           func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances
 	collectProcesses        func(context.Context, computeresources.Parameters) []*computeresources.ProcessInfo
 	newProc                 computeresources.NewProcessWithContextHelper
 }
