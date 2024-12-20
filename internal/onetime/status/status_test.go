@@ -785,9 +785,11 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "System Discovery",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:  "System Discovery",
+						State: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -809,9 +811,11 @@ func TestStatusHandler(t *testing.T) {
 						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:           "Workload Manager",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:  "Workload Manager",
+						State: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
 							{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
@@ -819,6 +823,7 @@ func TestStatusHandler(t *testing.T) {
 							{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
 							{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
 						},
+						FullyFunctional: spb.State_SUCCESS_STATE,
 					},
 				},
 			},
@@ -938,9 +943,11 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "System Discovery",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:  "System Discovery",
+						State: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -952,7 +959,9 @@ func TestStatusHandler(t *testing.T) {
 						Name:            "Backint",
 						State:           spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_SUCCESS_STATE,
-						IamPermissions:  defaultBackintIAMPermissions,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "bucket", Value: "fake-bucket", IsDefault: false},
 							{Name: "log_to_cloud", Value: "true", IsDefault: true},
@@ -969,9 +978,11 @@ func TestStatusHandler(t *testing.T) {
 						ConfigValues:   []*spb.ConfigValue{},
 					},
 					{
-						Name:           "Workload Manager",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:  "Workload Manager",
+						State: spb.State_SUCCESS_STATE,
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
 							{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
@@ -979,6 +990,7 @@ func TestStatusHandler(t *testing.T) {
 							{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
 							{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
 						},
+						FullyFunctional: spb.State_SUCCESS_STATE,
 					},
 				},
 			},
@@ -1043,6 +1055,55 @@ func TestBackintStatusFailures(t *testing.T) {
 				ErrorMessage:   `bucket must be provided`,
 				IamPermissions: defaultBackintIAMPermissions,
 				ConfigValues:   []*spb.ConfigValue{},
+			},
+		},
+		{
+			name: "IAMPermissionsNotGranted",
+			s: Status{
+				backintReadFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+  "bucket": "fake-bucket",
+  "log_to_cloud": true,
+	"threads": 1
+}
+`), nil
+				},
+				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
+				backintClient:         defaultStorageClient,
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"storage.objects.create":          false,
+						"storage.objects.delete":          false,
+						"storage.multipartUploads.create": false,
+					}, nil
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Backint",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "IAM permissions not granted",
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "storage.multipartUploads.create",
+						Granted: spb.State_FAILURE_STATE,
+					},
+					{
+						Name:    "storage.objects.create",
+						Granted: spb.State_FAILURE_STATE,
+					},
+					{
+						Name:    "storage.objects.delete",
+						Granted: spb.State_FAILURE_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "bucket", Value: "fake-bucket", IsDefault: false},
+					{Name: "log_to_cloud", Value: "true", IsDefault: true},
+					{Name: "param_file", Value: "fake-path/backint-gcs/parameters.json", IsDefault: false},
+					{Name: "threads", Value: "1", IsDefault: false},
+				},
 			},
 		},
 		{

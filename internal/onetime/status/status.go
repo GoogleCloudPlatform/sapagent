@@ -65,7 +65,7 @@ const (
 	backintMultipartLabel     = "BACKINT_MULTIPART"
 	diskBackupLabel           = "DISKBACKUP"
 	diskBackupStripedLabel    = "DISKBACKUP_STRIPED"
-	sapSystemDiscoveryLabel   = "SAP_SYSTEM_DISCOVERY"
+	systemDiscoveryLabel      = "SAP_SYSTEM_DISCOVERY"
 	workloadEvaluationMELabel = "WORKLOAD_EVALUATION_METRICS"
 	secretManagerLabel        = "SECRET_MANAGER"
 	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
@@ -406,8 +406,18 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 			configValue("system_discovery_update_frequency", config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().GetSeconds(), 4*60*60),
 		},
 	}
-	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+		status.State = spb.State_FAILURE_STATE
+		return status
+	}
+	status.State = spb.State_SUCCESS_STATE
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, systemDiscoveryLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
 
 	return status
@@ -483,8 +493,28 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		}
 	}
 
-	// TODO: Perform IAM checks.
-
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, backintLabel, &permissions.ResourceDetails{
+		ProjectID:  s.cloudProps.GetProjectId(),
+		BucketName: printConfig.Bucket,
+	})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	if printConfig.XmlMultipartUpload {
+		multipartUploadPermissionsStatus, multipartAllGranted, err := s.fetchPermissionsStatus(ctx, backintMultipartLabel, &permissions.ResourceDetails{
+			ProjectID:  s.cloudProps.GetProjectId(),
+			BucketName: printConfig.Bucket,
+		})
+		if err != nil {
+			return logCheckFailureAndReturnStatus(ctx, status, "Error checking multipart upload IAM permissions", spb.State_ERROR_STATE)
+		}
+		permissionsStatus = append(permissionsStatus, multipartUploadPermissionsStatus...)
+		allGranted = allGranted && multipartAllGranted
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
 	connectParams := &storage.ConnectParameters{
 		StorageClient:    s.backintClient,
 		ServiceAccount:   config.GetServiceAccountKey(),
@@ -511,7 +541,6 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 		// TODO: Add config values.
 		ConfigValues: []*spb.ConfigValue{},
 	}
-
 	return status
 }
 
@@ -528,10 +557,22 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 			configValue("workload_validation_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency(), 300),
 		},
 	}
-	if config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
+		status.State = spb.State_FAILURE_STATE
+		return status
+	}
+	status.State = spb.State_SUCCESS_STATE
+
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, workloadEvaluationMELabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
 
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
