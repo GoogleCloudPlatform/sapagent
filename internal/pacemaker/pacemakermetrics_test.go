@@ -235,10 +235,14 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"fence_agent":          "fence_gce",
-		"pcmk_delay_max":       "test-instance-name=45",
-		"pcmk_monitor_retries": "5",
-		"pcmk_reboot_timeout":  "200",
+		"fence_agent":            "fence_gce",
+		"pcmk_delay_max":         "test-instance-name=45",
+		"pcmk_monitor_retries":   "5",
+		"pcmk_reboot_timeout":    "200",
+		"saphana_notify":         "",
+		"saphana_clone_max":      "",
+		"saphana_clone_node_max": "",
+		"saphana_interleave":     "",
 	}
 }
 
@@ -252,9 +256,20 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"fence_agent_logging_api_access": "false",
 		"location_preference_set":        locationPref,
 		"maintenance_mode_active":        "true",
+		"stonith_enabled":                "",
+		"stonith_timeout":                "",
 		"ascs_instance":                  "",
 		"ers_instance":                   "",
 		"enqueue_server":                 "",
+		"saphana_notify":                 "",
+		"saphana_clone_max":              "",
+		"saphana_clone_node_max":         "",
+		"saphana_interleave":             "",
+		"ascs_failure_timeout":           "",
+		"ascs_migration_threshold":       "",
+		"ascs_resource_stickiness":       "",
+		"is_ers":                         "",
+		"op_timeout":                     "",
 	}
 }
 
@@ -286,6 +301,14 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ascs_instance":                    "",
 		"ers_instance":                     "",
 		"enqueue_server":                   "",
+		"saphana_notify":                   "",
+		"saphana_clone_max":                "",
+		"saphana_clone_node_max":           "",
+		"saphana_interleave":               "",
+		"ascs_failure_timeout":             "",
+		"ascs_migration_threshold":         "",
+		"ascs_resource_stickiness":         "",
+		"is_ers":                           "",
 		"op_timeout":                       "600",
 		"stonith_enabled":                  "true",
 		"stonith_timeout":                  "300",
@@ -341,9 +364,20 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"fence_agent_logging_api_access": "true",
 		"location_preference_set":        locationPref,
 		"maintenance_mode_active":        "true",
+		"stonith_enabled":                "",
+		"stonith_timeout":                "",
 		"ascs_instance":                  "",
 		"ers_instance":                   "",
 		"enqueue_server":                 "",
+		"saphana_notify":                 "",
+		"saphana_clone_max":              "",
+		"saphana_clone_node_max":         "",
+		"saphana_interleave":             "",
+		"ascs_failure_timeout":           "",
+		"ascs_migration_threshold":       "",
+		"ascs_resource_stickiness":       "",
+		"is_ers":                         "",
+		"op_timeout":                     "",
 	}
 }
 
@@ -879,7 +913,12 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{},
+			wantLabels: map[string]string{
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
+			},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesNoMatch",
@@ -899,7 +938,12 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{},
+			wantLabels: map[string]string{
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
+			},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch1",
@@ -924,7 +968,12 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path",
 			},
-			wantLabels: map[string]string{},
+			wantLabels: map[string]string{
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
+			},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch2",
@@ -956,7 +1005,12 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path2",
 			},
-			wantLabels: map[string]string{},
+			wantLabels: map[string]string{
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
+			},
 		},
 		{
 			name:      "pcmkDelayMaxSingleValue",
@@ -1008,7 +1062,11 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "instance-name-4=30",
+				"pcmk_delay_max":         "instance-name-4=30",
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
 			},
 		},
 		{
@@ -1043,7 +1101,11 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max": "instance-name-1=60,instance-name-2=30",
+				"pcmk_delay_max":         "instance-name-1=60,instance-name-2=30",
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
 			},
 		},
 		{
@@ -2054,7 +2116,11 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 		{
 			name:  "ZeroValueGroup",
 			group: Group{},
-			want:  map[string]string{},
+			want: map[string]string{
+				"ascs_failure_timeout":     "",
+				"ascs_migration_threshold": "",
+				"ascs_resource_stickiness": "",
+			},
 		},
 		{
 			name: "NoSAPInstanceType",
@@ -2072,7 +2138,11 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"ascs_failure_timeout":     "",
+				"ascs_migration_threshold": "",
+				"ascs_resource_stickiness": "",
+			},
 		},
 		{
 			name: "MetadataKeyMismatch",
@@ -2090,7 +2160,11 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"ascs_failure_timeout":     "",
+				"ascs_migration_threshold": "",
+				"ascs_resource_stickiness": "",
+			},
 		},
 		{
 			name: "Success",
@@ -2136,7 +2210,9 @@ func TestSetERSConfigMetrics(t *testing.T) {
 		{
 			name:  "ZeroValueGroup",
 			group: Group{},
-			want:  map[string]string{},
+			want: map[string]string{
+				"is_ers": "",
+			},
 		},
 		{
 			name: "NoSAPInstanceType",
@@ -2152,7 +2228,9 @@ func TestSetERSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"is_ers": "",
+			},
 		},
 		{
 			name: "MetadataKeyMismatch",
@@ -2168,7 +2246,9 @@ func TestSetERSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"is_ers": "",
+			},
 		},
 		{
 			name: "Success",
@@ -2248,7 +2328,10 @@ func TestSetPacemakerStonithClusterProperty(t *testing.T) {
 					},
 				},
 			},
-			want: map[string]string{},
+			want: map[string]string{
+				"stonith_enabled": "",
+				"stonith_timeout": "",
+			},
 		},
 		{
 			name: "Success",

@@ -656,6 +656,9 @@ func collectEnqueueServer(ctx context.Context, l map[string]string, exec command
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
 func setASCSConfigMetrics(l map[string]string, group Group) {
+	l["ascs_failure_timeout"] = ""
+	l["ascs_migration_threshold"] = ""
+	l["ascs_resource_stickiness"] = ""
 	metaAttributesKeys := map[string]bool{
 		"failure-timeout":     true,
 		"migration-threshold": true,
@@ -677,6 +680,7 @@ func setASCSConfigMetrics(l map[string]string, group Group) {
 
 // setERSConfigMetrics sets the metrics collected from the ERS resource group.
 func setERSConfigMetrics(l map[string]string, group Group) {
+	l["is_ers"] = ""
 	for _, primitive := range group.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
@@ -690,6 +694,7 @@ func setERSConfigMetrics(l map[string]string, group Group) {
 }
 
 func setOPOptions(l map[string]string, opOptions ClusterPropertySet) {
+	l["op_timeout"] = ""
 	opOptionsKeys := map[string]bool{
 		"timeout": true,
 	}
@@ -703,6 +708,8 @@ func setOPOptions(l map[string]string, opOptions ClusterPropertySet) {
 }
 
 func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterPropertySet) {
+	l["stonith_enabled"] = ""
+	l["stonith_timeout"] = ""
 	stonithClusterPropertyKeys := map[string]bool{
 		"stonith-enabled": true,
 		"stonith-timeout": true,
@@ -724,6 +731,11 @@ func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterProper
 }
 
 func setPacemakerHANACloneAttrs(ctx context.Context, l map[string]string, resources Resources, osVendorID string) {
+	l["saphana_notify"] = ""
+	l["saphana_clone_max"] = ""
+	l["saphana_clone_node_max"] = ""
+	l["saphana_interleave"] = ""
+
 	var metaAttrs ClusterPropertySet
 	switch osVendorID {
 	case "rhel":
