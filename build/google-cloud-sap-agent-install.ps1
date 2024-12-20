@@ -13,6 +13,7 @@ $ErrorActionPreference = 'Stop'
 $INSTALL_DIR = 'C:\Program Files\Google\google-cloud-sap-agent'
 $SVC_NAME = 'google-cloud-sap-agent'
 # The google-cloud-sap-agent-service.exe is a Windows Service Wrapper for google-cloud-sap-agent.exe
+# this is no longer used, we just use this name to remove the old service
 $SVC_NAME_EXE = 'google-cloud-sap-agent-service.exe'
 $BIN_NAME_EXE = 'google-cloud-sap-agent.exe'
 $MONITOR_TASK = 'google-cloud-sap-agent-monitor'
@@ -75,10 +76,26 @@ function CreateInstall-Dirs {
 }
 
 function ConfigureAgentWindows-Service {
-  if ($(Get-Service -Name $SVC_NAME -ErrorAction SilentlyContinue).Status) {
-    & $INSTALL_DIR\$SVC_NAME_EXE uninstall
+  if ($(Get-Service -Name $SVC_NAME -ErrorAction SilentlyContinue).Length -gt 0) {
+    Log-Write 'Service google-cloud-sap-agent already exists...'
+    if (Test-Path "$INSTALL_DIR/$SVC_NAME_EXE") {
+      Log-Write "Removing old service $SVC_NAME_EXE"
+      # this the old service, remove it
+      & $INSTALL_DIR\$SVC_NAME_EXE uninstall
+      RemoveItem-IfExists "$INSTALL_DIR/$SVC_NAME_EXE"
+    }
+    else {
+      Log-Write "Removing old service $SVC_NAME"
+      # this is the new service, remove it
+      Stop-Service $SVC_NAME
+      $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='google-cloud-sap-agent'"
+      $service.Dispose()
+      sc.exe delete $SVC_NAME
+    }
   }
-  & $INSTALL_DIR\$SVC_NAME_EXE install
+  Log-Write "Creating service $SVC_NAME"
+  # Create the new service
+  New-Service -Name $SVC_NAME -BinaryPathName '"C:\Program Files\Google\google-cloud-sap-agent\google-cloud-sap-agent.exe" winservice' -DisplayName 'Google Cloud SAP Agent' -Description 'Google Cloud SAP Agent' -StartupType Automatic
   Start-Service $SVC_NAME
 }
 

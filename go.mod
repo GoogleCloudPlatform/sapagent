@@ -28,6 +28,7 @@ require (
   github.com/google/subcommands v1.2.0
   github.com/googleapis/gax-go/v2 v2.12.2
   github.com/jonboulle/clockwork v0.4.1-0.20230717050334-b1209715e43c
+  github.com/kardianos/service v1.2.2
   github.com/pkg/errors v0.9.1
   github.com/shirou/gopsutil/v3 v3.22.12
   github.com/zieckey/goini v0.0.0-20180118150432-0da17d361d26

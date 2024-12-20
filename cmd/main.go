@@ -74,10 +74,11 @@ var (
 	_ = flag.Bool("help", false, "Should we display a help message")
 )
 
-func registerSubCommands() {
+func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iipb.CloudProperties) {
 	// NOTE: The order of the commands here is the order they will be displayed in the help message.
 	//       Be sure to keep the ordering in ascending order by subcommand name.
-	scs := [...]subcommands.Command{
+	d := &startdaemon.Daemon{}
+	scs := []subcommands.Command{
 		&aianalyze.AiAnalyzer{},
 		&backint.Backint{},
 		&balanceirq.BalanceIRQ{},
@@ -102,15 +103,16 @@ func registerSubCommands() {
 		&reliability.Reliability{},
 		&remotevalidation.RemoteValidation{},
 		&service.Service{},
-		&startdaemon.Daemon{},
 		&status.Status{},
 		&supportbundle.SupportBundle{},
 		&systemdiscovery.SystemDiscovery{},
 		&validate.Validate{},
 		&version.Version{},
-
+		d,
 		subcommands.HelpCommand(), // Implement "help"
 	}
+	// Add any additional windows or linux specific subcommands.
+	scs = append(scs, additionalSubcommands(ctx, d, lp, cloudProps)...)
 	for _, command := range scs {
 		subcommands.Register(command, "")
 	}
@@ -128,7 +130,6 @@ func registerSubCommands() {
 }
 
 func main() {
-	registerSubCommands()
 	ctx := context.Background()
 	lp := log.Parameters{
 		OSType:     runtime.GOOS,
@@ -150,6 +151,7 @@ func main() {
 		}
 	}
 	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())
+	registerSubCommands(ctx, lp, cloudProps)
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
 	if lp.CloudLoggingClient != nil {
