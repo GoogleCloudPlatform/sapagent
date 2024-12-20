@@ -23,9 +23,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"flag"
 	store "cloud.google.com/go/storage"
@@ -69,6 +72,15 @@ var (
 	}
 )
 
+type mockFileInfo struct{ perm os.FileMode }
+
+func (m *mockFileInfo) Name() string       { return "mock_file" }
+func (m *mockFileInfo) Size() int64        { return 0 }
+func (m *mockFileInfo) Mode() os.FileMode  { return m.perm }
+func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
+func (m *mockFileInfo) IsDir() bool        { return false }
+func (m *mockFileInfo) Sys() any           { return nil }
+
 func fakeServer(bucketName string) *fakestorage.Server {
 	return fakestorage.NewServer([]fakestorage.Object{
 		{
@@ -79,6 +91,32 @@ func fakeServer(bucketName string) *fakestorage.Server {
 			Content: []byte("hello world"),
 		},
 	})
+}
+
+func httpGetFailure(url string) (*http.Response, error) {
+	return nil, fmt.Errorf("endpoint failure")
+}
+
+func httpGetError(url string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: 500,
+		Body:       io.NopCloser(strings.NewReader("internal error")),
+	}, nil
+}
+
+func httpGetSuccess(url string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("{\"metrics\": [\"test\"]}")),
+	}, nil
+}
+
+func dbConnectorSuccess(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
+	return &databaseconnector.DBHandle{}, nil
+}
+
+func dbConnectorFailure(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
+	return nil, fmt.Errorf("connection failure")
 }
 
 func TestSynopsisForStatus(t *testing.T) {
@@ -726,6 +764,14 @@ func TestStatusHandler(t *testing.T) {
 				exists: func(string) bool {
 					return true
 				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0077}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
 				cloudProps: &iipb.CloudProperties{
 					Scopes: []string{requiredScope},
 				},
@@ -785,9 +831,11 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "System Discovery",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:            "System Discovery",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_FAILURE_STATE,
+						ErrorMessage:    "/usr/sap/sapservices has incorrect permissions. Got: 077, want: 0400",
+						IamPermissions:  []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -874,6 +922,14 @@ func TestStatusHandler(t *testing.T) {
 				cloudProps: &iipb.CloudProperties{
 					Scopes: []string{},
 				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0400}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
 				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
 				backintClient:         defaultStorageClient,
 				httpGet:               httpGetSuccess,
@@ -938,9 +994,10 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:           "System Discovery",
-						State:          spb.State_SUCCESS_STATE,
-						IamPermissions: []*spb.IAMPermission{},
+						Name:            "System Discovery",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
+						IamPermissions:  []*spb.IAMPermission{},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "enable_discovery", Value: "true", IsDefault: true},
 							{Name: "enable_workload_discovery", Value: "true", IsDefault: true},
@@ -1086,28 +1143,71 @@ func TestBackintStatusFailures(t *testing.T) {
 	}
 }
 
-func httpGetFailure(url string) (*http.Response, error) {
-	return nil, fmt.Errorf("endpoint failure")
-}
-
-func httpGetError(url string) (*http.Response, error) {
-	return &http.Response{
-		StatusCode: 500,
-		Body:       io.NopCloser(strings.NewReader("internal error")),
-	}, nil
-}
-
-func httpGetSuccess(url string) (*http.Response, error) {
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(strings.NewReader("{\"metrics\": [\"test\"]}")),
-	}, nil
-}
-
-func dbConnectorSuccess(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
-	return &databaseconnector.DBHandle{}, nil
-}
-
-func dbConnectorFailure(ctx context.Context, p databaseconnector.Params) (*databaseconnector.DBHandle, error) {
-	return nil, fmt.Errorf("connection failure")
+func TestSystemDiscoveryStatusFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Status
+		want *spb.ServiceStatus
+	}{
+		{
+			name: "FailedToStatSapServices",
+			s: Status{
+				stat: func(name string) (os.FileInfo, error) {
+					return nil, fmt.Errorf("failed to stat sapservices")
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return nil, nil
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "System Discovery",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "failed to stat sapservices",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "enable_discovery", Value: "true", IsDefault: true},
+					{Name: "enable_workload_discovery", Value: "false", IsDefault: false},
+					{Name: "sap_instances_update_frequency", Value: "0", IsDefault: false},
+					{Name: "system_discovery_update_frequency", Value: "0", IsDefault: false},
+				},
+			},
+		},
+		{
+			name: "FailedToReadDir",
+			s: Status{
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0400}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return nil, fmt.Errorf("failed to read dir")
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "System Discovery",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "failed to read dir",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "enable_discovery", Value: "true", IsDefault: true},
+					{Name: "enable_workload_discovery", Value: "false", IsDefault: false},
+					{Name: "sap_instances_update_frequency", Value: "0", IsDefault: false},
+					{Name: "system_discovery_update_frequency", Value: "0", IsDefault: false},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			config := &cpb.Configuration{
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: wpb.Bool(true),
+				},
+			}
+			got := test.s.systemDiscoveryStatus(context.Background(), config)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("systemDiscoveryStatus() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
 }

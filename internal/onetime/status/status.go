@@ -22,6 +22,8 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io/fs"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -81,7 +83,9 @@ type (
 		CheckIAMPermissionsOnSecret(ctx context.Context, projectID, secretID string, permissions []string) ([]string, error)
 	}
 
-	httpGetter func(url string) (resp *http.Response, err error)
+	httpGetter  func(url string) (resp *http.Response, err error)
+	statFunc    func(name string) (os.FileInfo, error)
+	readDirFunc func(dirname string) ([]fs.FileInfo, error)
 )
 
 // Status stores the status subcommand parameters.
@@ -105,6 +109,8 @@ type Status struct {
 	permissionsStatus permissions.FetchStatusFunc
 	httpGet           httpGetter
 	createDBHandle    databaseconnector.DBHandleFunc
+	stat              statFunc
+	readDir           readDirFunc
 }
 
 // Name implements the subcommand interface for status.
@@ -168,6 +174,8 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 	s.exists = commandlineexecutor.CommandExists
 	s.backintClient = store.NewClient
 	s.iamService, err = iam.NewIAMClient(ctx)
+	s.stat = os.Stat
+	s.readDir = ioutil.ReadDir
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
 		return nil, subcommands.ExitFailure
@@ -410,6 +418,20 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 		status.State = spb.State_SUCCESS_STATE
 	}
 
+	// Ensure sapservices and anything in /hana/shared have readable permissions.
+	if err := checkFilePermissions("/usr/sap/sapservices", 0400, s.stat); err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
+	}
+	files, err := s.readDir("/hana/shared")
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
+	}
+	for _, f := range files {
+		if err := checkFilePermissions("/hana/shared/"+f.Name(), 0400, s.stat); err != nil {
+			return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
+		}
+	}
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
@@ -508,8 +530,6 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 		Name:           "Disk Snapshot",
 		State:          spb.State_UNSPECIFIED_STATE,
 		IamPermissions: []*spb.IAMPermission{},
-		// TODO: Add config values.
-		ConfigValues: []*spb.ConfigValue{},
 	}
 
 	return status
@@ -576,4 +596,15 @@ func logCheckFailureAndReturnStatus(ctx context.Context, status *spb.ServiceStat
 	status.FullyFunctional = fullyFunctional
 	status.ErrorMessage = msg
 	return status
+}
+
+func checkFilePermissions(path string, wantPermissions fs.FileMode, stat statFunc) error {
+	fileInfo, err := stat(path)
+	if err != nil {
+		return err
+	}
+	if fileInfo.Mode().Perm()&wantPermissions != wantPermissions {
+		return fmt.Errorf("%s has incorrect permissions. Got: %#o, want: %#o", path, fileInfo.Mode().Perm(), wantPermissions)
+	}
+	return nil
 }
