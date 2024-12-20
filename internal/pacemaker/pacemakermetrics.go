@@ -145,28 +145,28 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		delete(pruneLabels, m.GetMetricInfo().GetLabel())
 	}
 
-	pacemakerVal, l := collectPacemakerValAndLabels(ctx, params)
+	pacemakerVal, labels := collectPacemakerValAndLabels(ctx, params)
 	for label := range pruneLabels {
-		delete(l, label)
+		delete(labels, label)
 	}
 
 	// Add OS command metrics to the labels.
 	for _, m := range pacemaker.GetOsCommandMetrics() {
 		k, v := configurablemetrics.CollectOSCommandMetric(ctx, m, params.Execute, params.OSVendorID)
 		if k != "" {
-			l[k] = v
+			labels[k] = v
 		}
 	}
-	return pacemakerVal, l
+	return pacemakerVal, labels
 }
 
 // collectPacemakerValAndLabels collects the pacemaker metrics and labels as specified by the WorkloadValidation config.
 func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float64, map[string]string) {
-	l := map[string]string{}
+	labels := map[string]string{}
 
 	if params.Config.GetCloudProperties() == nil {
 		log.CtxLogger(ctx).Debug("No cloud properties")
-		return 0.0, l
+		return 0.0, labels
 	}
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
@@ -175,13 +175,13 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	if pacemakerXMLString == nil {
 		log.CtxLogger(ctx).Debug("No pacemaker xml")
-		return 0.0, l
+		return 0.0, labels
 	}
 	pacemakerDocument, err := ParseXML([]byte(*pacemakerXMLString))
 
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
-		return 0.0, l
+		return 0.0, labels
 	}
 
 	instances := clusterNodes(pacemakerDocument.Configuration.Nodes)
@@ -190,7 +190,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	// Ex: instance11, ... , instance1
 	sort.Slice(instances, func(i, j int) bool { return len(instances[i]) > len(instances[j]) })
 
-	results := setPacemakerPrimitives(ctx, l, pacemakerDocument.Configuration.Resources, instances, params.Config, params.OSVendorID)
+	results := setPacemakerPrimitives(ctx, labels, pacemakerDocument.Configuration.Resources, instances, params.Config, params.OSVendorID)
 
 	if id, ok := results["projectId"]; ok {
 		projectID = id
@@ -200,7 +200,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 		params.JSONCredentialsGetter, params.DefaultTokenGetter)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
-		return 0.0, l
+		return 0.0, labels
 	}
 	rscLocations := pacemakerDocument.Configuration.Constraints.RSCLocations
 	locationPreferenceSet := "false"
@@ -212,34 +212,34 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 			break
 		}
 	}
-	l["location_preference_set"] = locationPreferenceSet
+	labels["location_preference_set"] = locationPreferenceSet
 
 	rscOptionNvPairs := pacemakerDocument.Configuration.RSCDefaults.NVPairs
-	setLabelsForRSCNVPairs(l, rscOptionNvPairs, "migration-threshold")
-	setLabelsForRSCNVPairs(l, rscOptionNvPairs, "resource-stickiness")
+	setLabelsForRSCNVPairs(labels, rscOptionNvPairs, "migration-threshold")
+	setLabelsForRSCNVPairs(labels, rscOptionNvPairs, "resource-stickiness")
 
 	// This will get any <primitive> with type=SAPHana, these can be under <clone> or <master>.
-	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHana"))
-	setPacemakerHanaOperations(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHana"))
+	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHana"))
+	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHana"))
 
-	setPacemakerAPIAccess(ctx, l, projectID, bearerToken, params.Execute)
-	setPacemakerMaintenanceMode(ctx, l, crmAvailable, params.Execute)
+	setPacemakerAPIAccess(ctx, labels, projectID, bearerToken, params.Execute)
+	setPacemakerMaintenanceMode(ctx, labels, crmAvailable, params.Execute)
 
-	setPacemakerStonithClusterProperty(l, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
+	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
 
 	// This will get any <primitive> with type=SAPHanaTopology, these can be under <clone> or <master>.
-	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHanaTopology"))
-	pacemakerHanaTopology(l, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
+	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHanaTopology"))
+	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
 
-	collectASCSInstance(ctx, l, params.Exists, params.Execute)
-	collectEnqueueServer(ctx, l, params.Execute)
-	setASCSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
-	setERSConfigMetrics(l, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ers"))
+	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
+	collectEnqueueServer(ctx, labels, params.Execute)
+	setASCSConfigMetrics(labels, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
+	setERSConfigMetrics(labels, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ers"))
 
 	// sets the OP options from the pacemaker configuration.
-	setOPOptions(l, pacemakerDocument.Configuration.OPDefaults)
+	setOPOptions(labels, pacemakerDocument.Configuration.OPDefaults)
 
-	return 1.0, l
+	return 1.0, labels
 }
 
 // clusterNodes returns a list of VM instance names from a list of CIBNode objects.
@@ -275,18 +275,18 @@ func filterGroupsByID(groups []Group, idPrefix string) Group {
 
 // setPacemakerHanaOperations sets the pacemaker hana operations labels for the metric validation
 // collector.
-func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
+func setPacemakerHanaOperations(labels map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
 		name := sapHanaOperation.Name
 		switch name {
 		case "start":
-			l["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
 		case "stop":
-			l["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
 		case "promote":
-			l["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
 		case "demote":
-			l["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
 		default:
 			// fall through
 		}
@@ -295,7 +295,7 @@ func setPacemakerHanaOperations(l map[string]string, sapHanaOperations []Op) {
 
 // setPacemakerAPIAccess sets the pacemaker fence agent API access labels for the metric validation
 // collector.
-func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
+func setPacemakerAPIAccess(ctx context.Context, labels map[string]string, projectID string, bearerToken string, exec commandlineexecutor.Execute) {
 	fenceAgentComputeAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
@@ -318,8 +318,8 @@ func setPacemakerAPIAccess(ctx context.Context, l map[string]string, projectID s
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not obtain fence agent logging API Access", log.Error(err))
 	}
-	l["fence_agent_compute_api_access"] = strconv.FormatBool(fenceAgentComputeAPIAccess)
-	l["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
+	labels["fence_agent_compute_api_access"] = strconv.FormatBool(fenceAgentComputeAPIAccess)
+	labels["fence_agent_logging_api_access"] = strconv.FormatBool(fenceAgentLoggingAPIAccess)
 }
 
 // checkAPIAccess checks if the given API endpoint is accessible.
@@ -361,7 +361,7 @@ func checkAPIAccess(ctx context.Context, exec commandlineexecutor.Execute, args 
 
 // setPacemakerMaintenanceMode defines the pacemaker maintenance mode label for the metric validation
 // collector.
-func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
+func setPacemakerMaintenanceMode(ctx context.Context, labels map[string]string, crmAvailable bool, exec commandlineexecutor.Execute) {
 	result := commandlineexecutor.Result{}
 	if crmAvailable {
 		result = exec(ctx, commandlineexecutor.Params{
@@ -379,21 +379,21 @@ func setPacemakerMaintenanceMode(ctx context.Context, l map[string]string, crmAv
 	if result.Error == nil && result.StdOut != "" {
 		maintenanceModeLabel = "true"
 	}
-	l["maintenance_mode_active"] = maintenanceModeLabel
+	labels["maintenance_mode_active"] = maintenanceModeLabel
 }
 
 // setLabelsForRscNvPairs converts a list of pacemaker name/value XML nodes to metric labels if they
 // match a specific name.
-func setLabelsForRSCNVPairs(l map[string]string, rscOptionNvPairs []NVPair, nameToFind string) {
+func setLabelsForRSCNVPairs(labels map[string]string, rscOptionNvPairs []NVPair, nameToFind string) {
 	for _, rscOptionNvPair := range rscOptionNvPairs {
 		if rscOptionNvPair.Name == nameToFind {
-			l[strings.ReplaceAll(nameToFind, "-", "_")] = rscOptionNvPair.Value
+			labels[strings.ReplaceAll(nameToFind, "-", "_")] = rscOptionNvPair.Value
 		}
 	}
 }
 
 // setPacemakerPrimitives sets the pacemaker primitives labels for the metric validation collector.
-func setPacemakerPrimitives(ctx context.Context, l map[string]string, resources Resources, instances []string, c *cpb.Configuration, osVendorID string) map[string]string {
+func setPacemakerPrimitives(ctx context.Context, labels map[string]string, resources Resources, instances []string, c *cpb.Configuration, osVendorID string) map[string]string {
 	primitives := resources.Primitives
 	returnMap := map[string]string{}
 	var pcmkDelayMax []string
@@ -417,17 +417,17 @@ func setPacemakerPrimitives(ctx context.Context, l map[string]string, resources 
 		if typeNode != "fence_gce" && !strings.HasSuffix(attribute.ID, properties.GetInstanceName()+"-instance_attributes") {
 			continue
 		}
-		serviceAccountJSONFile = iteratePrimitiveChild(l, attribute, classNode, typeNode, idNode, returnMap, properties.GetInstanceName())
+		serviceAccountJSONFile = iteratePrimitiveChild(labels, attribute, classNode, typeNode, idNode, returnMap, properties.GetInstanceName())
 		if serviceAccountJSONFile != "" {
 			break
 		}
 	}
 	if len(pcmkDelayMax) > 0 {
-		l["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
+		labels["pcmk_delay_max"] = strings.Join(pcmkDelayMax, ",")
 	}
 	returnMap["serviceAccountJsonFile"] = serviceAccountJSONFile
 
-	setPacemakerHANACloneAttrs(ctx, l, resources, osVendorID)
+	setPacemakerHANACloneAttrs(ctx, labels, resources, osVendorID)
 	return returnMap
 }
 
@@ -460,7 +460,7 @@ func instanceAttributeValue(key string, attribute ClusterPropertySet, instance s
 }
 
 // iteratePrimitiveChild iterates through the primitive child nodes and sets the pacemaker primitives labels for the metric validation collector.
-func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, classNode string, typeNode string, idNode string, returnMap map[string]string, instanceName string) string {
+func iteratePrimitiveChild(labels map[string]string, attribute ClusterPropertySet, classNode string, typeNode string, idNode string, returnMap map[string]string, instanceName string) string {
 	attributeChildren := attribute.NVPairs
 	fenceAttributes := map[string]string{}
 	portMatchesInstanceName := false
@@ -486,10 +486,10 @@ func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, cl
 	// If the values for the stonith device are for the current instance then write the labels
 	if (typeNode == "fence_gce" && portMatchesInstanceName) || strings.HasSuffix(idNode, instanceName) {
 		for k, v := range fenceAttributes {
-			l[k] = v
+			labels[k] = v
 		}
 		if classNode == "stonith" {
-			l["fence_agent"] = strings.ReplaceAll(typeNode, "external/", "")
+			labels["fence_agent"] = strings.ReplaceAll(typeNode, "external/", "")
 		}
 	}
 
@@ -497,11 +497,11 @@ func iteratePrimitiveChild(l map[string]string, attribute ClusterPropertySet, cl
 }
 
 // pacemakerHanaTopology sets the pacemaker hana topology labels for the metric validation collector.
-func pacemakerHanaTopology(l map[string]string, sapHanaOperations []Op) {
+func pacemakerHanaTopology(labels map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
 		if sapHanaOperation.Name == "monitor" {
-			l["saphanatopology_monitor_interval"] = sapHanaOperation.Interval
-			l["saphanatopology_monitor_timeout"] = sapHanaOperation.Timeout
+			labels["saphanatopology_monitor_interval"] = sapHanaOperation.Interval
+			labels["saphanatopology_monitor_timeout"] = sapHanaOperation.Timeout
 			return
 		}
 	}
@@ -556,9 +556,9 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 }
 
 // collectASCSInstance determines the VM instances serving as the ASCS/ERS resource group.
-func collectASCSInstance(ctx context.Context, l map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
-	l["ascs_instance"] = ""
-	l["ers_instance"] = ""
+func collectASCSInstance(ctx context.Context, labels map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
+	labels["ascs_instance"] = ""
+	labels["ers_instance"] = ""
 
 	var command string
 	switch {
@@ -598,21 +598,21 @@ func collectASCSInstance(ctx context.Context, l map[string]string, exists comman
 				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
 				continue
 			}
-			l["ascs_instance"] = match[1]
+			labels["ascs_instance"] = match[1]
 		case inERSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
 			match := sapInstanceRegex.FindStringSubmatch(line)
 			if len(match) != 2 {
 				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ERS instance name.", command), "line", line)
 				continue
 			}
-			l["ers_instance"] = match[1]
+			labels["ers_instance"] = match[1]
 		}
 	}
 }
 
 // collectEnqueueServer determines the enqueue server (ENSA or ENSA2) in use by the Pacemaker cluster.
-func collectEnqueueServer(ctx context.Context, l map[string]string, exec commandlineexecutor.Execute) {
-	l["enqueue_server"] = ""
+func collectEnqueueServer(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
+	labels["enqueue_server"] = ""
 
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "grep",
@@ -646,19 +646,19 @@ func collectEnqueueServer(ctx context.Context, l map[string]string, exec command
 	})
 	switch {
 	case result.Error == nil && result.ExitCode == 0: // Pattern found
-		l["enqueue_server"] = "ENSA2"
+		labels["enqueue_server"] = "ENSA2"
 	case result.ExitCode == 1: // Pattern not found
-		l["enqueue_server"] = "ENSA1"
+		labels["enqueue_server"] = "ENSA1"
 	default: // File not found
 		log.CtxLogger(ctx).Debugw("Could not grep DEFAULT.PFL. Skipping enqueue_server metric collection.", "error", result.Error)
 	}
 }
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
-func setASCSConfigMetrics(l map[string]string, group Group) {
-	l["ascs_failure_timeout"] = ""
-	l["ascs_migration_threshold"] = ""
-	l["ascs_resource_stickiness"] = ""
+func setASCSConfigMetrics(labels map[string]string, group Group) {
+	labels["ascs_failure_timeout"] = ""
+	labels["ascs_migration_threshold"] = ""
+	labels["ascs_resource_stickiness"] = ""
 	metaAttributesKeys := map[string]bool{
 		"failure-timeout":     true,
 		"migration-threshold": true,
@@ -672,29 +672,29 @@ func setASCSConfigMetrics(l map[string]string, group Group) {
 		for _, nvPair := range primitive.MetaAttributes.NVPairs {
 			if _, ok := metaAttributesKeys[nvPair.Name]; ok {
 				key := "ascs_" + strings.ReplaceAll(nvPair.Name, "-", "_")
-				l[key] = nvPair.Value
+				labels[key] = nvPair.Value
 			}
 		}
 	}
 }
 
 // setERSConfigMetrics sets the metrics collected from the ERS resource group.
-func setERSConfigMetrics(l map[string]string, group Group) {
-	l["is_ers"] = ""
+func setERSConfigMetrics(labels map[string]string, group Group) {
+	labels["is_ers"] = ""
 	for _, primitive := range group.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
 		for _, nvPair := range primitive.InstanceAttributes.NVPairs {
 			if nvPair.Name == "IS_ERS" {
-				l["is_ers"] = nvPair.Value
+				labels["is_ers"] = nvPair.Value
 			}
 		}
 	}
 }
 
-func setOPOptions(l map[string]string, opOptions ClusterPropertySet) {
-	l["op_timeout"] = ""
+func setOPOptions(labels map[string]string, opOptions ClusterPropertySet) {
+	labels["op_timeout"] = ""
 	opOptionsKeys := map[string]bool{
 		"timeout": true,
 	}
@@ -702,14 +702,14 @@ func setOPOptions(l map[string]string, opOptions ClusterPropertySet) {
 	for _, nvPair := range opOptions.NVPairs {
 		if _, ok := opOptionsKeys[nvPair.Name]; ok {
 			key := "op_" + strings.ReplaceAll(nvPair.Name, "-", "_")
-			l[key] = strings.ReplaceAll(nvPair.Value, "s", "")
+			labels[key] = strings.ReplaceAll(nvPair.Value, "s", "")
 		}
 	}
 }
 
-func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterPropertySet) {
-	l["stonith_enabled"] = ""
-	l["stonith_timeout"] = ""
+func setPacemakerStonithClusterProperty(labels map[string]string, cps []ClusterPropertySet) {
+	labels["stonith_enabled"] = ""
+	labels["stonith_timeout"] = ""
 	stonithClusterPropertyKeys := map[string]bool{
 		"stonith-enabled": true,
 		"stonith-timeout": true,
@@ -719,9 +719,9 @@ func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterProper
 			for _, nvPair := range cp.NVPairs {
 				if _, ok := stonithClusterPropertyKeys[nvPair.Name]; ok {
 					key := strings.ReplaceAll(nvPair.Name, "-", "_")
-					l[key] = nvPair.Value
+					labels[key] = nvPair.Value
 					if strings.HasSuffix(key, "timeout") {
-						l[key] = strings.ReplaceAll(nvPair.Value, "s", "")
+						labels[key] = strings.ReplaceAll(nvPair.Value, "s", "")
 					}
 				}
 			}
@@ -730,11 +730,11 @@ func setPacemakerStonithClusterProperty(l map[string]string, cps []ClusterProper
 	}
 }
 
-func setPacemakerHANACloneAttrs(ctx context.Context, l map[string]string, resources Resources, osVendorID string) {
-	l["saphana_notify"] = ""
-	l["saphana_clone_max"] = ""
-	l["saphana_clone_node_max"] = ""
-	l["saphana_interleave"] = ""
+func setPacemakerHANACloneAttrs(ctx context.Context, labels map[string]string, resources Resources, osVendorID string) {
+	labels["saphana_notify"] = ""
+	labels["saphana_clone_max"] = ""
+	labels["saphana_clone_node_max"] = ""
+	labels["saphana_interleave"] = ""
 
 	var metaAttrs ClusterPropertySet
 	switch osVendorID {
@@ -766,7 +766,7 @@ func setPacemakerHANACloneAttrs(ctx context.Context, l map[string]string, resour
 	for _, nvPair := range metaAttrs.NVPairs {
 		if _, ok := pacemakerHANACloneAttrsKeys[nvPair.Name]; ok {
 			key := "saphana_" + strings.ReplaceAll(nvPair.Name, "-", "_")
-			l[key] = nvPair.Value
+			labels[key] = nvPair.Value
 		}
 	}
 }
