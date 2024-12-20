@@ -17,7 +17,7 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
-  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241216220000-e80b9b366dbe
+  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241219155943-efb6969a4ce6
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
