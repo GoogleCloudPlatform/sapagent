@@ -800,7 +800,7 @@ func TestCollectAndSendSlowMovingMetrics(t *testing.T) {
 	})
 
 	// Wait for some iterations
-	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Second * 2)
+	time.Sleep(time.Duration(p.Config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency()) * time.Millisecond * 2500)
 	m.Lock()
 	before := c.timesCollectWithRetryCalled
 	m.Unlock()
