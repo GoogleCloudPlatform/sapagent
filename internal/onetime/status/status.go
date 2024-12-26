@@ -67,7 +67,7 @@ const (
 	backintMultipartLabel     = "BACKINT_MULTIPART"
 	diskBackupLabel           = "DISKBACKUP"
 	diskBackupStripedLabel    = "DISKBACKUP_STRIPED"
-	sapSystemDiscoveryLabel   = "SAP_SYSTEM_DISCOVERY"
+	systemDiscoveryLabel      = "SAP_SYSTEM_DISCOVERY"
 	workloadEvaluationMELabel = "WORKLOAD_EVALUATION_METRICS"
 	secretManagerLabel        = "SECRET_MANAGER"
 	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
@@ -321,9 +321,8 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 
 func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "Process Metrics",
-		State:          spb.State_UNSPECIFIED_STATE,
-		IamPermissions: []*spb.IAMPermission{},
+		Name:  "Process Metrics",
+		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
 			configValue("process_metrics_frequency", config.GetCollectionConfiguration().GetProcessMetricsFrequency(), 5),
@@ -412,9 +411,7 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 
 func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "System Discovery",
-		State:          spb.State_FAILURE_STATE,
-		IamPermissions: []*spb.IAMPermission{},
+		Name: "System Discovery",
 		ConfigValues: []*spb.ConfigValue{
 			configValue("enable_discovery", config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue(), true),
 			configValue("enable_workload_discovery", config.GetDiscoveryConfiguration().GetEnableWorkloadDiscovery().GetValue(), true),
@@ -422,8 +419,18 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 			configValue("system_discovery_update_frequency", config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().GetSeconds(), 4*60*60),
 		},
 	}
-	if config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
+		status.State = spb.State_FAILURE_STATE
+		return status
+	}
+	status.State = spb.State_SUCCESS_STATE
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, systemDiscoveryLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
 
 	// Ensure sapservices and anything in /hana/shared have readable permissions.
@@ -447,15 +454,6 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
 		Name:  "Backint",
 		State: spb.State_UNSPECIFIED_STATE,
-		IamPermissions: []*spb.IAMPermission{
-			{Name: "storage.objects.list"},
-			{Name: "storage.objects.create"},
-			{Name: "storage.objects.get"},
-			{Name: "storage.objects.update"},
-			{Name: "storage.objects.delete"},
-			{Name: "storage.multipartUploads.create"},
-			{Name: "storage.multipartUploads.abort"},
-		},
 	}
 	if s.BackintParametersPath == "" {
 		status.UnspecifiedStateMessage = "Backint parameters file not specified / Disabled"
@@ -513,8 +511,28 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		}
 	}
 
-	// TODO: Perform IAM checks.
-
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, backintLabel, &permissions.ResourceDetails{
+		ProjectID:  s.cloudProps.GetProjectId(),
+		BucketName: printConfig.Bucket,
+	})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	if printConfig.XmlMultipartUpload {
+		multipartUploadPermissionsStatus, multipartAllGranted, err := s.fetchPermissionsStatus(ctx, backintMultipartLabel, &permissions.ResourceDetails{
+			ProjectID:  s.cloudProps.GetProjectId(),
+			BucketName: printConfig.Bucket,
+		})
+		if err != nil {
+			return logCheckFailureAndReturnStatus(ctx, status, "Error checking multipart upload IAM permissions", spb.State_ERROR_STATE)
+		}
+		permissionsStatus = append(permissionsStatus, multipartUploadPermissionsStatus...)
+		allGranted = allGranted && multipartAllGranted
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
 	connectParams := &storage.ConnectParameters{
 		StorageClient:    s.backintClient,
 		ServiceAccount:   config.GetServiceAccountKey(),
@@ -535,19 +553,28 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 
 func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "Disk Snapshot",
-		State:          spb.State_UNSPECIFIED_STATE,
-		IamPermissions: []*spb.IAMPermission{},
+		Name:  "Disk Snapshot",
+		State: spb.State_SUCCESS_STATE, // Disk snapshot is an OTE so there's no enabled state to check.
 	}
-
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, diskBackupLabel, &permissions.ResourceDetails{
+		ProjectID: s.cloudProps.GetProjectId(),
+	})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+	// TODO: Add striped disk checks once that is GA.
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
 func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:           "Workload Manager",
-		State:          spb.State_FAILURE_STATE,
-		IamPermissions: []*spb.IAMPermission{},
+		Name:  "Workload Manager",
+		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_workload_validation_metrics", config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(), true),
 			configValue("config_target_environment", config.GetCollectionConfiguration().GetWorkloadValidationCollectionDefinition().GetConfigTargetEnvironment(), cpb.TargetEnvironment_PRODUCTION),
@@ -556,10 +583,22 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 			configValue("workload_validation_metrics_frequency", config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency(), 300),
 		},
 	}
-	if config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
-		status.State = spb.State_SUCCESS_STATE
+	if !config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
+		status.State = spb.State_FAILURE_STATE
+		return status
+	}
+	status.State = spb.State_SUCCESS_STATE
+
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, workloadEvaluationMELabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
 
+	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }
 
