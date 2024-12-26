@@ -869,6 +869,16 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 				},
+				References: []*spb.Reference{
+					{
+						Name: "Release notes",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new",
+					},
+					{
+						Name: "Guides",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides",
+					},
+				},
 			},
 		},
 		{
@@ -1036,6 +1046,16 @@ func TestStatusHandler(t *testing.T) {
 							{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
 							{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
 						},
+					},
+				},
+				References: []*spb.Reference{
+					{
+						Name: "Release notes",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new",
+					},
+					{
+						Name: "Guides",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides",
 					},
 				},
 			},

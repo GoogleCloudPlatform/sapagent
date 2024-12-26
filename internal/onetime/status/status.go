@@ -205,6 +205,14 @@ func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx))
 	agentStatus.Services = append(agentStatus.Services, s.diskSnapshotStatus(ctx, config))
 	agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
+	agentStatus.References = append(agentStatus.References, &spb.Reference{
+		Name: "Release notes",
+		Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new",
+	})
+	agentStatus.References = append(agentStatus.References, &spb.Reference{
+		Name: "Guides",
+		Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides",
+	})
 
 	return agentStatus, nil
 }
