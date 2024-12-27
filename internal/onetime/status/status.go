@@ -43,7 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"

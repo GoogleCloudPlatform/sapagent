@@ -17,7 +17,7 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
-  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241216220000-e80b9b366dbe
+  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241226073353-0b283b21f7a2
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
@@ -35,7 +35,7 @@ require (
   go.uber.org/zap v1.27.0
   golang.org/x/exp v0.0.0-20230321023759-10a507213a29
   golang.org/x/oauth2 v0.17.0
-  golang.org/x/sys v0.18.0
+  golang.org/x/sys v0.0.0-20201015000850-e3ed0017c211
   google.golang.org/api v0.168.0
   google.golang.org/genproto v0.0.0-20240205150955-31a09d347014
   google.golang.org/genproto/googleapis/api v0.0.0-20240205150955-31a09d347014

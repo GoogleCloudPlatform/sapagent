@@ -41,7 +41,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
-	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
