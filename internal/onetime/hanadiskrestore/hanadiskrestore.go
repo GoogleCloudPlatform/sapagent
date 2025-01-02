@@ -68,8 +68,8 @@ type (
 		ListDisks(project, zone, filter string) (*compute.DiskList, error)
 
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
-		AttachDiskWithInstanceName(ctx context.Context, diskName string, instanceName, project, dataDiskZone string) error
-		DetachDiskWithInstanceName(ctx context.Context, instanceName, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
+		AttachDisk(ctx context.Context, diskName string, instanceName, project, dataDiskZone string) error
+		DetachDisk(ctx context.Context, instanceName, project, dataDiskZone, dataDiskName, dataDiskDeviceName string) error
 		WaitForDiskOpCompletionWithRetry(ctx context.Context, op *compute.Operation, project, dataDiskZone string) error
 		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
 		AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
@@ -365,7 +365,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	r.DataDiskVG = vg
 	if !r.isGroupSnapshot {
 		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
-		if err := r.gceService.DetachDiskWithInstanceName(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
+		if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
 			hanabackup.RescanVolumeGroups(ctx)
 			return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -380,11 +380,11 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		disksDetached := []*ipb.Disk{}
 		for _, d := range r.disks {
 			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.GetMapping()))
-			if err := r.gceService.DetachDiskWithInstanceName(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
+			if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, d.DiskName, d.DeviceName); err != nil {
 				log.CtxLogger(ctx).Errorf("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
 				for _, disk := range disksDetached {
-					if err := r.gceService.AttachDiskWithInstanceName(ctx, disk.DiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); err != nil {
+					if err := r.gceService.AttachDisk(ctx, disk.DiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); err != nil {
 						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
 					}
 				}
@@ -413,7 +413,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
-	if err := r.gceService.DetachDiskWithInstanceName(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
+	if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
 		hanabackup.RescanVolumeGroups(ctx)
 		return fmt.Errorf("failed to detach old data disk: %v", err)
@@ -464,7 +464,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		return fmt.Errorf("insert data disk operation failed: %v", err)
 	}
 
-	if err := r.gceService.AttachDiskWithInstanceName(ctx, newDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); err != nil {
+	if err := r.gceService.AttachDisk(ctx, newDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); err != nil {
 		return fmt.Errorf("failed to attach new data disk to instance: %v", err)
 	}
 

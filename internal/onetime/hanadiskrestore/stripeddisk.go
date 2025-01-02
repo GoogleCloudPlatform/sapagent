@@ -49,7 +49,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
-			if attachDiskErr := r.gceService.AttachDiskWithInstanceName(ctx, d.DiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachDiskErr != nil {
+			if attachDiskErr := r.gceService.AttachDisk(ctx, d.DiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachDiskErr != nil {
 				r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
 			} else {
 				if modifyCGErr := r.modifyDiskInCG(ctx, d.DiskName, true); modifyCGErr != nil {
@@ -115,7 +115,7 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 	if r.DataDiskVG != "" {
 		if err := r.renameLVM(ctx, exec, cp, dev, lastDiskName); err != nil {
 			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-			if detachErr := r.gceService.DetachDiskWithInstanceName(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, lastDiskName, dev); detachErr != nil {
+			if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, lastDiskName, dev); detachErr != nil {
 				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", detachErr)
 				return detachErr
 			}
