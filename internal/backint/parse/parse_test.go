@@ -323,7 +323,7 @@ func TestCustomTime(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			got := CustomTime(context.Background(), test.customTime, test.now)
+			got := CustomTime(context.Background(), "test_time", test.customTime, test.now)
 			if !got.Equal(test.want) {
 				t.Errorf("customTime(%v, %v) = %v, want %v", test.customTime, test.now, got, test.want)
 			}

@@ -215,7 +215,9 @@ func backupFile(ctx context.Context, p parameters) string {
 		XMLMultipartWorkers:        p.config.GetParallelStreams(),
 		XMLMultipartServiceAccount: p.config.GetServiceAccountKey(),
 		XMLMultipartEndpoint:       p.config.GetClientEndpoint(),
-		CustomTime:                 parse.CustomTime(ctx, p.config.GetCustomTime(), time.Now().UTC()),
+		CustomTime:                 parse.CustomTime(ctx, "custom_time", p.config.GetCustomTime(), time.Now().UTC()),
+		ObjectRetentionMode:        p.config.GetObjectRetentionMode(),
+		ObjectRetentionTime:        parse.CustomTime(ctx, "object_retention_time", p.config.GetObjectRetentionTime(), time.Now().UTC()),
 	}
 	startTime := time.Now()
 	bytesWritten, err := rw.Upload(ctx)

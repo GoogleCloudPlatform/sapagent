@@ -73,6 +73,11 @@ message BackintConfiguration {
            //   current UTC time plus INT days. INT is any positive integer.
            //   Example: "UTCNow+1d"
   int64 parallel_recovery_streams = 39;
+  string object_retention_mode = 40;
+  string object_retention_time =
+      41;  // This updates the object retain-until time (Reference:
+           // https://cloud.google.com/storage/docs/object-lock):
+           // Accepted values match the custom_time field above.
 }
 
 enum LogLevel {

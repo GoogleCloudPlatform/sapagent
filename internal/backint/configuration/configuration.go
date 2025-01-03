@@ -184,6 +184,9 @@ func (p *Parameters) validateParameters() error {
 			return errors.New("compressed parallel restores are not supported - 'parallel_recovery_streams' must be set to 0 or 1 in order to compress data")
 		}
 	}
+	if p.Config.GetObjectRetentionMode() != "" && p.Config.GetObjectRetentionMode() != "Unlocked" && p.Config.GetObjectRetentionMode() != "Locked" {
+		return errors.New("object_retention_mode must be either 'Unlocked' or 'Locked'")
+	}
 
 	return nil
 }

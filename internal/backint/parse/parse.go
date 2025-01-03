@@ -143,11 +143,12 @@ func OpenFileWithRetries(name string, flag int, perm os.FileMode, timeoutMs int6
 }
 
 // CustomTime returns the custom time to be set in the metadata of the object.
-// If custom_time is not set or if there is an error parsing the time, an empty time is returned.
-// If custom_time is set to UTCNow, the current time is returned.
-// If custom_time is set to UTCNow+<INT>d, the current time plus the number of days is returned.
-// If custom_time is set to a time in RFC3339 format, the time is returned.
-func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time {
+// If customTime is not set or if there is an error parsing the time, an empty time is returned.
+// If customTime is set to UTCNow, the current time is returned.
+// If customTime is set to UTCNow+<INT>d, the current time plus the number of days is returned.
+// If customTime is set to a time in RFC3339 format, the time is returned.
+// parameterName is used solely for logging purposes.
+func CustomTime(ctx context.Context, parameterName string, customTime string, now time.Time) time.Time {
 	if customTime == "" {
 		return time.Time{}
 	}
@@ -162,12 +163,12 @@ func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time
 		matches := re.FindStringSubmatch(customTime)
 
 		if len(matches) != 3 {
-			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime field will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d")
+			log.Logger.Warnw("Could not parse time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). Time field will not be set.", parameterName, customTime, "Expected Format", "UTCNow+<INT>d")
 			return time.Time{}
 		}
 		numDays, err := strconv.Atoi(matches[1])
 		if err != nil {
-			log.Logger.Warnw("Could not parse custom_time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). CustomTime field will not be set.", "customTime", customTime, "Expected Format", "UTCNow+<INT>d", "err", err)
+			log.Logger.Warnw("Could not parse time field. Duration should be in the format of UTCNow+<INT>d(ex: UTCNow+1d). Time field will not be set.", parameterName, customTime, "Expected Format", "UTCNow+<INT>d", "err", err)
 			return time.Time{}
 		}
 		// Add the specified number of days.
@@ -176,7 +177,7 @@ func CustomTime(ctx context.Context, customTime string, now time.Time) time.Time
 
 	ct, err := time.Parse(time.RFC3339, customTime)
 	if err != nil {
-		log.Logger.Warnw("Could not parse custom_time field. CustomTime field will not be set.", "err", err, "customTime", customTime, "Expected Format", time.RFC3339)
+		log.Logger.Warnw("Could not parse time field. Time field will not be set.", "err", err, parameterName, customTime, "Expected Format", time.RFC3339)
 	}
 	return ct
 }
