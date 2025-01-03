@@ -843,7 +843,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				},
 			},
 			want: &spb.ServiceStatus{
-				Name:  "Workload Manager",
+				Name:  "Workload Manager Evaluation",
 				State: spb.State_FAILURE_STATE,
 				ConfigValues: []*spb.ConfigValue{
 					{Name: "collect_workload_validation_metrics", Value: "false", IsDefault: false},
@@ -880,7 +880,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				},
 			},
 			want: &spb.ServiceStatus{
-				Name:            "Workload Manager",
+				Name:            "Workload Manager Evaluation",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_FAILURE_STATE,
 				IamPermissions: []*spb.IAMPermission{
@@ -925,7 +925,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				},
 			},
 			want: &spb.ServiceStatus{
-				Name:            "Workload Manager",
+				Name:            "Workload Manager Evaluation",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_SUCCESS_STATE,
 				IamPermissions: []*spb.IAMPermission{
@@ -967,7 +967,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				},
 			},
 			want: &spb.ServiceStatus{
-				Name:            "Workload Manager",
+				Name:            "Workload Manager Evaluation",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
 				IamPermissions:  nil,
@@ -1113,7 +1113,7 @@ func TestStatusHandler(t *testing.T) {
 						ConfigValues: []*spb.ConfigValue{},
 					},
 					{
-						Name:  "Workload Manager",
+						Name:  "Workload Manager Evaluation",
 						State: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
@@ -1302,7 +1302,7 @@ func TestStatusHandler(t *testing.T) {
 						ConfigValues: []*spb.ConfigValue{},
 					},
 					{
-						Name:  "Workload Manager",
+						Name:  "Workload Manager Evaluation",
 						State: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
