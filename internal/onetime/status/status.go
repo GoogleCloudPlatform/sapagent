@@ -573,7 +573,7 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 
 func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
 	status := &spb.ServiceStatus{
-		Name:  "Workload Manager",
+		Name:  "Workload Manager Evaluation",
 		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_workload_validation_metrics", config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue(), true),
