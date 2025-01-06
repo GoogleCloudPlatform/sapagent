@@ -79,19 +79,18 @@ function ConfigureAgentWindows-Service {
   if ($(Get-Service -Name $SVC_NAME -ErrorAction SilentlyContinue).Length -gt 0) {
     Log-Write 'Service google-cloud-sap-agent already exists...'
     if (Test-Path "$INSTALL_DIR/$SVC_NAME_EXE") {
-      Log-Write "Removing old service $SVC_NAME_EXE"
-      # this the old service, remove it
+      Log-Write "Removing old service wrapper $SVC_NAME_EXE"
+      # Old style service, remove it
       & $INSTALL_DIR\$SVC_NAME_EXE uninstall
       RemoveItem-IfExists "$INSTALL_DIR/$SVC_NAME_EXE"
     }
-    else {
-      Log-Write "Removing old service $SVC_NAME"
-      # this is the new service, remove it
-      Stop-Service $SVC_NAME
-      $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='google-cloud-sap-agent'"
-      $service.Dispose()
-      sc.exe delete $SVC_NAME
-    }
+    Log-Write "Removing old service $SVC_NAME"
+    # New style service, remove it
+    Stop-Service $SVC_NAME
+    $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='google-cloud-sap-agent'"
+    $service.Dispose()
+    # without the ampersand PowerShell will block removal of the service for some time.
+    & sc.exe delete $SVC_NAME
   }
   Log-Write "Creating service $SVC_NAME"
   # Create the new service

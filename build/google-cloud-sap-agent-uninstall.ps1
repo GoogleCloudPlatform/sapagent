@@ -24,7 +24,8 @@ try {
     Stop-Service $SVC_NAME
     $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='google-cloud-sap-agent'"
     $service.Dispose()
-    sc.exe delete $SVC_NAME
+    # without the ampersand PowerShell will block removal of the service for some time.
+    & sc.exe delete $SVC_NAME
   }
 
   # remove the agent directory
