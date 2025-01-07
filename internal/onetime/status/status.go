@@ -504,6 +504,8 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		configValue("storage_class", printConfig.StorageClass, "STANDARD"),
 		configValue("threads", printConfig.Threads, 64),
 		configValue("xml_multipart_upload", printConfig.XmlMultipartUpload, false),
+		configValue("object_retention_mode", printConfig.ObjectRetentionMode, ""),
+		configValue("object_retention_time", printConfig.ObjectRetentionTime, ""),
 	}
 	for _, configValue := range overrideOnlyConfigValues {
 		if !configValue.GetIsDefault() {
