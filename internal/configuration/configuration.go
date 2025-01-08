@@ -373,6 +373,7 @@ func applyOverrides(defaultHMQueriesList, customHMQueriesList []*cpb.Query) []*c
 				// every override query's name is of the form `default_` + queryName
 				log.Logger.Debugw("Overriding query", "Query", query, "enabled", customQuery.GetEnabled())
 				q.Enabled = customQuery.GetEnabled()
+				q.RunOn = customQuery.GetRunOn()
 				break
 			}
 		}

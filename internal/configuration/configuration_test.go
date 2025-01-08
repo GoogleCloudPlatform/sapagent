@@ -790,7 +790,7 @@ func TestApplyOverrides(t *testing.T) {
 		name             string
 		defaultQueryList []*cpb.Query
 		customQueryList  []*cpb.Query
-		wantCount        int
+		want             []*cpb.Query
 	}{
 		{
 			name: "OnlyDefaultQueryEnabled",
@@ -820,7 +820,19 @@ func TestApplyOverrides(t *testing.T) {
 					Enabled: false,
 				},
 			},
-			wantCount: 2,
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "host_query",
+					Sql:     "sample sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_RUN_ON_UNSPECIFIED,
+				},
+				&cpb.Query{
+					Name:    "service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+				},
+			},
 		},
 		{
 			name: "OnlyCustomQueryEnabled",
@@ -850,7 +862,12 @@ func TestApplyOverrides(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			wantCount: 1,
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
 		},
 		{
 			name: "OnlyDefaultQueryEnabled",
@@ -880,15 +897,172 @@ func TestApplyOverrides(t *testing.T) {
 					Enabled: true,
 				},
 			},
-			wantCount: 2,
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+		},
+		{
+			name: "OverrideWithRunOnPrimary",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_PRIMARY,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_PRIMARY,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_PRIMARY,
+				},
+				&cpb.Query{
+					Name:    "host_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_PRIMARY,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+		},
+		{
+			name: "OverrideWithRunOnSecondary",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_SECONDARY,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_SECONDARY,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_SECONDARY,
+				},
+				&cpb.Query{
+					Name:    "host_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_SECONDARY,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+		},
+		{
+			name: "OverrideWithRunOnAll",
+			defaultQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name: "service_query",
+					Sql:  "sample_sql",
+				},
+				&cpb.Query{
+					Name: "host_query",
+					Sql:  "sample_sql",
+				},
+			},
+			customQueryList: []*cpb.Query{
+				&cpb.Query{
+					Name:    "default_service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_ALL,
+				},
+				&cpb.Query{
+					Name:    "default_host_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_ALL,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
+			want: []*cpb.Query{
+				&cpb.Query{
+					Name:    "service_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_ALL,
+				},
+				&cpb.Query{
+					Name:    "host_query",
+					Sql:     "sample_sql",
+					Enabled: true,
+					RunOn:   cpb.RunOn_ALL,
+				},
+				&cpb.Query{
+					Name:    "custom_query",
+					Enabled: true,
+				},
+			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := applyOverrides(test.defaultQueryList, test.customQueryList)
-			if len(got) != test.wantCount {
-				t.Errorf("applyOverrides() (-want +got): \n%s", cmp.Diff(test.wantCount, len(got)))
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("applyOverrides() (-want +got):\n%s", diff)
 			}
 		})
 	}
