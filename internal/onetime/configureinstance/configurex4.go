@@ -58,7 +58,7 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	}
 	if rebootModprobe && c.Apply {
 		log.CtxLogger(ctx).Info("Regenerating modprobe by running 'usr/bin/dracut --force'.")
-		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "usr/bin/dracut", ArgsToSplit: "--force"}); res.ExitCode != 0 {
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "usr/bin/dracut", ArgsToSplit: "--force", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
@@ -83,7 +83,7 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 			log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to regenerate grub.")
 		} else {
 			log.CtxLogger(ctx).Info("Regenerating grub by running 'grub2-mkconfig'.")
-			if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: "-o /boot/grub2/grub.cfg"}); res.ExitCode != 0 {
+			if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: "-o /boot/grub2/grub.cfg", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
 				return false, fmt.Errorf("'grub2-mkconfig -o /boot/grub2/grub.cfg' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 			}
 		}
@@ -134,30 +134,30 @@ func (c *ConfigureInstance) configureX4SLES(ctx context.Context) (bool, error) {
 // it will attempt to enable and start it through systemctl.
 func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
 	// sapconf must be disabled and stopped before saptune can run.
-	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf"})
+	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf", Timeout: c.TimeoutSec})
 	if sapconfStatus.ExitCode != 4 {
-		sapconfDisable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf"})
+		sapconfDisable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf", Timeout: c.TimeoutSec})
 		if sapconfDisable.ExitCode != 0 {
 			return fmt.Errorf("sapconf service could not be disabled, code: %d, stderr: %s", sapconfDisable.ExitCode, sapconfDisable.StdErr)
 		}
-		sapconfStop := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf"})
+		sapconfStop := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf", Timeout: c.TimeoutSec})
 		if sapconfStop.ExitCode != 0 {
 			return fmt.Errorf("sapconf service could not be stopped, code: %d, stderr: %s", sapconfStop.ExitCode, sapconfStop.StdErr)
 		}
 		log.CtxLogger(ctx).Info("The sapconf service is disabled and stopped.")
 	}
 
-	saptuneStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status saptune"})
+	saptuneStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status saptune", Timeout: c.TimeoutSec})
 	if saptuneStatus.ExitCode == 4 {
 		return fmt.Errorf("saptune service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s", saptuneStatus.ExitCode, saptuneStatus.StdErr)
 	}
 	if saptuneStatus.ExitCode != 0 {
 		log.CtxLogger(ctx).Info("Attempting to enable and start saptune.")
-		saptuneEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable saptune"})
+		saptuneEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable saptune", Timeout: c.TimeoutSec})
 		if saptuneEnable.ExitCode != 0 {
 			return fmt.Errorf("saptune service could not be enabled, code: %d, stderr: %s", saptuneEnable.ExitCode, saptuneEnable.StdErr)
 		}
-		saptuneStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start saptune"})
+		saptuneStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start saptune", Timeout: c.TimeoutSec})
 		if saptuneStart.ExitCode != 0 {
 			return fmt.Errorf("saptune service could not be started, code: %d, stderr: %s", saptuneStart.ExitCode, saptuneStart.StdErr)
 		}
@@ -170,7 +170,7 @@ func (c *ConfigureInstance) saptuneService(ctx context.Context) error {
 // Returns true if saptune solution and note reapply is required.
 func (c *ConfigureInstance) saptuneSolutions(ctx context.Context) (bool, bool) {
 	solutionReapply, noteReapply := false, false
-	saptuneSolutions := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status"})
+	saptuneSolutions := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status", Timeout: c.TimeoutSec})
 	if match, _ := regexp.MatchString(`enabled Solution:\s*(HANA|NETWEAVER\+HANA|S4HANA\-APP\+DB|S4HANA\-DBSERVER)`, saptuneSolutions.StdOut); !match {
 		log.CtxLogger(ctx).Info("Enabled solution is not `(HANA|NETWEAVER+HANA|S4HANA-APP+DB|S4HANA-DBSERVER)`, SAPTune solution re-apply required.")
 		solutionReapply = true
@@ -231,7 +231,7 @@ func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	tunedActive := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "active"})
+	tunedActive := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "active", Timeout: c.TimeoutSec})
 	if !strings.Contains(tunedActive.StdOut, "google-x4") {
 		log.CtxLogger(ctx).Info("Active profile is not `google-x4`, Tuned re-apply required.")
 		tunedReapply = true
@@ -247,17 +247,17 @@ func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
 // tunedService checks if tuned service is running. If it is not running,
 // it will attempt to enable and start it through systemctl.
 func (c *ConfigureInstance) tunedService(ctx context.Context) error {
-	tunedStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status tuned"})
+	tunedStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status tuned", Timeout: c.TimeoutSec})
 	if tunedStatus.ExitCode == 4 {
 		return fmt.Errorf("tuned service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s", tunedStatus.ExitCode, tunedStatus.StdErr)
 	}
 	if tunedStatus.ExitCode != 0 {
 		log.CtxLogger(ctx).Info("Attempting to enable and start tuned.")
-		tunedEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable tuned"})
+		tunedEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable tuned", Timeout: c.TimeoutSec})
 		if tunedEnable.ExitCode != 0 {
 			return fmt.Errorf("tuned service could not be enabled, code: %d, stderr: %s", tunedEnable.ExitCode, tunedEnable.StdErr)
 		}
-		tunedStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start tuned"})
+		tunedStart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "start tuned", Timeout: c.TimeoutSec})
 		if tunedStart.ExitCode != 0 {
 			return fmt.Errorf("tuned service could not be started, code: %d, stderr: %s", tunedStart.ExitCode, tunedStart.StdErr)
 		}
