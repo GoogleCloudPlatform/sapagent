@@ -91,13 +91,12 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 // osSettings runs the configureinstance command to check if OS settings are configured correctly.
 func osSettings(ctx context.Context, params Parameters) string {
 	ci := &configureinstance.ConfigureInstance{
-		Check:           true,
-		HyperThreading:  "default",
-		OverrideVersion: "latest",
-		ReadFile:        os.ReadFile,
-		WriteFile:       os.WriteFile,
-		ExecuteFunc:     params.Execute,
-		MachineType:     params.Config.GetCloudProperties().GetMachineType(),
+		Check:          true,
+		HyperThreading: "default",
+		ReadFile:       os.ReadFile,
+		WriteFile:      os.WriteFile,
+		ExecuteFunc:    params.Execute,
+		MachineType:    params.Config.GetCloudProperties().GetMachineType(),
 	}
 	// Short-circuit OTE execution for unsupported machine types.
 	if !ci.IsSupportedMachineType() {

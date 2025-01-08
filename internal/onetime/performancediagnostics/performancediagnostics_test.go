@@ -412,7 +412,7 @@ func TestSetFlags(t *testing.T) {
 
 	flags := []string{
 		"type", "test-bucket", "backint-config-file", "output-bucket", "output-file-name",
-		"hyper-threading", "output-file-path", "override-version", "frequency",
+		"hyper-threading", "output-file-path", "frequency",
 		"total-points", "print-diff", "loglevel", "help", "h", "log-path",
 	}
 	for _, flag := range flags {

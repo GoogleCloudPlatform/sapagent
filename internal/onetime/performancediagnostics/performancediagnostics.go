@@ -74,7 +74,6 @@ type Diagnose struct {
 	LogLevel          string `json:"loglevel"`
 	OutputFilePath    string `json:"output-file-path"`
 	HyperThreading    string `json:"hyper-threading"`
-	OverrideVersion   string `json:"override-version"`
 	PrintDiff         bool   `json:"print-diff,string"`
 	BackintConfigFile string `json:"backint-config-file"`
 	TestBucket        string `json:"test-bucket"`
@@ -176,7 +175,7 @@ func (*Diagnose) Synopsis() string {
 func (*Diagnose) Usage() string {
 	return `Usage: performancediagnostics [-type=<all|backup|io|compute>] [-test-bucket=<name of bucket used to run backup]
 	[-backint-config-file=<path to backint config file>]	[-output-bucket=<name of bucket to upload the report] [-output-file-name=<diagnostics output name>]
-	[-output-file-path=<path to save output file generated>] [-hyper-threading=<default|off|on] [-override-version=<version>]
+	[-output-file-path=<path to save output file generated>] [-hyper-threading=<default|off|on]
 	[-print-diff=<true|false>] [-frequency=<frequency in seconds for compute>] [-total-points=<total data points for compute>]
 	[-h] [-loglevel=<debug|info|warn|error]>] [-log-path=<log-path>]` + "\n"
 }
@@ -190,7 +189,6 @@ func (d *Diagnose) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.OutputFileName, "output-file-name", "", "Sets the name for generated output file. (optional) Default: performance-diagnostics-<current_timestamp>")
 	fs.StringVar(&d.OutputFilePath, "output-file-path", "", fmt.Sprintf("Sets the path to save the output file. (optional) Default: %v", bundlePath))
 	fs.StringVar(&d.HyperThreading, "hyper-threading", "default", "Sets hyper threading settings for X4 machines")
-	fs.StringVar(&d.OverrideVersion, "override-version", "latest", "If specified, runs a specific version of configureinstance")
 	fs.IntVar(&d.Frequency, "frequency", minFrequency, fmt.Sprintf("Sets the frequency in seconds for HANA compute metrics collection. (optional) (min: %v) Default: %v", minFrequency, minFrequency))
 	fs.IntVar(&d.TotalDataPoints, "total-points", defaultTotalDataPoints, fmt.Sprintf("Sets the total data points for HANA compute metrics collection. (optional) (min: %v) Default: %v", minTotalDataPoints, defaultTotalDataPoints))
 	fs.BoolVar(&d.PrintDiff, "print-diff", false, "Prints all configuration diffs and log messages for configureinstance to stdout as JSON")
@@ -403,11 +401,10 @@ func (d *Diagnose) validateParams(ctx context.Context) error {
 
 func (d *Diagnose) runConfigureInstanceOTE(ctx context.Context, opts *options) subcommands.ExitStatus {
 	ci := &configureinstance.ConfigureInstance{
-		Check:           true,
-		ExecuteFunc:     opts.exec,
-		HyperThreading:  d.HyperThreading,
-		OverrideVersion: d.OverrideVersion,
-		PrintDiff:       d.PrintDiff,
+		Check:          true,
+		ExecuteFunc:    opts.exec,
+		HyperThreading: d.HyperThreading,
+		PrintDiff:      d.PrintDiff,
 	}
 	d.oteLogger.LogMessageToFileAndConsole(ctx, "Executing ConfigureInstance")
 	defer d.oteLogger.LogMessageToFileAndConsole(ctx, "Finished invoking ConfigureInstance")

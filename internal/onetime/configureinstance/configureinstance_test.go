@@ -194,12 +194,11 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			name: "FailReadFileX4",
 			want: subcommands.ExitFailure,
 			c: ConfigureInstance{
-				Apply:           true,
-				MachineType:     "x4-megamem-1920",
-				HyperThreading:  hyperThreadingOn,
-				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
-				PrintDiff:       true,
+				Apply:          true,
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+				ReadFile:       defaultReadFile([]error{cmpopts.AnyError}, []string{""}),
+				PrintDiff:      true,
 			},
 			args: []any{
 				"test",
@@ -211,14 +210,13 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			name: "SuccessX4",
 			want: subcommands.ExitSuccess,
 			c: ConfigureInstance{
-				Apply:           true,
-				MachineType:     "x4-megamem-1920",
-				HyperThreading:  hyperThreadingOn,
-				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
-				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
+				Apply:          true,
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ExecuteFunc:    defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				WriteFile:      defaultWriteFile(5),
+				MkdirAll:       defaultMkdirAll(5),
 			},
 			args: []any{
 				"test",
@@ -249,7 +247,7 @@ func TestSynopsisForConfigureInstance(t *testing.T) {
 func TestSetFlagsForConfigureInstance(t *testing.T) {
 	c := ConfigureInstance{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"check", "apply", "overrideType", "hyperThreading", "h", "log-path"}
+	flags := []string{"check", "apply", "printDiff", "overrideType", "hyperThreading", "h", "log-path", "timeoutSec"}
 	c.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -277,13 +275,12 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "x4SuccessApply",
 			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
-				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
-				Apply:           true,
+				MachineType: "x4-megamem-1920",
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
+				Apply:       true,
 			},
 			want:            subcommands.ExitSuccess,
 			wantMsgFragment: "",
@@ -291,14 +288,13 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "x4SuccessCheck",
 			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
-				ExecuteFunc:     defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
-				WriteFile:       defaultWriteFile(5),
-				MkdirAll:        defaultMkdirAll(5),
-				Check:           true,
-				PrintDiff:       true,
+				MachineType: "x4-megamem-1920",
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX4Conf), "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", ""}),
+				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
+				Check:       true,
+				PrintDiff:   true,
 			},
 			want:            subcommands.ExitFailure,
 			wantMsgFragment: "",
@@ -306,49 +302,8 @@ func TestConfigureInstanceHandler(t *testing.T) {
 		{
 			name: "X4Fail",
 			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersionLatest,
-				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
-			},
-			want:            subcommands.ExitFailure,
-			wantMsgFragment: "ReadFile failed",
-		},
-		{
-			name: "X4FailVersionNotSupported",
-			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: "not-supported",
-				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
-			},
-			want:            subcommands.ExitUsageError,
-			wantMsgFragment: "this version (not-supported) is not supported for this machine type (x4-megamem-1920)",
-		},
-		{
-			name: "X4Fail3_3",
-			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersion33,
-				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
-			},
-			want:            subcommands.ExitFailure,
-			wantMsgFragment: "ReadFile failed",
-		},
-		{
-			name: "X4Fail3_4",
-			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersion34,
-				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
-			},
-			want:            subcommands.ExitFailure,
-			wantMsgFragment: "ReadFile failed",
-		},
-		{
-			name: "X4Fail3_5",
-			c: ConfigureInstance{
-				MachineType:     "x4-megamem-1920",
-				OverrideVersion: overrideVersion35,
-				ReadFile:        defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+				MachineType: "x4-megamem-1920",
+				ReadFile:    defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
 			},
 			want:            subcommands.ExitFailure,
 			wantMsgFragment: "ReadFile failed",
@@ -871,35 +826,30 @@ func TestSetDefaults(t *testing.T) {
 			name: "EmptyStruct",
 			c:    ConfigureInstance{},
 			want: ConfigureInstance{
-				HyperThreading:  hyperThreadingOn,
-				OverrideVersion: overrideVersionLatest,
-				TimeoutSec:      300,
+				HyperThreading: hyperThreadingOn,
+				TimeoutSec:     300,
 			},
 		},
 		{
 			name: "NilValuesStruct",
 			c: ConfigureInstance{
-				HyperThreading:  "",
-				OverrideVersion: "",
-				TimeoutSec:      0,
+				HyperThreading: "",
+				TimeoutSec:     0,
 			},
 			want: ConfigureInstance{
-				HyperThreading:  hyperThreadingOn,
-				OverrideVersion: overrideVersionLatest,
-				TimeoutSec:      300,
+				HyperThreading: hyperThreadingOn,
+				TimeoutSec:     300,
 			},
 		},
 		{
 			name: "AlreadySet",
 			c: ConfigureInstance{
-				HyperThreading:  "already_set",
-				OverrideVersion: "already_set",
-				TimeoutSec:      123,
+				HyperThreading: "already_set",
+				TimeoutSec:     123,
 			},
 			want: ConfigureInstance{
-				HyperThreading:  "already_set",
-				OverrideVersion: "already_set",
-				TimeoutSec:      123,
+				HyperThreading: "already_set",
+				TimeoutSec:     123,
 			},
 		},
 	}

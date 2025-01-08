@@ -46,90 +46,19 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			wantExitStatus: subcommands.ExitUsageError,
 		},
 		{
-			name: "FailureForLatestVersion",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_AgentCommand{
-					AgentCommand: &gpb.AgentCommand{
-						Parameters: map[string]string{
-							"check":           "true",
-							"overrideVersion": "latest",
-							"hyperThreading":  "off",
-							"overrideType":    "x4",
-						},
-					},
-				},
-			},
-			wantExitStatus: subcommands.ExitFailure,
-		},
-		{
-			name: "FailureFor3.3Version",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_AgentCommand{
-					AgentCommand: &gpb.AgentCommand{
-						Parameters: map[string]string{
-							"check":           "true",
-							"overrideVersion": "3.3",
-							"hyperThreading":  "off",
-						},
-					},
-				},
-			},
-			cloudProperties: &ipb.CloudProperties{
-				MachineType: "x4",
-			},
-			wantExitStatus: subcommands.ExitFailure,
-		},
-		{
-			name: "FailureFor3.4Version",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_AgentCommand{
-					AgentCommand: &gpb.AgentCommand{
-						Parameters: map[string]string{
-							"check":           "true",
-							"overrideVersion": "3.4",
-							"hyperThreading":  "off",
-						},
-					},
-				},
-			},
-			cloudProperties: &ipb.CloudProperties{
-				MachineType: "x4",
-			},
-			wantExitStatus: subcommands.ExitFailure,
-		},
-		{
 			name: "FailureForUnsupportedMachine",
 			command: &gpb.Command{
 				CommandType: &gpb.Command_AgentCommand{
 					AgentCommand: &gpb.AgentCommand{
 						Parameters: map[string]string{
-							"check":           "true",
-							"overrideVersion": "3.4",
-							"hyperThreading":  "off",
+							"check":          "true",
+							"hyperThreading": "off",
 						},
 					},
 				},
 			},
 			cloudProperties: &ipb.CloudProperties{
 				MachineType: "unsupported-machine",
-			},
-			wantExitStatus: subcommands.ExitUsageError,
-		},
-		{
-			name: "FailureForUnsupportedVersion",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_AgentCommand{
-					AgentCommand: &gpb.AgentCommand{
-						Parameters: map[string]string{
-							"check":           "true",
-							"overrideVersion": "unsupported-version",
-							"hyperThreading":  "off",
-						},
-					},
-				},
-			},
-			cloudProperties: &ipb.CloudProperties{
-				MachineType: "x4",
 			},
 			wantExitStatus: subcommands.ExitUsageError,
 		},

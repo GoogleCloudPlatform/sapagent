@@ -55,11 +55,6 @@ const (
 	hyperThreadingOn      = "on"
 	hyperThreadingOff     = "off"
 
-	overrideVersionLatest = "latest"
-	overrideVersion33     = "3.3"
-	overrideVersion34     = "3.4"
-	overrideVersion35     = "3.5"
-
 	dateTimeFormat = "2006-01-02T15:04:05Z"
 
 	operationRegenerateFile   = "REGENERATE_FILE"
@@ -79,15 +74,14 @@ type diff struct {
 
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
-	Apply           bool   `json:"apply,string"`
-	Check           bool   `json:"check,string"`
-	MachineType     string `json:"overrideType"`
-	HyperThreading  string `json:"hyperThreading"`
-	OverrideVersion string `json:"overrideVersion"`
-	PrintDiff       bool   `json:"printDiff,string"`
-	Help            bool   `json:"help,string"`
-	LogPath         string `json:"log-path"`
-	TimeoutSec      int    `json:"timeoutSec"`
+	Apply          bool   `json:"apply,string"`
+	Check          bool   `json:"check,string"`
+	MachineType    string `json:"overrideType"`
+	HyperThreading string `json:"hyperThreading"`
+	PrintDiff      bool   `json:"printDiff,string"`
+	Help           bool   `json:"help,string"`
+	LogPath        string `json:"log-path"`
+	TimeoutSec     int    `json:"timeoutSec"`
 
 	WriteFile   WriteFileFunc
 	ReadFile    ReadFileFunc
@@ -119,8 +113,6 @@ func (*ConfigureInstance) Usage() string {
     [-hyperThreading="on"]	Sets hyper threading settings for X4 machines
                               	Possible values: ["on", "off"]
     [-printDiff=false]		If true, prints all configuration diffs and log messages to stdout as JSON
-    [-overrideVersion="latest"]	If specified, runs a specific version of configureinstance.
-                               	Possible values: ["3.3", "3.4", "3.5", "latest"]
     [-log-path="/var/log/google-cloud-sap-agent/configureinstance.log"]			The full linux log path to write the log file (optional).
 		                            Default value is /var/log/google-cloud-sap-agent/configureinstance.log
 
@@ -135,7 +127,6 @@ func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
 	fs.StringVar(&c.MachineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "on", "Sets hyper threading settings for X4 machines")
-	fs.StringVar(&c.OverrideVersion, "overrideVersion", "latest", "If specified, runs a specific version of configureinstance")
 	fs.StringVar(&c.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/configureinstance.log")
 	fs.IntVar(&c.TimeoutSec, "timeoutSec", 300, "The timeout in seconds for long-running command line executions")
 	fs.BoolVar(&c.Help, "h", false, "Displays help")
@@ -211,9 +202,6 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (
 		c.MachineType = opts.CloudProperties.MachineType
 	}
 	c.setDefaults()
-	if c.OverrideVersion != overrideVersionLatest {
-		log.CtxLogger(ctx).Warnf(`overrideVersion set to %q. This will configure the instance with an older version. It is recommended to use the latest version for the most up to date configuration and fixes.`, c.OverrideVersion)
-	}
 	return c.configureInstanceHandler(ctx)
 }
 
@@ -221,9 +209,6 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (
 func (c *ConfigureInstance) setDefaults() {
 	if c.HyperThreading == "" {
 		c.HyperThreading = hyperThreadingOn
-	}
-	if c.OverrideVersion == "" {
-		c.OverrideVersion = overrideVersionLatest
 	}
 	if c.TimeoutSec == 0 {
 		c.TimeoutSec = 300
@@ -241,28 +226,8 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	log.CtxLogger(ctx).Infof("Using machine type: %s", c.MachineType)
 	switch {
 	case c.IsSupportedMachineType():
-		// NOTE: Any changes in configureinstance requires a copy of configurex4
-		// and google-x4.conf, renamed functions and global vars, and add to this
-		// switch statement and the help subcommand output.
-		switch c.OverrideVersion {
-		case overrideVersionLatest:
-			if rebootRequired, err = c.configureX4(ctx); err != nil {
-				return subcommands.ExitFailure, err.Error()
-			}
-		case overrideVersion33:
-			if rebootRequired, err = c.configureX43_3(ctx); err != nil {
-				return subcommands.ExitFailure, err.Error()
-			}
-		case overrideVersion34:
-			if rebootRequired, err = c.configureX43_4(ctx); err != nil {
-				return subcommands.ExitFailure, err.Error()
-			}
-		case overrideVersion35:
-			if rebootRequired, err = c.configureX43_5(ctx); err != nil {
-				return subcommands.ExitFailure, err.Error()
-			}
-		default:
-			return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this version (%s) is not supported for this machine type (%s)", c.OverrideVersion, c.MachineType)
+		if rebootRequired, err = c.configureX4(ctx); err != nil {
+			return subcommands.ExitFailure, err.Error()
 		}
 	default:
 		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
