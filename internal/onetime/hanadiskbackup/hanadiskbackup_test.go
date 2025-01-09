@@ -194,6 +194,2020 @@ func TestSnapshotHandler(t *testing.T) {
 	}
 }
 
+func TestValidateDisks(t *testing.T) {
+	tests := []struct {
+		name        string
+		s           *Snapshot
+		cp          *ipb.CloudProperties
+		exec        commandlineexecutor.Execute
+		wantMessage string
+		wantStatus  subcommands.ExitStatus
+	}{
+		{
+			name: "CheckTopologyFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			wantMessage: "ERROR: Failed to check if topology is scaleout or scaleup",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutNoDisks",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Sid:       "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Cannot discover disk mapping for scaleout topology",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutDisksValidateConsistencyGroupFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutSuccess",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupNonStripedDiskProvided",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disk:      "disk-name-1",
+				Sid:       "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedDiskAttachedToInstanceFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to check if disk disk-name-1 is attached to the instance",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedDiskAttachedToInstanceFalse",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: nil,
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Disk disk-name-1 is not attached to the instance",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedGetDiskFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:                  "disk-name-1",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+						},
+					},
+					GetDiskErr: []error{cmpopts.AnyError},
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to get disk data for disk disk-name-1",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedSuccess",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:                  "disk-name-1",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Name:                  "disk-name-2",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupReadDiskMappingFailure",
+			s: &Snapshot{
+				oteLogger:    defaultOTELogger,
+				SnapshotName: "snapshot",
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to read disk mapping",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupNonStripedReadDiskMappingSuccess",
+			s: &Snapshot{
+				SnapshotName: "sample-snapshot",
+				Disk:         "disk-name",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupCheckStripeError",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupCheckStripeFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupValidateConsistencyGroupFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:   []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDiskSuccess",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMessage, gotStatus := tc.s.validateDisks(ctx, tc.cp, tc.exec)
+			if gotMessage != tc.wantMessage {
+				t.Errorf("validateDisks() gotMessage=%v, wantMessage=%v", gotMessage, tc.wantMessage)
+			}
+			if gotStatus != tc.wantStatus {
+				t.Errorf("validateDisks() gotStatus=%v, wantStatus=%v", gotStatus, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestValidateScaleoutDisks(t *testing.T) {
+	tests := []struct {
+		name        string
+		s           *Snapshot
+		cp          *ipb.CloudProperties
+		exec        commandlineexecutor.Execute
+		wantMessage string
+		wantStatus  subcommands.ExitStatus
+	}{
+		{
+			name: "ScaleoutNoDisks",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Sid:       "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Cannot discover disk mapping for scaleout topology",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutDisksValidateConsistencyGroupFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutSuccess",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMessage, gotStatus := tc.s.validateScaleoutDisks(ctx, tc.cp, tc.exec)
+			if gotMessage != tc.wantMessage {
+				t.Errorf("validateScaleoutDisks() gotMessage=%v, wantMessage=%v", gotMessage, tc.wantMessage)
+			}
+			if gotStatus != tc.wantStatus {
+				t.Errorf("validateScaleoutDisks() gotStatus=%v, wantStatus=%v", gotStatus, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestValidateScaleupDisks(t *testing.T) {
+	tests := []struct {
+		name        string
+		s           *Snapshot
+		cp          *ipb.CloudProperties
+		exec        commandlineexecutor.Execute
+		wantMessage string
+		wantStatus  subcommands.ExitStatus
+	}{
+		{
+			name: "ScaleupNonStripedDiskProvided",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disk:      "disk-name-1",
+				Sid:       "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedDiskAttachedToInstanceFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to check if disk disk-name-1 is attached to the instance",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedDiskAttachedToInstanceFalse",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: nil,
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Disk disk-name-1 is not attached to the instance",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedGetDiskFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:                  "disk-name-1",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+						},
+					},
+					GetDiskErr: []error{cmpopts.AnyError},
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to get disk data for disk disk-name-1",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDisksProvidedSuccess",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1, disk-name-2",
+				Sid:       "SID",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:                  "disk-name-1",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Name:                  "disk-name-2",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupReadDiskMappingFailure",
+			s: &Snapshot{
+				oteLogger:    defaultOTELogger,
+				SnapshotName: "snapshot",
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to read disk mapping",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupNonStripedReadDiskMappingSuccess",
+			s: &Snapshot{
+				SnapshotName: "sample-snapshot",
+				Disk:         "disk-name",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+								{
+									Name: "disk-device-name",
+									Type: "/some/path/device-type",
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: `
+					17.11.2024 07:57:08
+					GetSystemInstanceList
+					OK
+					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupCheckStripeError",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupCheckStripeFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupValidateConsistencyGroupFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:   []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDiskSuccess",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+	}
+
+	ctx := context.Background()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			test.s.oteLogger = defaultOTELogger
+			gotMessage, gotStatus := test.s.validateScaleupDisks(ctx, test.cp, test.exec)
+			if gotMessage != test.wantMessage {
+				t.Errorf("validateScaleupDisks()=%v, want=%v", gotMessage, test.wantMessage)
+			}
+			if gotStatus != test.wantStatus {
+				t.Errorf("validateScaleupDisks()=%v, want=%v", gotStatus, test.wantStatus)
+			}
+		})
+	}
+}
+
+func TestVerifyStriping(t *testing.T) {
+	tests := []struct {
+		name        string
+		s           *Snapshot
+		cp          *ipb.CloudProperties
+		exec        commandlineexecutor.Execute
+		wantMessage string
+		wantStatus  subcommands.ExitStatus
+	}{
+		{
+			name: "ScaleupCheckStripeError",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupCheckStripeFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 1,
+				}
+			},
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupValidateConsistencyGroupFailure",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:   []error{cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDiskSuccess",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				physicalDataPath: "unknown",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut: `
+						17.11.2024 07:57:08
+						GetSystemInstanceList
+						OK
+						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotMessage, gotStatus := tc.s.validateScaleupDisks(ctx, tc.cp, tc.exec)
+			if gotMessage != tc.wantMessage {
+				t.Errorf("validateScaleupDisks()=%v, want=%v", gotMessage, tc.wantMessage)
+			}
+			if gotStatus != tc.wantStatus {
+				t.Errorf("validateScaleupDisks()=%v, want=%v", gotStatus, tc.wantStatus)
+			}
+		})
+	}
+}
+
 func TestReadDiskMapping(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -324,53 +2338,89 @@ func TestReadDiskMapping(t *testing.T) {
 
 func TestParseLabels(t *testing.T) {
 	tests := []struct {
-		name string
-		s    Snapshot
-		want map[string]string
+		name       string
+		s          *Snapshot
+		wantLabels map[string]string
+		wantErr    error
 	}{
 		{
 			name: "Invalidlabel",
-			s: Snapshot{
+			s: &Snapshot{
 				Labels: "label1,label2",
+				Disk:   "pd-1",
 			},
-			want: map[string]string{},
+			wantLabels: map[string]string{},
 		},
 		{
-			name: "Success",
-			s: Snapshot{
+			name: "SingleSnapshotSuccess",
+			s: &Snapshot{
 				Labels: "label1=value1,label2=value2",
+				Disk:   "pd-1",
 			},
-			want: map[string]string{"label1": "value1", "label2": "value2"},
+			wantLabels: map[string]string{"label1": "value1", "label2": "value2"},
 		},
 		{
-			name: "GroupSnapshot",
-			s: Snapshot{
+			name: "GroupSnapshotInstanceErr",
+			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				groupSnapshot:     true,
 				DiskZone:          "my-region-1",
 				cgName:            "my-cg",
 				Labels:            "label1=value1,label2=value2",
 				Disk:              "pd-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name: "pd-1",
+						},
+					},
+					GetDiskErr: []error{cmpopts.AnyError},
+				},
 			},
-			want: map[string]string{
-				"goog-sapagent-isg":       "group-snapshot-name",
-				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
-				"goog-sapagent-cgpath":    "my-region-my-cg",
-				"goog-sapagent-disk-name": "pd-1",
-				"label1":                  "value1",
-				"label2":                  "value2",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotSuccess",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				DiskZone:          "my-region-1",
+				cgName:            "my-cg",
+				Labels:            "label1=value1,label2=value2",
+				Disk:              "pd-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "pd-1",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			wantLabels: map[string]string{
+				"goog-sapagent-isg":           "group-snapshot-name",
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        "my-region-my-cg",
+				"goog-sapagent-disk-name":     "pd-1",
+				"goog-sapagent-instance-name": "my-instance",
+				"label1":                      "value1",
+				"label2":                      "value2",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.s.parseLabels()
+			got, err := test.s.parseLabels(test.s.Disk)
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
 			})
-			if !cmp.Equal(got, test.want, opts) {
-				t.Errorf("parseLabels() = %v, want %v", got, test.want)
+			if !cmp.Equal(got, test.wantLabels, opts) {
+				t.Errorf("parseLabels()=%v, want=%v", got, test.wantLabels)
+			}
+			if diff := cmp.Diff(test.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("parseLabels() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

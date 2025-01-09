@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,6 +29,14 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+)
+
+var (
+	// sapServicesStartsrvPattern captures the sapstartsrv path in /usr/sap/sapservices.
+	// Example: "/usr/sap/DEV/ASCS01/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm"
+	// is parsed as "sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01".
+	// Additional possibilities include sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS01_alidascs11
+	sapServicesStartsrvPattern = regexp.MustCompile(`sapstartsrv pf=/(usr/sap|sapmnt)/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/([A-Z][A-Z0-9]{2})_([a-zA-Z]+)([0-9]+)`)
 )
 
 // ParseBasePath parses the base path from the global.ini file.
@@ -321,4 +330,51 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 		}
 	}
 	return "", fmt.Errorf("no matching key for the disk")
+}
+
+// CheckTopology checks if topology of the system this instance belongs to is scaleout or not.
+// If it is scaleout, it returns true, otherwise false.
+func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID string) (bool, error) {
+	instanceNumber, err := getInstanceNumber(ctx, exec, SID)
+	if err != nil {
+		return false, err
+	}
+	cmd := commandlineexecutor.Params{
+		Executable: "sudo",
+		Args:       []string{"-i", "-u", fmt.Sprintf("%sadm", strings.ToLower(SID)), "sapcontrol", "-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+	}
+	res := exec(ctx, cmd)
+	if res.Error != nil {
+		return false, fmt.Errorf("failed to verify topology: %w", res.Error)
+	}
+	log.CtxLogger(ctx).Debugw("`sapcontrol -nr %s -function GetSystemInstanceList` returned", instanceNumber, "stdout", res.StdOut, "stderr", res.StdErr, "error", res.Error)
+
+	lines := strings.Split(res.StdOut, "\n")
+	if len(lines) == 6 {
+		return false, nil
+	}
+	if len(lines) > 6 {
+		return true, nil
+	}
+	return false, fmt.Errorf("no SAP instances found")
+}
+
+// getInstanceNumber returns the instance number of the instance.
+func getInstanceNumber(ctx context.Context, exec commandlineexecutor.Execute, SID string) (string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: fmt.Sprintf("'pf=/usr/sap/%s' /usr/sap/sapservices", SID),
+	})
+	log.CtxLogger(ctx).Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+	if result.Error != nil {
+		return "", result.Error
+	}
+
+	path := sapServicesStartsrvPattern.FindStringSubmatch(result.StdOut)
+	if len(path) < 6 {
+		return "", fmt.Errorf("no SAP Instance found")
+	}
+	log.CtxLogger(ctx).Debugw("SAP Instance found", "instanceNumber", path[5])
+
+	return path[5], nil
 }

@@ -653,8 +653,29 @@ func TestCreateGroupBackup(t *testing.T) {
 		want error
 	}{
 		{
+			name: "ParseLabelsFailure",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				gceService: &fake.TestGCE{
+					GetDiskErr:  []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{nil},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "DiskKeyFileProvided",
 			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
 				DiskKeyFile: "/test/disk/key.json",
 			},
 			want: cmpopts.AnyError,
@@ -666,6 +687,13 @@ func TestCreateGroupBackup(t *testing.T) {
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp:  nil,
 					CreateSnapshotErr: cmpopts.AnyError,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 			},
 			want: cmpopts.AnyError,
@@ -680,6 +708,13 @@ func TestCreateGroupBackup(t *testing.T) {
 					},
 					CreateSnapshotErr:     nil,
 					CreationCompletionErr: cmpopts.AnyError,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 			},
 			want: cmpopts.AnyError,
@@ -694,6 +729,13 @@ func TestCreateGroupBackup(t *testing.T) {
 					},
 					CreateSnapshotErr:     nil,
 					CreationCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 			},
 			want: nil,
@@ -789,7 +831,7 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 	ctx := context.Background()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.snapshot.validateDisksBelongToCG(ctx)
+			got := test.snapshot.validateDisksBelongToCG(ctx, test.snapshot.disks)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateDisksBelongToCG()=%v, want=%v", got, test.want)
 			}
@@ -930,9 +972,10 @@ func TestCGPath(t *testing.T) {
 
 func TestCreateGroupBackupLabels(t *testing.T) {
 	tests := []struct {
-		name string
-		s    *Snapshot
-		want map[string]string
+		name       string
+		s          *Snapshot
+		wantLabels map[string]string
+		wantErr    error
 	}{
 		{
 			name: "DiskSnapshot",
@@ -942,37 +985,155 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 				provisionedIops:       10000,
 				provisionedThroughput: 1000000000,
 			},
-			want: map[string]string{
+			wantLabels: map[string]string{
 				"goog-sapagent-provisioned-iops":       "10000",
 				"goog-sapagent-provisioned-throughput": "1000000000",
 			},
 		},
 		{
-			name: "GroupSnapshot",
+			name: "GroupSnapshotInstanceErr",
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
 				groupSnapshot:     true,
 				DiskZone:          "my-region-1",
 				cgName:            "my-cg",
 				Disk:              "my-disk",
+				gceService: &fake.TestGCE{
+					GetDiskErr:  []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{nil},
+				},
 			},
-			want: map[string]string{
-				"goog-sapagent-isg":       "group-snapshot-name",
-				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
-				"goog-sapagent-cgpath":    "my-region-my-cg",
-				"goog-sapagent-disk-name": "my-disk",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotSuccess",
+			s: &Snapshot{
+				groupSnapshotName: "group-snapshot-name",
+				groupSnapshot:     true,
+				DiskZone:          "my-region-1",
+				cgName:            "my-cg",
+				Disk:              "my-disk",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			wantLabels: map[string]string{
+				"goog-sapagent-isg":           "group-snapshot-name",
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        "my-region-my-cg",
+				"goog-sapagent-disk-name":     "my-disk",
+				"goog-sapagent-instance-name": "my-instance",
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.s.createGroupBackupLabels()
+			got, err := tc.s.createGroupBackupLabels(tc.s.Disk)
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
 			})
-			if !cmp.Equal(got, tc.want, opts) {
-				t.Errorf("parseLabels() = %v, want %v", got, tc.want)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createGroupBackupLabels() returned diff (-want +got):\n%s", diff)
+			}
+			if !cmp.Equal(got, tc.wantLabels, opts) {
+				t.Errorf("parseLabels() = %v, want %v", got, tc.wantLabels)
+			}
+		})
+	}
+}
+
+func TestGetInstanceName(t *testing.T) {
+	tests := []struct {
+		name         string
+		s            *Snapshot
+		dataDisk     string
+		zone         string
+		wantInstance string
+		wantErr      error
+	}{
+		{
+			name: "GetDiskErr",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					GetDiskErr:  []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{nil},
+				},
+			},
+			dataDisk:     "disk-name",
+			zone:         "zone-name",
+			wantInstance: "",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "NoUser",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name: "disk-name",
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			dataDisk:     "disk-name",
+			zone:         "zone-name",
+			wantInstance: "",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "MultipleUsers",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"user-1", "user-2"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			dataDisk:     "disk-name",
+			zone:         "zone-name",
+			wantInstance: "",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &Snapshot{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			dataDisk:     "disk-name",
+			zone:         "zone-name",
+			wantInstance: "my-instance",
+			wantErr:      nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.getInstanceName(tc.dataDisk, tc.zone)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("getInstanceName() returned diff (-want +got):\n%s", diff)
+			}
+			if got != tc.wantInstance {
+				t.Errorf("getInstanceName() = %q, want: %q", got, tc.wantInstance)
 			}
 		})
 	}

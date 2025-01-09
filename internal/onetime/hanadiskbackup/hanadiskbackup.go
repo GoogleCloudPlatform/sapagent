@@ -132,6 +132,7 @@ type Snapshot struct {
 	PasswordSecret                         string `json:"password-secret"`
 	HDBUserstoreKey                        string `json:"hdbuserstore-key"`
 	Disk                                   string `json:"source-disk"`
+	Disks                                  string `json:"source-disks"`
 	DiskZone                               string `json:"source-disk-zone"`
 	DiskKeyFile                            string `json:"source-disk-key-file"`
 	StorageLocation                        string `json:"storage-location"`
@@ -176,8 +177,8 @@ func (*Snapshot) Synopsis() string { return "invoke HANA backup using disk snaps
 // Usage implements the subcommand interface for hanadiskbackup.
 func (*Snapshot) Usage() string {
 	return `Usage: hanadiskbackup -port=<port-number> -sid=<HANA-sid> -hana-db-user=<HANA DB User>
-	[-source-disk=<disk-name>] [-source-disk-zone=<disk-zone>] [-host=<hostname>]
-	[-project=<project-name>] [-password=<passwd> | -password-secret=<secret-name>]
+	[-source-disk=<disk-name>] [-source-disk-zone=<disk-zone>] [-source-disks=<disk1,disk2>]
+	[-host=<hostname>] [-project=<project-name>] [-password=<passwd> | -password-secret=<secret-name>]
 	[-hdbuserstore-key=<userstore-key>] [-abandon-prepared=<true|false>]
 	[-send-metrics-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
 	[-storage-location=<storage-location>] [-snapshot-description=<description>]
@@ -195,7 +196,7 @@ func (*Snapshot) Usage() string {
 	hanadiskbackup -sid=<HANA SID> [Authentication Flags] -snapshot-name=<snapshot-name> -source-disk=<disk-name> -source-disk-zone=<disk-zone> -source-disk-key-file=<path-to-key-file>
 
 	For multi-disk backup:
-	hanadiskbackup -sid=<HANA SID> [Authentication Flags] -group-snapshot-name=<group-snapshot-name> -snapshot-type=<snapshot-type>
+	hanadiskbackup -sid=<HANA SID> [Authentication Flags] -group-snapshot-name=<group-snapshot-name> -source-disks=<disk1,disk2> -snapshot-type=<snapshot-type>
 	` + "\n"
 }
 
@@ -209,6 +210,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password. (optional - either password-secret or hdbuserstore-key must be provided)")
 	fs.StringVar(&s.HDBUserstoreKey, "hdbuserstore-key", "", "HANA userstore key specific to HANA instance.")
 	fs.StringVar(&s.Disk, "source-disk", "", "name of the disk from which you want to create a snapshot (optional). Default: disk used to store /hana/data/")
+	fs.StringVar(&s.Disks, "source-disks", "", "comma separated list of disks from which you want to create a snapshot. Valid format: \"disk1,disk2\" (optional).")
 	fs.StringVar(&s.DiskZone, "source-disk-zone", "", "zone of the disk from which you want to create a snapshot. (optional) Default: Same zone as current instance")
 	fs.BoolVar(&s.FreezeFileSystem, "freeze-file-system", false, "Freeze file system. (optional) Default: false")
 	fs.StringVar(&s.Host, "host", "localhost", "HANA host. (optional) Default: localhost")
@@ -294,39 +296,8 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		return errMessage, subcommands.ExitFailure
 	}
 
-	if s.Disk == "" {
-		log.CtxLogger(ctx).Info("Reading disk mapping for /hana/data/")
-		if err := s.readDiskMapping(ctx, cp); err != nil {
-			errMessage := "ERROR: Failed to read disk mapping"
-			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-			return errMessage, subcommands.ExitFailure
-		}
-
-		if len(s.disks) > 1 {
-			s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupStarted)
-			if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, commandlineexecutor.ExecuteCommand); err != nil {
-				errMessage := "ERROR: Failed to check if data device is striped"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
-			} else if !ok {
-				errMessage := "ERROR: Multiple disks are backing up /hana/data but data device is not striped"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
-			}
-			s.isgService = &instantsnapshotgroup.ISGService{}
-			if err := s.isgService.NewService(); err != nil {
-				errMessage := "ERROR: Failed to create Instant Snapshot Group service"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
-			}
-			if err := s.validateDisksBelongToCG(ctx); err != nil {
-				errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
-			}
-			s.groupSnapshot = true
-		}
-		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgName, "groupSnapshot", s.groupSnapshot)
+	if msg, exitStatus := s.validateDisks(ctx, cp, commandlineexecutor.ExecuteCommand); exitStatus != subcommands.ExitSuccess {
+		return msg, exitStatus
 	}
 
 	if s.groupSnapshotName != "" {
@@ -414,6 +385,140 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	s.sendDurationToCloudMonitoring(ctx, metricPrefix+s.Name()+"/totaltime", snapshotName, workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 	s.status = true
 	return successMessage, subcommands.ExitSuccess
+}
+
+// validateDisks validates the disks passed by the user.
+func (s *Snapshot) validateDisks(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	var isScaleout bool
+	var err error
+	if isScaleout, err = hanabackup.CheckTopology(ctx, exec, s.Sid); err != nil {
+		errMessage := "ERROR: Failed to check if topology is scaleout or scaleup"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	}
+	if isScaleout {
+		if msg, exitStatus := s.validateScaleoutDisks(ctx, cp, exec); exitStatus != subcommands.ExitSuccess {
+			return msg, exitStatus
+		}
+	} else {
+		if msg, exitStatus := s.validateScaleupDisks(ctx, cp, exec); exitStatus != subcommands.ExitSuccess {
+			return msg, exitStatus
+		}
+	}
+	return "", subcommands.ExitSuccess
+}
+
+// validateScaleoutDisks validates the disks passed by the user for scaleout topology.
+// It checks for the following:
+//
+//   - it checks if disks have been provided by the user, if not, it returns an error.
+//   - it checks if the disks belong to the same consistency group.
+func (s *Snapshot) validateScaleoutDisks(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	if s.Disks == "" {
+		errMessage := "ERROR: Cannot discover disk mapping for scaleout topology"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("autodiscovery of disk mapping is not supported for scaleout topology"))
+		return errMessage, subcommands.ExitFailure
+	}
+
+	s.isgService = &instantsnapshotgroup.ISGService{}
+	if err := s.isgService.NewService(); err != nil {
+		errMessage := "ERROR: Failed to create Instant Snapshot Group service"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	}
+	s.groupSnapshot = true
+
+	disks := strings.Split(s.Disks, ",")
+	for i := range disks {
+		disks[i] = strings.TrimSpace(disks[i])
+	}
+	if err := s.validateDisksBelongToCG(ctx, disks); err != nil {
+		errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	}
+
+	return "", subcommands.ExitSuccess
+}
+
+// validateScaleupDisks validates the disks passed by the user for scaleup topology.
+// It checks for the following:
+//
+//   - it checks if the disk(s) are provided or not. If not, it reads the disk mapping.
+//   - if multiple disks are provided, it checks if they belong to the same instance and to the same consistency group.
+func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	if s.Disk == "" {
+		if s.Disks != "" {
+			log.CtxLogger(ctx).Infow("Validating disks provided by the user are attached to the instance", "disks", s.Disks)
+			for _, disk := range strings.Split(s.Disks, ",") {
+				disk = strings.TrimSpace(disk)
+				if _, ok, err := s.gceService.DiskAttachedToInstance(s.Project, s.DiskZone, cp.GetInstanceName(), disk); err != nil {
+					errMessage := fmt.Sprintf("ERROR: Failed to check if disk %s is attached to the instance", disk)
+					s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+					return errMessage, subcommands.ExitFailure
+				} else if !ok {
+					errMessage := fmt.Sprintf("ERROR: Disk %s is not attached to the instance", disk)
+					s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("disk: [%s] is not attached to the instance", disk))
+					return errMessage, subcommands.ExitFailure
+				}
+
+				diskData, err := s.gceService.GetDisk(s.Project, s.DiskZone, disk)
+				if err != nil {
+					errMessage := fmt.Sprintf("ERROR: Failed to get disk data for disk %s", disk)
+					s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+					return errMessage, subcommands.ExitFailure
+				}
+				s.DiskZone = cp.GetZone()
+				s.provisionedIops = diskData.ProvisionedIops
+				s.provisionedThroughput = diskData.ProvisionedThroughput
+				s.disks = append(s.disks, disk)
+			}
+		} else {
+			log.CtxLogger(ctx).Info("Reading disk mapping for /hana/data/")
+			if err := s.readDiskMapping(ctx, cp); err != nil {
+				errMessage := "ERROR: Failed to read disk mapping"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+		}
+
+		if len(s.disks) > 1 {
+			if msg, exitStatus := s.verifyStriping(ctx, exec); exitStatus != subcommands.ExitSuccess {
+				return msg, exitStatus
+			}
+		}
+		log.CtxLogger(ctx).Infow("Successfully read disk mapping for /hana/data/", "disks", s.disks, "cgPath", s.cgName, "groupSnapshot", s.groupSnapshot)
+	}
+	return "", subcommands.ExitSuccess
+}
+
+// verifyStriping verifies if the data device is striped.
+// It also checks if the disks belong to the same consistency group.
+func (s *Snapshot) verifyStriping(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
+	s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupStarted)
+	if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, exec); err != nil {
+		errMessage := "ERROR: Failed to check if data device is striped"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	} else if !ok {
+		errMessage := "ERROR: Multiple disks are backing up /hana/data but data device is not striped"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("data device is not striped"))
+		return errMessage, subcommands.ExitFailure
+	}
+
+	s.isgService = &instantsnapshotgroup.ISGService{}
+	if err := s.isgService.NewService(); err != nil {
+		errMessage := "ERROR: Failed to create Instant Snapshot Group service"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	}
+	if err := s.validateDisksBelongToCG(ctx, s.disks); err != nil {
+		errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+		return errMessage, subcommands.ExitFailure
+	}
+	s.groupSnapshot = true
+	return "", subcommands.ExitSuccess
 }
 
 func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties) error {
@@ -563,13 +668,17 @@ func (s *Snapshot) prepareForChangeDiskTypeWorkflow(ctx context.Context, exec co
 
 func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc) (*compute.Operation, error) {
 	log.CtxLogger(ctx).Infow("Creating disk snapshot", "sourcedisk", s.Disk, "sourcediskzone", s.DiskZone, "snapshotname", s.SnapshotName)
+	labels, err := s.parseLabels(s.Disk)
+	if err != nil {
+		return nil, err
+	}
 
 	snapshot := &compute.Snapshot{
 		Description:      s.Description,
 		Name:             s.SnapshotName,
 		SnapshotType:     s.SnapshotType,
 		StorageLocations: []string{s.StorageLocation},
-		Labels:           s.parseLabels(),
+		Labels:           labels,
 	}
 
 	return s.createBackup(ctx, snapshot, createSnapshot)
@@ -611,8 +720,11 @@ func (s *Snapshot) createBackup(ctx context.Context, snapshot *compute.Snapshot,
 	return op, nil
 }
 
-func (s *Snapshot) parseLabels() map[string]string {
-	labels := s.createGroupBackupLabels()
+func (s *Snapshot) parseLabels(disk string) (labels map[string]string, err error) {
+	labels, err = s.createGroupBackupLabels(disk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create group backup labels: %w", err)
+	}
 	if s.Labels != "" {
 		for _, label := range strings.Split(s.Labels, ",") {
 			split := strings.Split(label, "=")
@@ -621,7 +733,7 @@ func (s *Snapshot) parseLabels() map[string]string {
 			}
 		}
 	}
-	return labels
+	return labels, nil
 }
 
 func (s *Snapshot) diskSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {

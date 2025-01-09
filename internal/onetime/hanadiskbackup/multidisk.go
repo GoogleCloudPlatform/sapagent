@@ -233,10 +233,22 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 	isName := instantSnapshot.Name
 	timestamp := time.Now().UTC().UnixNano()
 	snapshotName := s.createSnapshotName(isName, fmt.Sprintf("%d", timestamp))
+
+	// SourceDisk can be in the format of
+	// - https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/disks/my-disk
+	// - projects/my-project/zones/my-zone/disks/my-disk
+	// - zones/my-zone/disks/my-disk
+	parts := strings.Split(instantSnapshot.SourceDisk, "/")
+	diskName := parts[len(parts)-1]
+	labels, err := s.parseLabels(diskName)
+	if err != nil {
+		return err
+	}
+
 	snapshot := &compute.Snapshot{
 		Name:                  snapshotName,
 		SourceInstantSnapshot: fmt.Sprintf("projects/%s/zones/%s/instantSnapshots/%s", s.Project, s.DiskZone, isName),
-		Labels:                s.parseLabels(),
+		Labels:                labels,
 		Description:           s.Description,
 		SnapshotType:          strings.ToUpper(s.SnapshotType),
 	}
@@ -284,9 +296,9 @@ func (s *Snapshot) createSnapshotName(instantSnapshotName string, timestamp stri
 }
 
 // validateDisksBelongToCG validates that the disks belong to the same consistency group.
-func (s *Snapshot) validateDisksBelongToCG(ctx context.Context) error {
+func (s *Snapshot) validateDisksBelongToCG(ctx context.Context, disks []string) error {
 	disksTraversed := []string{}
-	for _, d := range s.disks {
+	for _, d := range disks {
 		cg, err := s.readConsistencyGroup(ctx, d)
 		if err != nil {
 			return err
@@ -328,7 +340,7 @@ func cgPath(policies []string) string {
 }
 
 // createGroupBackupLabels returns the labels to be added for the group snapshot.
-func (s *Snapshot) createGroupBackupLabels() map[string]string {
+func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, error) {
 	labels := map[string]string{}
 	if !s.groupSnapshot {
 		if s.provisionedIops != 0 {
@@ -337,7 +349,7 @@ func (s *Snapshot) createGroupBackupLabels() map[string]string {
 		if s.provisionedThroughput != 0 {
 			labels["goog-sapagent-provisioned-throughput"] = strconv.FormatInt(s.provisionedThroughput, 10)
 		}
-		return labels
+		return labels, nil
 	}
 	parts := strings.Split(s.DiskZone, "-")
 	region := strings.Join(parts[:len(parts)-1], "-")
@@ -345,10 +357,34 @@ func (s *Snapshot) createGroupBackupLabels() map[string]string {
 	labels["goog-sapagent-version"] = strings.ReplaceAll(configuration.AgentVersion, ".", "_")
 	labels["goog-sapagent-isg"] = s.groupSnapshotName
 	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
-	labels["goog-sapagent-disk-name"] = s.Disk
+	labels["goog-sapagent-disk-name"] = disk
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
-	return labels
+
+	if instanceName, err := s.getInstanceName(disk, s.DiskZone); err == nil {
+		labels["goog-sapagent-instance-name"] = instanceName
+	} else {
+		return nil, err
+	}
+	log.Logger.Debug("Labels: ", labels)
+	return labels, nil
+}
+
+func (s *Snapshot) getInstanceName(dataDisk, zone string) (string, error) {
+	disk, err := s.gceService.GetDisk(s.Project, zone, dataDisk)
+	if err != nil {
+		return "", err
+	}
+
+	log.Logger.Debugw("Disk users", "disk", disk, "users", disk.Users)
+	if len(disk.Users) == 0 {
+		return "", fmt.Errorf("disk %s is not attached to any instance", dataDisk)
+	} else if len(disk.Users) > 1 {
+		return "", fmt.Errorf("disk %s is attached to multiple instances: %v", dataDisk, disk.Users)
+	}
+
+	parts := strings.Split(disk.Users[0], "/")
+	return parts[len(parts)-1], nil
 }
 
 // generateSHA generates a SHA-224 hash of labels starting with "goog-sapagent".
