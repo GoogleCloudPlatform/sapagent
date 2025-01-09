@@ -2360,26 +2360,6 @@ func TestParseLabels(t *testing.T) {
 			wantLabels: map[string]string{"label1": "value1", "label2": "value2"},
 		},
 		{
-			name: "GroupSnapshotInstanceErr",
-			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
-				groupSnapshot:     true,
-				DiskZone:          "my-region-1",
-				cgName:            "my-cg",
-				Labels:            "label1=value1,label2=value2",
-				Disk:              "pd-1",
-				gceService: &fake.TestGCE{
-					GetDiskResp: []*compute.Disk{
-						{
-							Name: "pd-1",
-						},
-					},
-					GetDiskErr: []error{cmpopts.AnyError},
-				},
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
 			name: "GroupSnapshotSuccess",
 			s: &Snapshot{
 				groupSnapshotName: "group-snapshot-name",
@@ -2399,13 +2379,12 @@ func TestParseLabels(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"goog-sapagent-isg":           "group-snapshot-name",
-				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
-				"goog-sapagent-cgpath":        "my-region-my-cg",
-				"goog-sapagent-disk-name":     "pd-1",
-				"goog-sapagent-instance-name": "my-instance",
-				"label1":                      "value1",
-				"label2":                      "value2",
+				"goog-sapagent-isg":       "group-snapshot-name",
+				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":    "my-region-my-cg",
+				"goog-sapagent-disk-name": "pd-1",
+				"label1":                  "value1",
+				"label2":                  "value2",
 			},
 		},
 	}

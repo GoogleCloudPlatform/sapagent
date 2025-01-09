@@ -361,30 +361,8 @@ func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, erro
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
 
-	if instanceName, err := s.getInstanceName(disk, s.DiskZone); err == nil {
-		labels["goog-sapagent-instance-name"] = instanceName
-	} else {
-		return nil, err
-	}
 	log.Logger.Debug("Labels: ", labels)
 	return labels, nil
-}
-
-func (s *Snapshot) getInstanceName(dataDisk, zone string) (string, error) {
-	disk, err := s.gceService.GetDisk(s.Project, zone, dataDisk)
-	if err != nil {
-		return "", err
-	}
-
-	log.Logger.Debugw("Disk users", "disk", disk, "users", disk.Users)
-	if len(disk.Users) == 0 {
-		return "", fmt.Errorf("disk %s is not attached to any instance", dataDisk)
-	} else if len(disk.Users) > 1 {
-		return "", fmt.Errorf("disk %s is attached to multiple instances: %v", dataDisk, disk.Users)
-	}
-
-	parts := strings.Split(disk.Users[0], "/")
-	return parts[len(parts)-1], nil
 }
 
 // generateSHA generates a SHA-224 hash of labels starting with "goog-sapagent".

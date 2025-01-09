@@ -78,22 +78,29 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		return err
 	}
 
+	// Creating a map of disk names to their respective instances.
+	diskToInstanceMap := make(map[string]string)
+	for _, d := range r.disks {
+		diskToInstanceMap[d.disk.DiskName] = d.instanceName
+	}
 	var lastDiskName string
 	var numOfDisksRestored int
 	for _, snapshot := range snapshotList.Items {
 		if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
 			timestamp := time.Now().Unix()
-			sourceDiskName := truncateName(ctx, snapshot.Name, fmt.Sprintf("%d", timestamp))
+			newDiskName := truncateName(ctx, snapshot.Name, fmt.Sprintf("%d", timestamp))
 			if r.NewDiskPrefix != "" {
-				sourceDiskName = fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", numOfDisksRestored+1))
+				newDiskName = fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", numOfDisksRestored+1))
 			}
-			lastDiskName = sourceDiskName
+			lastDiskName = newDiskName
 
-			if err := r.restoreFromSnapshot(ctx, exec, snapshot.Labels["goog-sapagent-instance-name"], snapshotKey, sourceDiskName, snapshot.Name); err != nil {
+			log.CtxLogger(ctx).Debugw("Restoring snapshot", "new Disk", newDiskName, "source disk", snapshot.Labels["goog-sapagent-disk-name"])
+			instanceName := diskToInstanceMap[snapshot.Labels["goog-sapagent-disk-name"]]
+			if err := r.restoreFromSnapshot(ctx, exec, instanceName, snapshotKey, newDiskName, snapshot.Name); err != nil {
 				return err
 			}
-			if err := r.modifyDiskInCG(ctx, sourceDiskName, true); err != nil {
-				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", sourceDiskName)
+			if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
+				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDiskName)
 			}
 
 			numOfDisksRestored++
