@@ -766,6 +766,55 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "GroupSnapshotNewDiskPrefixPresent",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				NewDiskPrefix: "test-prefix",
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName:   "test-disk-name",
+							DeviceName: "pd-balanced",
+							Type:       "PERSISTENT",
+						},
+					},
+				},
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp:                      []*compute.Disk{&compute.Disk{Name: "test-prefix-1"}},
+					GetDiskErr:                       []error{nil},
+				},
+				isGroupSnapshot: true,
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "EmptyNewTypeGroupSnapshotErr",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {

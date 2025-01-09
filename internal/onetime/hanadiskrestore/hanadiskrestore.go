@@ -608,6 +608,16 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		}
 	}
 
+	if r.isGroupSnapshot && r.NewDiskPrefix != "" {
+		for diskNum := range len(r.disks) {
+			newDiskName := fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", diskNum+1))
+			disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, newDiskName)
+			if disk != nil && err == nil {
+				return fmt.Errorf("disk with name %v already exists, please choose a different prefix", newDiskName)
+			}
+		}
+	}
+
 	if r.NewDiskType == "" {
 		if !r.isGroupSnapshot {
 			d, err := r.computeService.Disks.Get(r.Project, r.DataDiskZone, r.DataDiskName).Do()
