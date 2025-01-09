@@ -43,7 +43,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		snapShotKey = key
 	}
 
-	if err := r.restoreFromSnapshot(ctx, exec, cp, snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
+	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)

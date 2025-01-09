@@ -49,11 +49,11 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 		for _, d := range r.disks {
-			if attachDiskErr := r.gceService.AttachDisk(ctx, d.DiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachDiskErr != nil {
+			if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
 				r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
 			} else {
-				if modifyCGErr := r.modifyDiskInCG(ctx, d.DiskName, true); modifyCGErr != nil {
-					log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.DiskName)
+				if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, true); modifyCGErr != nil {
+					log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.disk.DiskName)
 					r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
 				}
 			}
@@ -89,7 +89,7 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 			}
 			lastDiskName = sourceDiskName
 
-			if err := r.restoreFromSnapshot(ctx, exec, cp, snapshotKey, sourceDiskName, snapshot.Name); err != nil {
+			if err := r.restoreFromSnapshot(ctx, exec, snapshot.Labels["goog-sapagent-instance-name"], snapshotKey, sourceDiskName, snapshot.Name); err != nil {
 				return err
 			}
 			if err := r.modifyDiskInCG(ctx, sourceDiskName, true); err != nil {
@@ -104,22 +104,24 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		return fmt.Errorf("required number of disks did not get restored, wanted: %v, got: %v", len(r.disks), numOfDisksRestored)
 	}
 
-	dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), lastDiskName)
-	if err != nil {
-		return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", lastDiskName)
-	}
-	if !ok {
-		return fmt.Errorf("source-disk=%v is not attached to the instance", lastDiskName)
-	}
+	if !r.isScaleout {
+		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), lastDiskName)
+		if err != nil {
+			return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", lastDiskName)
+		}
+		if !ok {
+			return fmt.Errorf("source-disk=%v is not attached to the instance", lastDiskName)
+		}
 
-	if r.DataDiskVG != "" {
-		if err := r.renameLVM(ctx, exec, cp, dev, lastDiskName); err != nil {
-			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-			if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, lastDiskName, dev); detachErr != nil {
-				log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", detachErr)
-				return detachErr
+		if r.DataDiskVG != "" {
+			if err := r.renameLVM(ctx, exec, cp, dev, lastDiskName); err != nil {
+				log.CtxLogger(ctx).Info("Removing newly attached restored disk")
+				if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, lastDiskName, dev); detachErr != nil {
+					log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", detachErr)
+					return detachErr
+				}
+				return err
 			}
-			return err
 		}
 	}
 	return nil
@@ -161,15 +163,15 @@ func (r *Restorer) validateDisksBelongToCG(ctx context.Context) error {
 		var cg string
 		var err error
 
-		cg, err = r.readConsistencyGroup(ctx, d.DiskName)
+		cg, err = r.readConsistencyGroup(ctx, d.disk.DiskName)
 		if err != nil {
 			return err
 		}
 
 		if r.cgName != "" && cg != r.cgName {
-			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d, cg, disksTraversed, r.cgName)
+			return fmt.Errorf("all disks should belong to the same consistency group, however disk %s belongs to %s, while other disks %s belong to %s", d.disk.DiskName, cg, disksTraversed, r.cgName)
 		}
-		disksTraversed = append(disksTraversed, d.DiskName)
+		disksTraversed = append(disksTraversed, d.disk.DiskName)
 		r.cgName = cg
 	}
 
@@ -210,4 +212,115 @@ func truncateName(ctx context.Context, src, suffix string) string {
 	}
 
 	return snapshotName + "-" + suffix
+}
+
+// multiDisksAttachedToInstance checks if all data backing disks are attached
+// to their respective instance or not. These multidisks could be either
+// scaleout or non-scaleout(striped).
+func (r *Restorer) multiDisksAttachedToInstance(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (bool, error) {
+	var err error
+	if r.isScaleout, err = hanabackup.CheckTopology(ctx, exec, r.Sid); err != nil {
+		return false, fmt.Errorf("failed to check topology: %w", err)
+	} else if r.isScaleout {
+		if len(r.SourceDisks) == 0 {
+			return false, fmt.Errorf("cannot perform autodiscovery of disks for scaleout, please pass -source-disks parameter")
+		}
+		if err := r.scaleoutDisksAttachedToInstance(ctx, cp); err != nil {
+			return false, fmt.Errorf("failed to verify if disks are attached to the instance: %w", err)
+		}
+	} else {
+		if len(r.SourceDisks) > 0 {
+			if err := r.scaleupDisksAttachedToInstance(ctx, cp); err != nil {
+				return false, fmt.Errorf("failed to verify if disks are attached to the instance: %w", err)
+			}
+		}
+	}
+	return true, nil
+}
+
+// scaleupDisksAttachedToInstance checks if all the disks provided
+// in the -source-disks parameter are attached to the instance or not.
+func (r *Restorer) scaleupDisksAttachedToInstance(ctx context.Context, cp *ipb.CloudProperties) error {
+	log.CtxLogger(ctx).Infow("Validating disks provided by the user are attached to the instance", "disks", r.SourceDisks)
+	r.disks = []*multiDisks{}
+	for _, disk := range strings.Split(r.SourceDisks, ",") {
+		disk = strings.TrimSpace(disk)
+		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, cp.GetZone(), cp.GetInstanceName(), disk)
+		if err != nil {
+			log.CtxLogger(ctx).Errorf("failed to check if disk %v is attached to the instance: %v", disk, err)
+			return err
+		} else if !ok {
+			log.CtxLogger(ctx).Errorf("disk %v is not attached to the instance", disk)
+			return fmt.Errorf("disk %v is not attached to the instance", disk)
+		}
+
+		r.DataDiskZone = cp.GetZone()
+		r.disks = append(r.disks, &multiDisks{
+			disk: &ipb.Disk{
+				DiskName:   disk,
+				DeviceName: dev,
+			},
+			instanceName: cp.GetInstanceName(),
+		})
+	}
+
+	return nil
+}
+
+// scaleoutDisksAttachedToInstance checks if all data backing disks are attached
+// to their respective instance or not.
+// For disks belonging to the current instance, it verifies if the disks provided in the -source-disks parameter are attached to the instance.
+// For disks not belonging to the current instance, it verifies if the disks are attached to any instance.
+func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.CloudProperties) error {
+	currentNodeDisks := make(map[string]bool)
+	for _, d := range r.disks {
+		currentNodeDisks[d.disk.DiskName] = false
+	}
+
+	disks := strings.Split(r.SourceDisks, ",")
+	for _, d := range disks {
+		d = strings.TrimSpace(d)
+		if _, ok := currentNodeDisks[d]; ok {
+			_, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), d)
+			if err != nil {
+				return fmt.Errorf("failed to verify if disk %v is attached to the instance: %v", d, err)
+			}
+			if !ok {
+				return fmt.Errorf("disk %v is not attached to the instance", d)
+			}
+
+			delete(currentNodeDisks, d)
+		} else {
+			disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, d)
+			if err != nil {
+				return fmt.Errorf("failed to get disk %v: %v", d, err)
+			}
+
+			if len(disk.Users) == 0 {
+				return fmt.Errorf("disk %v is not attached to any instance", d)
+			}
+			parts := strings.Split(disk.Users[0], "/")
+			instanceName := parts[len(parts)-1]
+			log.CtxLogger(ctx).Debugw("Disk %v is attached to instance %v", d, instanceName)
+
+			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, d)
+			r.disks = append(r.disks, &multiDisks{
+				disk: &ipb.Disk{
+					DiskName:   d,
+					DeviceName: dev,
+				},
+				instanceName: instanceName,
+			})
+		}
+	}
+
+	if len(currentNodeDisks) == 0 {
+		return nil
+	}
+
+	leftoverDisks := []string{}
+	for disk := range currentNodeDisks {
+		leftoverDisks = append(leftoverDisks, disk)
+	}
+	return fmt.Errorf("-source-disks does not contain disks: [%s] that also back up /hana/data", strings.Join(leftoverDisks, ","))
 }
