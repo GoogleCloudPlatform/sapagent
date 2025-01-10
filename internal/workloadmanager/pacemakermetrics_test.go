@@ -122,6 +122,8 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"saphana_stop_timeout":             "3600",
 					"saphanatopology_monitor_interval": "10",
 					"saphanatopology_monitor_timeout":  "600",
+					"saphanatopology_start_timeout":    "600",
+					"saphanatopology_stop_timeout":     "300",
 					"ascs_instance":                    "",
 					"ers_instance":                     "",
 					"enqueue_server":                   "",

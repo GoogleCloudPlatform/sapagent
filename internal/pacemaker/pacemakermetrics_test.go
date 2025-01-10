@@ -298,6 +298,8 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"saphana_stop_timeout":             "3600",
 		"saphanatopology_monitor_interval": "10",
 		"saphanatopology_monitor_timeout":  "600",
+		"saphanatopology_start_timeout":    "600",
+		"saphanatopology_stop_timeout":     "300",
 		"ascs_instance":                    "",
 		"ers_instance":                     "",
 		"enqueue_server":                   "",
@@ -333,6 +335,8 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"saphana_stop_timeout":             "3600",
 		"saphanatopology_monitor_interval": "10",
 		"saphanatopology_monitor_timeout":  "600",
+		"saphanatopology_start_timeout":    "600",
+		"saphanatopology_stop_timeout":     "300",
 		"ascs_instance":                    "",
 		"ers_instance":                     "",
 		"enqueue_server":                   "",
@@ -1838,7 +1842,7 @@ func TestPacemakerHanaTopology(t *testing.T) {
 			name: "monitorPrimitiveNotFound",
 			ops: []Op{
 				{
-					Name:    "start",
+					Name:    "invalid",
 					Timeout: "0",
 				},
 			},
@@ -1864,6 +1868,8 @@ func TestPacemakerHanaTopology(t *testing.T) {
 			want: map[string]string{
 				"saphanatopology_monitor_timeout":  "600",
 				"saphanatopology_monitor_interval": "30",
+				"saphanatopology_start_timeout":    "1",
+				"saphanatopology_stop_timeout":     "2",
 			},
 		},
 	}

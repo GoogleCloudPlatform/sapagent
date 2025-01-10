@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 14,
+    "version": 15,
     "validation_system": {
       "system_metrics": [
         {
@@ -913,6 +913,20 @@
               "label": "saphanatopology_monitor_timeout"
             },
             "value": "SAPHANATOPOLOGY_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_start_timeout"
+            },
+            "value": "SAPHANATOPOLOGY_START_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_stop_timeout"
+            },
+            "value": "SAPHANATOPOLOGY_STOP_TIMEOUT"
           }
         ],
         "fence_agent_metrics": [

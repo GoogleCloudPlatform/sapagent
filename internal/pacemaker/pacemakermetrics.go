@@ -103,6 +103,8 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"maintenance_mode_active":          true,
 		"saphanatopology_monitor_interval": true,
 		"saphanatopology_monitor_timeout":  true,
+		"saphanatopology_start_timeout":    true,
+		"saphanatopology_stop_timeout":     true,
 		"ascs_instance":                    true,
 		"ers_instance":                     true,
 		"enqueue_server":                   true,
@@ -499,10 +501,14 @@ func iteratePrimitiveChild(labels map[string]string, attribute ClusterPropertySe
 // pacemakerHanaTopology sets the pacemaker hana topology labels for the metric validation collector.
 func pacemakerHanaTopology(labels map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
-		if sapHanaOperation.Name == "monitor" {
+		switch sapHanaOperation.Name {
+		case "monitor":
 			labels["saphanatopology_monitor_interval"] = sapHanaOperation.Interval
 			labels["saphanatopology_monitor_timeout"] = sapHanaOperation.Timeout
-			return
+		case "start":
+			labels["saphanatopology_start_timeout"] = sapHanaOperation.Timeout
+		case "stop":
+			labels["saphanatopology_stop_timeout"] = sapHanaOperation.Timeout
 		}
 	}
 }
