@@ -432,7 +432,8 @@ func TestCheckTopology(t *testing.T) {
 					OK
 					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
 					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					`,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -459,7 +460,8 @@ func TestCheckTopology(t *testing.T) {
 					GetSystemInstanceList
 					OK
 					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+					`,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,

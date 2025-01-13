@@ -350,10 +350,10 @@ func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID st
 	log.CtxLogger(ctx).Debugw("`sapcontrol -nr %s -function GetSystemInstanceList` returned", instanceNumber, "stdout", res.StdOut, "stderr", res.StdErr, "error", res.Error)
 
 	lines := strings.Split(res.StdOut, "\n")
-	if len(lines) == 6 {
+	if len(lines) == 7 {
 		return false, nil
 	}
-	if len(lines) > 6 {
+	if len(lines) > 7 {
 		return true, nil
 	}
 	return false, fmt.Errorf("no SAP instances found")

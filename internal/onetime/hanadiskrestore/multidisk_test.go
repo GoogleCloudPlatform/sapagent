@@ -46,7 +46,8 @@ var (
 			OK
 			hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
 			scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-			scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+			scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+			`,
 			StdErr:   "",
 			Error:    nil,
 			ExitCode: 0,
@@ -68,7 +69,8 @@ var (
 			GetSystemInstanceList
 			OK
 			hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-			rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+			rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+			`,
 			StdErr:   "",
 			Error:    nil,
 			ExitCode: 0,

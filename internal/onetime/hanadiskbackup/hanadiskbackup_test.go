@@ -50,6 +50,24 @@ func TestMain(t *testing.M) {
 	os.Exit(t.Run())
 }
 
+const (
+	scaleoutTopology = `
+	17.11.2024 07:57:08
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+	rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+	`
+	scaleupTopology = `
+	17.11.2024 07:57:08
+	GetSystemInstanceList
+	OK
+	hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
+	rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
+	`
+)
+
 var (
 	defaultOTELogger = onetime.CreateOTELogger(false)
 
@@ -232,13 +250,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -269,13 +281,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -313,13 +319,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -346,12 +346,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -382,12 +377,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -418,12 +408,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -463,12 +448,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -517,12 +497,7 @@ func TestValidateDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -572,12 +547,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -636,12 +606,7 @@ func TestValidateDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -712,12 +677,7 @@ func TestValidateDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -795,12 +755,7 @@ func TestValidateDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -880,12 +835,7 @@ func TestValidateDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -972,12 +922,7 @@ func TestValidateDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1036,13 +981,7 @@ func TestValidateScaleoutDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1073,13 +1012,7 @@ func TestValidateScaleoutDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1117,13 +1050,7 @@ func TestValidateScaleoutDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleout, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN
-					rb-scaleoutw1, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleoutTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1176,12 +1103,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1212,12 +1134,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1248,12 +1165,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1293,12 +1205,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1347,12 +1254,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1402,12 +1304,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1466,12 +1363,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
-					OK
-					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-					rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+					StdOut:   scaleupTopology,
 					StdErr:   "",
 					Error:    nil,
 					ExitCode: 0,
@@ -1542,12 +1434,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1625,12 +1512,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1710,12 +1592,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1802,12 +1679,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1911,12 +1783,7 @@ func TestVerifyStriping(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -1994,12 +1861,7 @@ func TestVerifyStriping(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -2079,12 +1941,7 @@ func TestVerifyStriping(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
@@ -2171,12 +2028,7 @@ func TestVerifyStriping(t *testing.T) {
 				}
 				if params.Executable == "sudo" {
 					return commandlineexecutor.Result{
-						StdOut: `
-						17.11.2024 07:57:08
-						GetSystemInstanceList
-						OK
-						hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus
-						rb-scaleup, 12, 51213, 51214, 0.3, HDB|HDB_WORKER, GREEN`,
+						StdOut:   scaleupTopology,
 						StdErr:   "",
 						Error:    nil,
 						ExitCode: 0,
