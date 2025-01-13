@@ -47,6 +47,7 @@ var (
 	netweaverPatchNumberRegex = regexp.MustCompile(`patch number\s+([0-9]+)`)
 	sapDbHostRegex            = regexp.MustCompile(`SAPDBHOST\s+=\s+(.*)`)
 	hostnameRegex             = regexp.MustCompile(`^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$`)
+	landscapeIDRegex          = regexp.MustCompile(`id\s+=\s+([a-zA-Z0-9\-]+)`)
 )
 
 const (
@@ -541,12 +542,14 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 	}
 	dbNFS, _ := d.discoverDatabaseNFS(ctx)
 	version, dbProductVersion, _ := d.discoverHANAVersion(ctx, app)
+	landscapeID, _ := d.discoverHANALandscapeId(ctx, app)
 	dbProps := &spb.SapDiscovery_Component_DatabaseProperties{
 		DatabaseType:    spb.SapDiscovery_Component_DatabaseProperties_HANA,
 		SharedNfsUri:    dbNFS,
 		DatabaseVersion: version,
 		DatabaseSid:     app.Sapsid,
 		InstanceNumber:  app.InstanceNumber,
+		LandscapeId:     landscapeID,
 	}
 
 	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
@@ -1321,4 +1324,27 @@ func (d *SapDiscovery) discoverHANATenantDBs(ctx context.Context, app *sappb.SAP
 
 	log.CtxLogger(ctx).Debugw("End of discoverHANATenantDBs", "dbSids", dbSids)
 	return dbSids, nil
+
+}
+
+func (d *SapDiscovery) discoverHANALandscapeId(ctx context.Context, app *sappb.SAPInstance) (string, error) {
+	log.CtxLogger(ctx).Debugw("Entered discoverHANALandscapeId")
+	sidUpper := strings.ToUpper(app.Sapsid)
+	path := fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config/nameserver.ini", sidUpper)
+	p := commandlineexecutor.Params{
+		Executable: "grep",
+		Args:       []string{"'id ='", path},
+	}
+	res := d.Execute(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr)
+		return "", res.Error
+	}
+	log.CtxLogger(ctx).Debugw("HANA landscape id output", "stdOut", res.StdOut)
+
+	lid := landscapeIDRegex.FindStringSubmatch(res.StdOut)
+	if len(lid) < 2 {
+		return "", errors.New("unable to identify HANA landscape id")
+	}
+	return lid[1], nil
 }

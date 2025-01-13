@@ -206,6 +206,7 @@ dbms/name = DEH
 dbid = DEH
 SAPDBHOST = test-instance
 	`
+	defaultLandscapeID = "5b91d2e8-e104-e541-9749-6ae7b2ebcfe9"
 )
 
 var (
@@ -324,6 +325,9 @@ var (
 		StdOut: "",
 		StdErr: "",
 		Error:  errors.New("default error"),
+	}
+	defaultLandscapeIDResult = commandlineexecutor.Result{
+		StdOut: "id = 5b91d2e8-e104-e541-9749-6ae7b2ebcfe9",
 	}
 )
 
@@ -2445,8 +2449,16 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				// HDB Version
 				Executable: "sudo",
+			}, {
+				// HANA landscape id
+				Executable: "grep",
 			}},
-			results: []commandlineexecutor.Result{landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
+			results: []commandlineexecutor.Result{
+				landscapeSingleNodeResult,
+				hanaMountResult,
+				defaultHANAVersionResult,
+				defaultLandscapeIDResult,
+			},
 		},
 		fileSystem: &fakefs.FileSystem{
 			ReadFileResp: [][]byte{[]byte("")},
@@ -2464,6 +2476,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2783,16 +2796,22 @@ func TestDiscoverSAPApps(t *testing.T) {
 				// HDB Version
 				Executable: "sudo",
 			}, {
+				// HANA Landscape ID
+				Executable: "grep",
+			}, {
 				Executable: "sudo",
 			}, {
 				Executable: "df",
 			}, {
 				// HDB Version
 				Executable: "sudo",
+			}, {
+				// HANA Landscape ID
+				Executable: "grep",
 			}},
 			results: []commandlineexecutor.Result{
-				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult,
-				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult},
+				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult, defaultLandscapeIDResult,
+				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult, defaultLandscapeIDResult},
 		},
 		fileSystem: &fakefs.FileSystem{
 			ReadFileResp: [][]byte{[]byte{}, []byte{}},
@@ -2810,6 +2829,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2836,6 +2856,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "def",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2906,6 +2927,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
@@ -2920,6 +2944,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
+				defaultLandscapeIDResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{
@@ -2958,6 +2983,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "DEH",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -3030,6 +3056,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
 			}, {
 				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}, {
 				Executable: "df",
@@ -3059,6 +3088,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
+				defaultLandscapeIDResult,
 				defaultProfileResult,
 				netweaverMountResult,
 				defaultNetweaverKernelResult,
@@ -3104,6 +3134,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "DEH",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -3200,6 +3231,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "db2adm", "/usr/sap/DB2/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/DB2/SYS/global/hdb/custom/config/nameserver.ini"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
@@ -3214,6 +3248,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
+				defaultLandscapeIDResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{
@@ -3283,6 +3318,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "DB2",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
