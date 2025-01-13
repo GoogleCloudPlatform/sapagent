@@ -278,6 +278,7 @@ func runDiscovery(ctx context.Context, a any) {
 			for _, sys := range sapSystems {
 				sys.ProjectNumber = cp.GetNumericProjectId()
 				sys.UpdateTime = timestamppb.Now()
+				sys.UseDrReconciliation = true
 				log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
 				// Send System to DW API
 				insightRequest := &dwpb.WriteInsightRequest{
