@@ -377,7 +377,11 @@ var (
 							Class:      "ocf",
 							Provider:   "suse",
 							ClassType:  "SAPHana",
-							Operations: []Op{{Name: "start", Interval: "0", Timeout: "3600", ID: "rsc_sap_HAS_HDB00-operations-start-0"}},
+							Operations: []Op{
+								{Name: "start", Interval: "0", Timeout: "3600", ID: "rsc_sap_HAS_HDB00-operations-start-0"},
+								{Name: "monitor", Interval: "60", Role: "Primary", Timeout: "700", ID: "rsc_sap_HAS_HDB00-operations-monitor-60"},
+								{Name: "monitor", Interval: "61", Role: "Secondary", Timeout: "700", ID: "rsc_sap_HAS_HDB00-operations-monitor-61"},
+							},
 							InstanceAttributes: ClusterPropertySet{
 								ID:      "rsc_SAPHana_HAS_HDB00-instance_attributes",
 								NVPairs: []NVPair{{Name: "SID", Value: "HAS", ID: "rsc_SAPHana_HAS_HDB00-instance_attributes-SID"}},

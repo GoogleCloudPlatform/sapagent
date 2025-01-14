@@ -159,6 +159,7 @@ type Op struct {
 	ID       string `xml:"id,attr"`
 	Interval string `xml:"interval,attr"`
 	Name     string `xml:"name,attr"`
+	Role     string `xml:"role,attr"`
 	Timeout  string `xml:"timeout,attr"`
 }
 

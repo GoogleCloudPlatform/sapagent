@@ -86,39 +86,43 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 
 	// Prune the configurable labels depending on what is defined in the workload config.
 	pruneLabels := map[string]bool{
-		"pcmk_delay_base":                  true,
-		"pcmk_delay_max":                   true,
-		"pcmk_monitor_retries":             true,
-		"pcmk_reboot_timeout":              true,
-		"location_preference_set":          true,
-		"migration_threshold":              true,
-		"resource_stickiness":              true,
-		"saphana_start_timeout":            true,
-		"saphana_stop_timeout":             true,
-		"saphana_promote_timeout":          true,
-		"saphana_demote_timeout":           true,
-		"fence_agent":                      true,
-		"fence_agent_compute_api_access":   true,
-		"fence_agent_logging_api_access":   true,
-		"maintenance_mode_active":          true,
-		"saphanatopology_monitor_interval": true,
-		"saphanatopology_monitor_timeout":  true,
-		"saphanatopology_start_timeout":    true,
-		"saphanatopology_stop_timeout":     true,
-		"ascs_instance":                    true,
-		"ers_instance":                     true,
-		"enqueue_server":                   true,
-		"ascs_failure_timeout":             true,
-		"ascs_migration_threshold":         true,
-		"ascs_resource_stickiness":         true,
-		"is_ers":                           true,
-		"op_timeout":                       true,
-		"stonith_enabled":                  true,
-		"stonith_timeout":                  true,
-		"saphana_notify":                   true,
-		"saphana_clone_max":                true,
-		"saphana_clone_node_max":           true,
-		"saphana_interleave":               true,
+		"pcmk_delay_base":                    true,
+		"pcmk_delay_max":                     true,
+		"pcmk_monitor_retries":               true,
+		"pcmk_reboot_timeout":                true,
+		"location_preference_set":            true,
+		"migration_threshold":                true,
+		"resource_stickiness":                true,
+		"saphana_start_timeout":              true,
+		"saphana_stop_timeout":               true,
+		"saphana_promote_timeout":            true,
+		"saphana_demote_timeout":             true,
+		"saphana_primary_monitor_interval":   true,
+		"saphana_primary_monitor_timeout":    true,
+		"saphana_secondary_monitor_interval": true,
+		"saphana_secondary_monitor_timeout":  true,
+		"fence_agent":                        true,
+		"fence_agent_compute_api_access":     true,
+		"fence_agent_logging_api_access":     true,
+		"maintenance_mode_active":            true,
+		"saphanatopology_monitor_interval":   true,
+		"saphanatopology_monitor_timeout":    true,
+		"saphanatopology_start_timeout":      true,
+		"saphanatopology_stop_timeout":       true,
+		"ascs_instance":                      true,
+		"ers_instance":                       true,
+		"enqueue_server":                     true,
+		"ascs_failure_timeout":               true,
+		"ascs_migration_threshold":           true,
+		"ascs_resource_stickiness":           true,
+		"is_ers":                             true,
+		"op_timeout":                         true,
+		"stonith_enabled":                    true,
+		"stonith_timeout":                    true,
+		"saphana_notify":                     true,
+		"saphana_clone_max":                  true,
+		"saphana_clone_node_max":             true,
+		"saphana_interleave":                 true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -289,6 +293,15 @@ func setPacemakerHanaOperations(labels map[string]string, sapHanaOperations []Op
 			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
 		case "demote":
 			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+		case "monitor":
+			switch sapHanaOperation.Role {
+			case "Master":
+				labels["saphana_primary_monitor_interval"] = sapHanaOperation.Interval
+				labels["saphana_primary_monitor_timeout"] = sapHanaOperation.Timeout
+			case "Slave":
+				labels["saphana_secondary_monitor_interval"] = sapHanaOperation.Interval
+				labels["saphana_secondary_monitor_timeout"] = sapHanaOperation.Timeout
+			}
 		default:
 			// fall through
 		}

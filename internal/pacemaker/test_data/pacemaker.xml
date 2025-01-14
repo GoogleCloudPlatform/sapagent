@@ -116,6 +116,8 @@ limitations under the License.
         <primitive id="rsc_SAPHana_HAS_HDB00" class="ocf" provider="suse" type="SAPHana">
           <operations id="rsc_sap_HAS_HDB00-operations">
             <op name="start" interval="0" timeout="3600" id="rsc_sap_HAS_HDB00-operations-start-0"/>
+            <op name="monitor" interval="60" role="Primary" timeout="700" id="rsc_sap_HAS_HDB00-operations-monitor-60"/>
+            <op name="monitor" interval="61" role="Secondary" timeout="700" id="rsc_sap_HAS_HDB00-operations-monitor-61"/>
           </operations>
           <instance_attributes id="rsc_SAPHana_HAS_HDB00-instance_attributes">
             <nvpair name="SID" value="HAS" id="rsc_SAPHana_HAS_HDB00-instance_attributes-SID"/>
