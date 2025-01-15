@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 16,
+    "version": 17,
     "validation_system": {
       "system_metrics": [
         {
@@ -820,28 +820,32 @@
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_notify"
+              "label": "saphana_notify",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_NOTIFY"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_clone_max"
+              "label": "saphana_clone_max",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_CLONE_MAX"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_clone_node_max"
+              "label": "saphana_clone_node_max",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_CLONE_NODE_MAX"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_interleave"
+              "label": "saphana_interleave",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_INTERLEAVE"
           }
@@ -935,28 +939,32 @@
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphanatopology_monitor_interval"
+              "label": "saphanatopology_monitor_interval",
+              "min_version": "3.7"
             },
             "value": "SAPHANATOPOLOGY_MONITOR_INTERVAL"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphanatopology_monitor_timeout"
+              "label": "saphanatopology_monitor_timeout",
+              "min_version": "3.7"
             },
             "value": "SAPHANATOPOLOGY_MONITOR_TIMEOUT"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphanatopology_start_timeout"
+              "label": "saphanatopology_start_timeout",
+              "min_version": "3.7"
             },
             "value": "SAPHANATOPOLOGY_START_TIMEOUT"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphanatopology_stop_timeout"
+              "label": "saphanatopology_stop_timeout",
+              "min_version": "3.7"
             },
             "value": "SAPHANATOPOLOGY_STOP_TIMEOUT"
           }
@@ -1046,7 +1054,8 @@
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "op_timeout"
+              "label": "op_timeout",
+              "min_version": "3.7"
             },
             "value": "OP_TIMEOUT"
           }
@@ -1063,14 +1072,16 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/pacemaker",
-            "label": "stonith_enabled"
+            "label": "stonith_enabled",
+            "min_version": "3.7"
           },
           "value": "STONITH_ENABLED"
         },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/pacemaker",
-            "label": "stonith_timeout"
+            "label": "stonith_timeout",
+            "min_version": "3.7"
           },
           "value": "STONITH_TIMEOUT"
         }
