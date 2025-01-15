@@ -202,9 +202,64 @@ R3trans finished (0000).
 rdisp/mshost = some-test-ascs
 dbs/hdb/dbname = DEH
 j2ee/dbname = DEH
+dbms/type = hdb
 dbms/name = DEH
 dbid = DEH
 SAPDBHOST = test-instance
+	`
+	db2ProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = db2
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = db2Hostname
+	`
+	oracleProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = ora
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = oracleHostname
+	`
+	sqlServerProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = mss
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = mssHostname
+	`
+	aseProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = syb
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = sybHostname
+	`
+	maxDBProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = ada
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = adaHostname
+	`
+	unspecifiedTypeProfileOutput = `
+rdisp/mshost = some-test-ascs
+dbs/hdb/dbname = DEH
+j2ee/dbname = DEH
+dbms/type = somethingElse
+dbms/name = DEH
+dbid = DEH
+SAPDBHOST = otherHostname
 	`
 	defaultLandscapeID = "5b91d2e8-e104-e541-9749-6ae7b2ebcfe9"
 )
@@ -223,6 +278,24 @@ var (
 	}
 	defaultProfileResult = commandlineexecutor.Result{
 		StdOut: defaultProfileOutput,
+	}
+	db2ProfileResult = commandlineexecutor.Result{
+		StdOut: db2ProfileOutput,
+	}
+	oracleProfileResult = commandlineexecutor.Result{
+		StdOut: oracleProfileOutput,
+	}
+	sqlServerProfileResult = commandlineexecutor.Result{
+		StdOut: sqlServerProfileOutput,
+	}
+	aseProfileResult = commandlineexecutor.Result{
+		StdOut: aseProfileOutput,
+	}
+	maxDBProfileResult = commandlineexecutor.Result{
+		StdOut: maxDBProfileOutput,
+	}
+	unspecifiedTypeProfileResult = commandlineexecutor.Result{
+		StdOut: unspecifiedTypeProfileOutput,
 	}
 	hanaMountResult = commandlineexecutor.Result{
 		StdOut: defaultDBMountOutput,
@@ -1385,6 +1458,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleWorkloadProperties,
@@ -1448,6 +1526,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: exampleJavaWorkloadProperties,
@@ -1505,6 +1588,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance", "test-instance2"},
 			WorkloadProperties: exampleWorkloadProperties,
@@ -1528,6 +1616,366 @@ func TestDiscoverNetweaver(t *testing.T) {
 				}
 			case "grep":
 				return defaultProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
+			},
+			DBHosts:            []string{"test-instance"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "DB2",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return db2ProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_DB2,
+					},
+				},
+			},
+			DBHosts:            []string{"db2Hostname"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "Oracle",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return oracleProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_ORACLE,
+					},
+				},
+			},
+			DBHosts:            []string{"oracleHostname"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "SQLServer",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return sqlServerProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_SQLSERVER,
+					},
+				},
+			},
+			DBHosts:            []string{"mssHostname"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "ASE",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return aseProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_ASE,
+					},
+				},
+			},
+			DBHosts:            []string{"sybHostname"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "MaxDB",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return maxDBProfileResult
+			case "df":
+				return netweaverMountResult
+			}
+			return commandlineexecutor.Result{
+				StdErr:   "Unexpected command",
+				Error:    errors.New("Unexpected command"),
+				ExitCode: 1,
+			}
+		},
+		fileSystem: &fakefs.FileSystem{
+			MkDirErr:              []error{nil},
+			ChmodErr:              []error{nil},
+			CreateResp:            []*os.File{{}},
+			CreateErr:             []error{nil},
+			WriteStringToFileResp: []int{0},
+			WriteStringToFileErr:  []error{nil},
+			RemoveAllErr:          []error{nil},
+			ReadFileResp:          [][]byte{[]byte{}},
+			ReadFileErr:           []error{nil},
+		},
+		want: SapSystemDetails{
+			AppComponent: &spb.SapDiscovery_Component{
+				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+						ApplicationType: spb.SapDiscovery_Component_ApplicationProperties_NETWEAVER_ABAP,
+						AscsUri:         "some-test-ascs",
+						NfsUri:          "1.2.3.4",
+					}},
+				Sid: "abc",
+			},
+			DBComponent: &spb.SapDiscovery_Component{
+				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_MAXDB,
+					},
+				},
+			},
+			DBHosts:            []string{"adaHostname"},
+			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
+			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
+		},
+	}, {
+		name: "Unspecified",
+		app: &sappb.SAPInstance{
+			Sapsid: "abc",
+			Type:   sappb.InstanceType_NETWEAVER,
+		},
+		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+			switch params.Executable {
+			case "sudo":
+				if slices.Contains(params.Args, "hdbuserstore") {
+					return defaultUserStoreResult
+				} else if slices.Contains(params.Args, "HAGetFailoverConfig") {
+					return commandlineexecutor.Result{Error: errors.New("some error")}
+				} else if slices.Contains(params.Args, "R3trans") {
+					return defaultR3transResult
+				}
+			case "grep":
+				return unspecifiedTypeProfileResult
 			case "df":
 				return netweaverMountResult
 			}
@@ -1834,6 +2282,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 			},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2516,6 +2969,10 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sh", // profile for SID
 			}, {
 				Executable: "sh", // profile for nodes
+			}, {
+				Executable: "grep", // Get profile
+			}, {
+				Executable: "grep", // Get profile
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,                                             // Get profile
@@ -2526,7 +2983,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				commandlineexecutor.Result{Error: errors.New("R3trans err")},     // ABAP
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")}, // Java
 				defaultProfileResult,                                             // profile for SID
-				defaultProfileResult,
+				defaultProfileResult,                                             // profile for nodes
+				defaultProfileResult,                                             // Get profile
+				defaultProfileResult,                                             // Get profile
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -2566,6 +3025,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2620,6 +3084,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "grep", // Get profile
 			}, {
+				Executable: "grep", // Get profile
+			}, {
 				Executable: "df", // Get NFS
 			}, {
 				Executable: "sudo", // Kernel version
@@ -2635,6 +3101,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sh", // profile for SID
 			}, {
 				Executable: "sh", // profile for nodes
+			}, {
+				Executable: "grep", // Get profile
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,                                             // Get profile
@@ -2647,6 +3115,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultProfileResult,                                             // profile for SID
 				defaultProfileResult,                                             // profile for nodes
 				defaultProfileResult,                                             // Get profile
+				defaultProfileResult,                                             // Get profile
 				netweaverMountResult,                                             // Get NFS
 				defaultNetweaverKernelResult,                                     // Kernel version
 				defaultFailoverConfigResult,                                      // Failover config
@@ -2655,6 +3124,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")}, // Java
 				defaultProfileResult,                                             // profile for SID
 				defaultProfileResult,                                             // profile for nodes
+				defaultProfileResult,                                             // Get profile
 			},
 		},
 		sapInstances: &sappb.SAPInstances{
@@ -2696,6 +3166,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2741,6 +3216,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppOnHost: true,
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBHosts:            []string{"test-instance"},
 			WorkloadProperties: nil,
@@ -2919,6 +3399,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable:  "sh",
 				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
+				Executable: "grep",
+				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
 			}, {
@@ -2939,6 +3422,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
+				defaultProfileResult,
 				defaultProfileResult,
 				defaultProfileResult,
 				landscapeSingleNodeResult,
@@ -3083,6 +3567,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable:  "sh",
 				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
+			}, {
+				Executable: "grep",
+				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult,
@@ -3096,6 +3583,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				defaultNetweaverInstanceListResult,
 				commandlineexecutor.Result{Error: errors.New("R3trans error")},
 				commandlineexecutor.Result{Error: errors.New("batchconfig err")},
+				defaultProfileResult,
 				defaultProfileResult,
 				defaultProfileResult,
 			},
@@ -3134,7 +3622,6 @@ func TestDiscoverSAPApps(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "DEH",
 						InstanceNumber:  "00",
-						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -3223,6 +3710,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable:  "sh",
 				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
+				Executable: "grep", // Get profile
+			}, {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "db2adm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
 			}, {
@@ -3234,6 +3723,9 @@ func TestDiscoverSAPApps(t *testing.T) {
 			}, {
 				Executable: "grep",
 				Args:       []string{"'id ='", "/usr/sap/DB2/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
@@ -3245,10 +3737,12 @@ func TestDiscoverSAPApps(t *testing.T) {
 				commandlineexecutor.Result{Error: errors.New("batchconfig error")},
 				defaultProfileResult,
 				defaultProfileResult,
+				defaultProfileResult,
 				landscapeSingleNodeResult,
 				hanaMountResult,
 				defaultHANAVersionResult,
 				defaultLandscapeIDResult,
+				defaultProfileResult,
 			},
 		},
 		fileSystem: &fakefs.FileSystem{
@@ -3278,6 +3772,11 @@ func TestDiscoverSAPApps(t *testing.T) {
 			AppHosts:  []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			DBOnHost:           false,
 			DBHosts:            []string{"test-instance"},

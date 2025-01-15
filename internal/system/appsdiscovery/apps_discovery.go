@@ -58,8 +58,18 @@ const (
 	r3transOutputPath    = r3transTmpFolder + "output.txt"
 	profileDBIDNameKey   = "dbid"
 	profileDBMSNameKey   = "dbms/name"
+	profileDBMSTypeKey   = "dbms/type"
+	profileDBHostKey     = "SAPDBHOST"
 	profileJ2EEDBNameKey = "j2ee/dbname"
 	profileDBSHDBNameKey = "dbs/hdb/dbname"
+	maxDBName            = "ada"
+	db2DBName            = "db2"
+	db4DBName            = "db4"
+	db6DBName            = "db6"
+	hanaDBName           = "hdb"
+	sqlServerName        = "mss"
+	oracleName           = "ora"
+	sybaseASEName        = "syb"
 )
 
 type fileReader func(filename string) ([]byte, error)
@@ -456,8 +466,27 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	if err != nil {
 		return details
 	}
-
 	details.DBHosts = dbHosts
+
+	dbType, err := d.discoverDBType(ctx, app.Sapsid)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverDBType.", "error", err)
+		return details
+	}
+	details.DBComponent.Properties = &spb.SapDiscovery_Component_DatabaseProperties_{
+		DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+			DatabaseType: dbType,
+		},
+	}
+	if dbType == spb.SapDiscovery_Component_DatabaseProperties_HANA {
+		return details
+	}
+	// For non-HANA DBs, we just check for the SAPDBHOST in the DEFAULT.PFL file.
+	dbhost, err := d.discoverDBHost(ctx, app.Sapsid)
+	if err != nil {
+		return details
+	}
+	details.DBHosts = []string{dbhost}
 	return details
 }
 
@@ -1142,6 +1171,87 @@ func (d *SapDiscovery) discoverASCS(ctx context.Context, sid string) (string, er
 	}
 
 	return "", errors.New("no ASCS found in default profile")
+}
+
+func (d *SapDiscovery) discoverDBType(ctx context.Context, sid string) (spb.SapDiscovery_Component_DatabaseProperties_DatabaseType, error) {
+	// The DB type of a SAP System is identified by the entry "dbms/type" in the DEFAULT.PFL
+	profilePath := fmt.Sprintf("/sapmnt/%s/profile/DEFAULT.PFL", sid)
+	p := commandlineexecutor.Params{
+		Executable: "grep",
+		Args:       []string{profileDBMSTypeKey, profilePath},
+	}
+	res := d.Execute(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED, res.Error
+	}
+	lines := strings.Split(res.StdOut, "\n")
+	part := ""
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			// Commented line, skip
+			continue
+		}
+		if !strings.Contains(line, profileDBMSTypeKey) {
+			continue
+		}
+		parts := strings.Split(line, "=")
+		if len(parts) < 2 {
+			continue
+		}
+
+		part = strings.TrimSpace(parts[1])
+		break
+	}
+	switch part {
+	case hanaDBName:
+		return spb.SapDiscovery_Component_DatabaseProperties_HANA, nil
+	case db2DBName, db4DBName, db6DBName:
+		return spb.SapDiscovery_Component_DatabaseProperties_DB2, nil
+	case oracleName:
+		return spb.SapDiscovery_Component_DatabaseProperties_ORACLE, nil
+	case sqlServerName:
+		return spb.SapDiscovery_Component_DatabaseProperties_SQLSERVER, nil
+	case sybaseASEName:
+		return spb.SapDiscovery_Component_DatabaseProperties_ASE, nil
+	case maxDBName:
+		return spb.SapDiscovery_Component_DatabaseProperties_MAXDB, nil
+	default:
+		return spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED, errors.New("no DB type found in default profile")
+	}
+}
+
+func (d *SapDiscovery) discoverDBHost(ctx context.Context, sid string) (string, error) {
+	// The DB Host of a SAP System is identified by the entry "SAPDBHOST" in the DEFAULT.PFL
+	profilePath := fmt.Sprintf("/sapmnt/%s/profile/DEFAULT.PFL", sid)
+	p := commandlineexecutor.Params{
+		Executable: "grep",
+		Args:       []string{profileDBHostKey, profilePath},
+	}
+	res := d.Execute(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+	lines := strings.Split(res.StdOut, "\n")
+	part := ""
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			// Commented line, skip
+			continue
+		}
+		if !strings.Contains(line, profileDBHostKey) {
+			continue
+		}
+		parts := strings.Split(line, "=")
+		if len(parts) < 2 {
+			continue
+		}
+
+		part = strings.TrimSpace(parts[1])
+		return part, nil
+	}
+	return "", errors.New("no SAP DB host found in default profile")
 }
 
 func (d *SapDiscovery) discoverAppNFS(ctx context.Context, sid string) (string, error) {
