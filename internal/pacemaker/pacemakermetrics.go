@@ -119,10 +119,15 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"op_timeout":                         true,
 		"stonith_enabled":                    true,
 		"stonith_timeout":                    true,
+		"saphana_automated_register":         true,
+		"saphana_duplicate_primary_timeout":  true,
+		"saphana_prefer_site_takeover":       true,
 		"saphana_notify":                     true,
 		"saphana_clone_max":                  true,
 		"saphana_clone_node_max":             true,
 		"saphana_interleave":                 true,
+		"saphanatopology_clone_node_max":     true,
+		"saphanatopology_interleave":         true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -196,7 +201,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	// Ex: instance11, ... , instance1
 	sort.Slice(instances, func(i, j int) bool { return len(instances[i]) > len(instances[j]) })
 
-	results := setPacemakerPrimitives(ctx, labels, pacemakerDocument.Configuration.Resources, instances, params.Config, params.OSVendorID)
+	results := setPacemakerPrimitives(ctx, labels, pacemakerDocument.Configuration.Resources, instances, params.Config)
 
 	if id, ok := results["projectId"]; ok {
 		projectID = id
@@ -224,18 +229,30 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	setLabelsForRSCNVPairs(labels, rscOptionNvPairs, "migration-threshold")
 	setLabelsForRSCNVPairs(labels, rscOptionNvPairs, "resource-stickiness")
 
-	// This will get any <primitive> with type=SAPHana, these can be under <clone> or <master>.
-	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHana"))
-	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHana"))
+	// Aggregate resources specified as <clone> or <master> into a single slice.
+	// This is necessary because of differences in the Pacemaker XML config
+	// between RHEL and SLES.
+	var cloneResources []Clone
+	cloneResources = append(cloneResources, pacemakerDocument.Configuration.Resources.Clone...)
+	cloneResources = append(cloneResources, pacemakerDocument.Configuration.Resources.Master)
+
+	var clonePrimitives []PrimitiveClass
+	for _, cloneResource := range cloneResources {
+		clonePrimitives = append(clonePrimitives, cloneResource.Primitives...)
+	}
+
+	// This will get metrics for the <primitive> with type=SAPHana.
+	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(clonePrimitives, "SAPHana"))
+	setPacemakerHANACloneAttrs(labels, cloneResources)
+
+	// This will get metrics for the <primitive> with type=SAPHanaTopology.
+	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(clonePrimitives, "SAPHanaTopology"))
+	setPacemakerHANATopologyCloneAttrs(labels, cloneResources)
 
 	setPacemakerAPIAccess(ctx, labels, projectID, bearerToken, params.Execute)
 	setPacemakerMaintenanceMode(ctx, labels, crmAvailable, params.Execute)
 
 	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
-
-	// This will get any <primitive> with type=SAPHanaTopology, these can be under <clone> or <master>.
-	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Clone.Primitives, "SAPHanaTopology"))
-	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(pacemakerDocument.Configuration.Resources.Master.Primitives, "SAPHanaTopology"))
 
 	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, labels, params.Execute)
@@ -408,7 +425,7 @@ func setLabelsForRSCNVPairs(labels map[string]string, rscOptionNvPairs []NVPair,
 }
 
 // setPacemakerPrimitives sets the pacemaker primitives labels for the metric validation collector.
-func setPacemakerPrimitives(ctx context.Context, labels map[string]string, resources Resources, instances []string, c *cpb.Configuration, osVendorID string) map[string]string {
+func setPacemakerPrimitives(ctx context.Context, labels map[string]string, resources Resources, instances []string, c *cpb.Configuration) map[string]string {
 	primitives := resources.Primitives
 	returnMap := map[string]string{}
 	var pcmkDelayMax []string
@@ -442,7 +459,6 @@ func setPacemakerPrimitives(ctx context.Context, labels map[string]string, resou
 	}
 	returnMap["serviceAccountJsonFile"] = serviceAccountJSONFile
 
-	setPacemakerHANACloneAttrs(ctx, labels, resources, osVendorID)
 	return returnMap
 }
 
@@ -749,42 +765,79 @@ func setPacemakerStonithClusterProperty(labels map[string]string, cps []ClusterP
 	}
 }
 
-func setPacemakerHANACloneAttrs(ctx context.Context, labels map[string]string, resources Resources, osVendorID string) {
+func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone) {
+	labels["saphana_automated_register"] = ""
+	labels["saphana_duplicate_primary_timeout"] = ""
+	labels["saphana_prefer_site_takeover"] = ""
 	labels["saphana_notify"] = ""
 	labels["saphana_clone_max"] = ""
 	labels["saphana_clone_node_max"] = ""
 	labels["saphana_interleave"] = ""
-
-	var metaAttrs ClusterPropertySet
-	switch osVendorID {
-	case "rhel":
-		clone := resources.Clone
-		for _, p := range clone.Primitives {
-			if p.ClassType == "SAPHana" {
-				metaAttrs = p.MetaAttributes
-				break
-			}
-		}
-	case "sles":
-		metaAttrs = resources.Master.Attributes
-	default:
-		log.CtxLogger(ctx).Debugw("Unsupported OS vendor ID for pacemakerHANACloneAttrs", "osVendorID", osVendorID)
-		return
+	instanceAttributeKeys := map[string]bool{
+		"AUTOMATED_REGISTER":        true,
+		"DUPLICATE_PRIMARY_TIMEOUT": true,
+		"PREFER_SITE_TAKEOVER":      true,
 	}
-	if len(metaAttrs.NVPairs) == 0 {
-		return
-	}
-
-	pacemakerHANACloneAttrsKeys := map[string]bool{
+	metaAttributeKeys := map[string]bool{
 		"notify":         true,
 		"clone-max":      true,
 		"clone-node-max": true,
 		"interleave":     true,
 	}
 
-	for _, nvPair := range metaAttrs.NVPairs {
-		if _, ok := pacemakerHANACloneAttrsKeys[nvPair.Name]; ok {
+	var instanceAttrs []NVPair
+	var metaAttrs []NVPair
+	for _, clone := range cloneResources {
+		for _, p := range clone.Primitives {
+			if p.ClassType == "SAPHana" {
+				instanceAttrs = p.InstanceAttributes.NVPairs
+				// For RHEL, the meta attributes exist within the <primitive> tag.
+				// For SLES, the meta attributes exist at the same level as the <primitive> tag.
+				// For simplicity, just combine all attributes into a single slice.
+				metaAttrs = append(metaAttrs, clone.Attributes.NVPairs...)
+				metaAttrs = append(metaAttrs, p.MetaAttributes.NVPairs...)
+				break
+			}
+		}
+	}
+
+	for _, nvPair := range instanceAttrs {
+		if _, ok := instanceAttributeKeys[nvPair.Name]; ok {
+			key := "saphana_" + strings.ToLower(nvPair.Name)
+			labels[key] = nvPair.Value
+		}
+	}
+	for _, nvPair := range metaAttrs {
+		if _, ok := metaAttributeKeys[nvPair.Name]; ok {
 			key := "saphana_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+			labels[key] = nvPair.Value
+		}
+	}
+}
+
+func setPacemakerHANATopologyCloneAttrs(labels map[string]string, cloneResources []Clone) {
+	labels["saphanatopology_clone_node_max"] = ""
+	labels["saphanatopology_interleave"] = ""
+	keys := map[string]bool{
+		"clone-node-max": true,
+		"interleave":     true,
+	}
+
+	var metaAttrs []NVPair
+	for _, clone := range cloneResources {
+		for _, p := range clone.Primitives {
+			if p.ClassType == "SAPHanaTopology" {
+				// For simplicity, combine all meta attributes into a single slice.
+				metaAttrs = append(metaAttrs, clone.Attributes.NVPairs...)
+				metaAttrs = append(metaAttrs, p.MetaAttributes.NVPairs...)
+				break
+			}
+		}
+	}
+
+	for _, nvPair := range metaAttrs {
+		if _, ok := keys[nvPair.Name]; ok {
+			key := "saphanatopology_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 			labels[key] = nvPair.Value
 		}
 	}
