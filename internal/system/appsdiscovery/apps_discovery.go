@@ -464,10 +464,10 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	}
 	dbHosts, err := d.discoverAppToDBConnection(ctx, app.Sapsid, isABAP)
 	if err != nil {
-		return details
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverAppToDBConnection.", "error", err)
+	} else {
+		details.DBHosts = dbHosts
 	}
-	details.DBHosts = dbHosts
-
 	dbType, err := d.discoverDBType(ctx, app.Sapsid)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Encountered error during call to discoverDBType.", "error", err)
@@ -481,9 +481,11 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 	if dbType == spb.SapDiscovery_Component_DatabaseProperties_HANA {
 		return details
 	}
+
 	// For non-HANA DBs, we just check for the SAPDBHOST in the DEFAULT.PFL file.
 	dbhost, err := d.discoverDBHost(ctx, app.Sapsid)
 	if err != nil {
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverDBHost.", "error", err)
 		return details
 	}
 	details.DBHosts = []string{dbhost}
@@ -1185,6 +1187,7 @@ func (d *SapDiscovery) discoverDBType(ctx context.Context, sid string) (spb.SapD
 		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return spb.SapDiscovery_Component_DatabaseProperties_DATABASE_TYPE_UNSPECIFIED, res.Error
 	}
+	log.CtxLogger(ctx).Debugw("DB type grep output", "stdOut", res.StdOut)
 	lines := strings.Split(res.StdOut, "\n")
 	part := ""
 	for _, line := range lines {
@@ -1233,6 +1236,7 @@ func (d *SapDiscovery) discoverDBHost(ctx context.Context, sid string) (string, 
 		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
 		return "", res.Error
 	}
+	log.CtxLogger(ctx).Debugw("DB host grep output", "stdOut", res.StdOut)
 	lines := strings.Split(res.StdOut, "\n")
 	part := ""
 	for _, line := range lines {

@@ -2225,6 +2225,11 @@ func TestDiscoverNetweaver(t *testing.T) {
 			AppHosts: []string{"fs1-nw-node2", "fs1-nw-node1"},
 			DBComponent: &spb.SapDiscovery_Component{
 				Sid: "DEH",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						DatabaseType: spb.SapDiscovery_Component_DatabaseProperties_HANA,
+					},
+				},
 			},
 			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{},
 			AppInstance:        &sappb.SAPInstance{Sapsid: "abc", Type: sappb.InstanceType_NETWEAVER},
