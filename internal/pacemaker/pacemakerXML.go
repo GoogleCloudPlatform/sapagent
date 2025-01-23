@@ -59,7 +59,7 @@ Resources stores metadata defining the node structure of the current CIB object 
 type Resources struct {
 	Primitives []PrimitiveClass `xml:"primitive"`
 	Groups     []Group          `xml:"group"`
-	Clone      Clone            `xml:"clone"`
+	Clone      []Clone          `xml:"clone"`
 	Master     Clone            `xml:"master"`
 }
 

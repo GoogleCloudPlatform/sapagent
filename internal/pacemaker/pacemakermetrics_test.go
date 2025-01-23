@@ -235,14 +235,10 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"fence_agent":            "fence_gce",
-		"pcmk_delay_max":         "test-instance-name=45",
-		"pcmk_monitor_retries":   "5",
-		"pcmk_reboot_timeout":    "200",
-		"saphana_notify":         "",
-		"saphana_clone_max":      "",
-		"saphana_clone_node_max": "",
-		"saphana_interleave":     "",
+		"fence_agent":          "fence_gce",
+		"pcmk_delay_max":       "test-instance-name=45",
+		"pcmk_monitor_retries": "5",
+		"pcmk_reboot_timeout":  "200",
 	}
 }
 
@@ -307,10 +303,10 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ascs_instance":                      "",
 		"ers_instance":                       "",
 		"enqueue_server":                     "",
-		"saphana_notify":                     "",
-		"saphana_clone_max":                  "",
-		"saphana_clone_node_max":             "",
-		"saphana_interleave":                 "",
+		"saphana_notify":                     "true",
+		"saphana_clone_max":                  "2",
+		"saphana_clone_node_max":             "1",
+		"saphana_interleave":                 "true",
 		"ascs_failure_timeout":               "",
 		"ascs_migration_threshold":           "",
 		"ascs_resource_stickiness":           "",
@@ -898,7 +894,6 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		c          *cnfpb.Configuration
 		instances  []string
 		resources  Resources
-		osVendorID string
 		want       map[string]string
 		wantLabels map[string]string
 	}{
@@ -925,12 +920,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
-			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesNoMatch",
@@ -950,12 +940,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "",
 			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
-			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch1",
@@ -980,12 +965,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path",
 			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
-			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "TestSetPacemakerPrimitivesBasicMatch2",
@@ -1017,12 +997,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 			want: map[string]string{
 				"serviceAccountJsonFile": "external/test/account/path2",
 			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
-			},
+			wantLabels: map[string]string{},
 		},
 		{
 			name:      "pcmkDelayMaxSingleValue",
@@ -1074,11 +1049,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max":         "instance-name-4=30",
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
+				"pcmk_delay_max": "instance-name-4=30",
 			},
 		},
 		{
@@ -1113,122 +1084,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 				"serviceAccountJsonFile": "",
 			},
 			wantLabels: map[string]string{
-				"pcmk_delay_max":         "instance-name-1=60,instance-name-2=30",
-				"saphana_notify":         "",
-				"saphana_clone_max":      "",
-				"saphana_clone_node_max": "",
-				"saphana_interleave":     "",
-			},
-		},
-		{
-			name:      "pacemaker_hana_clone_attrs_rhel",
-			c:         defaultConfiguration,
-			instances: []string{"instance-name-1", "instance-name-2"},
-			resources: Resources{
-				Primitives: []PrimitiveClass{
-					{
-						ClassType: "fake-type",
-						InstanceAttributes: ClusterPropertySet{
-							ID: "test-instance-name-instance_attributes",
-							NVPairs: []NVPair{
-								NVPair{
-									Name:  "serviceaccount",
-									Value: "external/test/account/path",
-								},
-							},
-						},
-					},
-				},
-				Clone: Clone{
-					Primitives: []PrimitiveClass{
-						{
-							ClassType: "SAPHana",
-							MetaAttributes: ClusterPropertySet{
-								NVPairs: []NVPair{
-									{
-										Name:  "notify",
-										Value: "true",
-									},
-									{
-										Name:  "clone-max",
-										Value: "2",
-									},
-									{
-										Name:  "clone-node-max",
-										Value: "1",
-									},
-									{
-										Name:  "interleave",
-										Value: "true",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			osVendorID: "rhel",
-			want: map[string]string{
-				"serviceAccountJsonFile": "external/test/account/path",
-			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "true",
-				"saphana_clone_max":      "2",
-				"saphana_clone_node_max": "1",
-				"saphana_interleave":     "true",
-			},
-		},
-		{
-			name:      "pacemaker_hana_clone_attrs_sles",
-			c:         defaultConfiguration,
-			instances: []string{"instance-name-1", "instance-name-2"},
-			resources: Resources{
-				Primitives: []PrimitiveClass{
-					{
-						ClassType: "fake-type",
-						InstanceAttributes: ClusterPropertySet{
-							ID: "test-instance-name-instance_attributes",
-							NVPairs: []NVPair{
-								NVPair{
-									Name:  "serviceaccount",
-									Value: "external/test/account/path",
-								},
-							},
-						},
-					},
-				},
-				Master: Clone{
-					Attributes: ClusterPropertySet{
-						NVPairs: []NVPair{
-							{
-								Name:  "notify",
-								Value: "true",
-							},
-							{
-								Name:  "clone-max",
-								Value: "2",
-							},
-							{
-								Name:  "clone-node-max",
-								Value: "1",
-							},
-							{
-								Name:  "interleave",
-								Value: "true",
-							},
-						},
-					},
-				},
-			},
-			osVendorID: "sles",
-			want: map[string]string{
-				"serviceAccountJsonFile": "external/test/account/path",
-			},
-			wantLabels: map[string]string{
-				"saphana_notify":         "true",
-				"saphana_clone_max":      "2",
-				"saphana_clone_node_max": "1",
-				"saphana_interleave":     "true",
+				"pcmk_delay_max": "instance-name-1=60,instance-name-2=30",
 			},
 		},
 	}
@@ -1237,7 +1093,7 @@ func TestSetPacemakerPrimitives(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			gotLabels := map[string]string{}
 			ctx := context.Background()
-			got := setPacemakerPrimitives(ctx, gotLabels, test.resources, test.instances, test.c, test.osVendorID)
+			got := setPacemakerPrimitives(ctx, gotLabels, test.resources, test.instances, test.c)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerPrimitives() returned unexpected return map diff (-want +got):\n%s", diff)
@@ -2386,6 +2242,130 @@ func TestSetPacemakerStonithClusterProperty(t *testing.T) {
 			setPacemakerStonithClusterProperty(got, test.cps)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerStonithClusterProperty() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetPacemakerHANACloneAttrs(t *testing.T) {
+	tests := []struct {
+		name   string
+		clones []Clone
+		want   map[string]string
+	}{
+		{
+			name: "NoMetaAttributes",
+			clones: []Clone{
+				Clone{
+					ID: "NoMetaAttributes",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHana",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphana_notify":         "",
+				"saphana_clone_max":      "",
+				"saphana_clone_node_max": "",
+				"saphana_interleave":     "",
+			},
+		},
+		{
+			name: "SuccessRHEL",
+			clones: []Clone{
+				Clone{
+					ID: "SAPHanaTopology",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHanaTopology",
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									NVPair{Name: "notify", Value: "false"},
+									NVPair{Name: "clone-max", Value: "20"},
+									NVPair{Name: "clone-node-max", Value: "10"},
+									NVPair{Name: "interleave", Value: "false"},
+								},
+							},
+						},
+					},
+				},
+				Clone{
+					ID: "SAPHana",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHana",
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									NVPair{Name: "notify", Value: "true"},
+									NVPair{Name: "clone-max", Value: "2"},
+									NVPair{Name: "clone-node-max", Value: "1"},
+									NVPair{Name: "interleave", Value: "true"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphana_notify":         "true",
+				"saphana_clone_max":      "2",
+				"saphana_clone_node_max": "1",
+				"saphana_interleave":     "true",
+			},
+		},
+		{
+			name: "SuccessSLES",
+			clones: []Clone{
+				Clone{
+					ID: "SAPHanaTopology",
+					Attributes: ClusterPropertySet{
+						NVPairs: []NVPair{
+							NVPair{Name: "notify", Value: "false"},
+							NVPair{Name: "clone-max", Value: "20"},
+							NVPair{Name: "clone-node-max", Value: "10"},
+							NVPair{Name: "interleave", Value: "false"},
+						},
+					},
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHanaTopology",
+						},
+					},
+				},
+				Clone{
+					ID: "SAPHana",
+					Attributes: ClusterPropertySet{
+						NVPairs: []NVPair{
+							NVPair{Name: "notify", Value: "true"},
+							NVPair{Name: "clone-max", Value: "2"},
+							NVPair{Name: "clone-node-max", Value: "1"},
+							NVPair{Name: "interleave", Value: "true"},
+						},
+					},
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHana",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphana_notify":         "true",
+				"saphana_clone_max":      "2",
+				"saphana_clone_node_max": "1",
+				"saphana_interleave":     "true",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setPacemakerHANACloneAttrs(got, test.clones)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setPacemakerHANACloneAttrs() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

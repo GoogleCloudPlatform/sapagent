@@ -345,22 +345,24 @@ var (
 						},
 					},
 				},
-				Clone: Clone{
-					ID: "cln_SAPHanaTopology_HAS_HDB00",
-					Attributes: ClusterPropertySet{
-						ID:      "cln_SAPHanaTopology_HAS_HDB00-meta_attributes",
-						NVPairs: []NVPair{{Name: "clone-node-max", Value: "1", ID: "cln_SAPHanaTopology_HAS_HDB00-meta_attributes-clone-node-max"}},
-					},
-					Primitives: []PrimitiveClass{
-						{
-							ID:         "rsc_SAPHanaTopology_HAS_HDB00",
-							Class:      "ocf",
-							Provider:   "suse",
-							ClassType:  "SAPHanaTopology",
-							Operations: []Op{{Name: "monitor", Interval: "10", Timeout: "600", ID: "rsc_sap2_HAS_HDB00-operations-monitor-10"}},
-							InstanceAttributes: ClusterPropertySet{
-								ID:      "rsc_SAPHanaTopology_HAS_HDB00-instance_attributes",
-								NVPairs: []NVPair{{Name: "SID", Value: "HAS", ID: "rsc_SAPHanaTopology_HAS_HDB00-instance_attributes-SID"}},
+				Clone: []Clone{
+					Clone{
+						ID: "cln_SAPHanaTopology_HAS_HDB00",
+						Attributes: ClusterPropertySet{
+							ID:      "cln_SAPHanaTopology_HAS_HDB00-meta_attributes",
+							NVPairs: []NVPair{{Name: "clone-node-max", Value: "1", ID: "cln_SAPHanaTopology_HAS_HDB00-meta_attributes-clone-node-max"}},
+						},
+						Primitives: []PrimitiveClass{
+							{
+								ID:         "rsc_SAPHanaTopology_HAS_HDB00",
+								Class:      "ocf",
+								Provider:   "suse",
+								ClassType:  "SAPHanaTopology",
+								Operations: []Op{{Name: "monitor", Interval: "10", Timeout: "600", ID: "rsc_sap2_HAS_HDB00-operations-monitor-10"}},
+								InstanceAttributes: ClusterPropertySet{
+									ID:      "rsc_SAPHanaTopology_HAS_HDB00-instance_attributes",
+									NVPairs: []NVPair{{Name: "SID", Value: "HAS", ID: "rsc_SAPHanaTopology_HAS_HDB00-instance_attributes-SID"}},
+								},
 							},
 						},
 					},
