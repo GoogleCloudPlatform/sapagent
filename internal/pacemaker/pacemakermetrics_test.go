@@ -261,6 +261,8 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"saphana_clone_max":              "",
 		"saphana_clone_node_max":         "",
 		"saphana_interleave":             "",
+		"saphanatopology_clone_node_max": "",
+		"saphanatopology_interleave":     "",
 		"ascs_failure_timeout":           "",
 		"ascs_migration_threshold":       "",
 		"ascs_resource_stickiness":       "",
@@ -307,6 +309,8 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"saphana_clone_max":                  "2",
 		"saphana_clone_node_max":             "1",
 		"saphana_interleave":                 "true",
+		"saphanatopology_clone_node_max":     "1",
+		"saphanatopology_interleave":         "true",
 		"ascs_failure_timeout":               "",
 		"ascs_migration_threshold":           "",
 		"ascs_resource_stickiness":           "",
@@ -355,6 +359,8 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"saphana_clone_max":                  "2",
 		"saphana_clone_node_max":             "1",
 		"saphana_interleave":                 "true",
+		"saphanatopology_clone_node_max":     "1",
+		"saphanatopology_interleave":         "true",
 	}
 }
 
@@ -381,6 +387,8 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"saphana_clone_max":              "",
 		"saphana_clone_node_max":         "",
 		"saphana_interleave":             "",
+		"saphanatopology_clone_node_max": "",
+		"saphanatopology_interleave":     "",
 		"ascs_failure_timeout":           "",
 		"ascs_migration_threshold":       "",
 		"ascs_resource_stickiness":       "",
@@ -2366,6 +2374,116 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 			setPacemakerHANACloneAttrs(got, test.clones)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerHANACloneAttrs() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetPacemakerHANATopologyCloneAttrs(t *testing.T) {
+	tests := []struct {
+		name   string
+		clones []Clone
+		want   map[string]string
+	}{
+		{
+			name: "NoMetaAttributes",
+			clones: []Clone{
+				Clone{
+					ID: "NoMetaAttributes",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHanaTopology",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphanatopology_clone_node_max": "",
+				"saphanatopology_interleave":     "",
+			},
+		},
+		{
+			name: "SuccessRHEL",
+			clones: []Clone{
+				Clone{
+					ID: "SAPHana",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHana",
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									NVPair{Name: "clone-node-max", Value: "10"},
+									NVPair{Name: "interleave", Value: "false"},
+								},
+							},
+						},
+					},
+				},
+				Clone{
+					ID: "SAPHanaTopology",
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHanaTopology",
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									NVPair{Name: "clone-node-max", Value: "1"},
+									NVPair{Name: "interleave", Value: "true"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphanatopology_clone_node_max": "1",
+				"saphanatopology_interleave":     "true",
+			},
+		},
+		{
+			name: "SuccessSLES",
+			clones: []Clone{
+				Clone{
+					ID: "SAPHana",
+					Attributes: ClusterPropertySet{
+						NVPairs: []NVPair{
+							NVPair{Name: "clone-node-max", Value: "10"},
+							NVPair{Name: "interleave", Value: "false"},
+						},
+					},
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHana",
+						},
+					},
+				},
+				Clone{
+					ID: "SAPHanaTopology",
+					Attributes: ClusterPropertySet{
+						NVPairs: []NVPair{
+							NVPair{Name: "clone-node-max", Value: "1"},
+							NVPair{Name: "interleave", Value: "true"},
+						},
+					},
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPHanaTopology",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"saphanatopology_clone_node_max": "1",
+				"saphanatopology_interleave":     "true",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setPacemakerHANATopologyCloneAttrs(got, test.clones)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setPacemakerHANATopologyCloneAttrs() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

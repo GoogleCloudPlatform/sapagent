@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 17,
+    "version": 18,
     "validation_system": {
       "system_metrics": [
         {
@@ -848,6 +848,22 @@
               "min_version": "3.7"
             },
             "value": "SAPHANA_INTERLEAVE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_clone_node_max",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_CLONE_NODE_MAX"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_interleave",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_INTERLEAVE"
           }
         ],
         "rsc_location_metrics": [

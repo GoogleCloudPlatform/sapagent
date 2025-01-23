@@ -123,6 +123,8 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"saphana_clone_max":                  true,
 		"saphana_clone_node_max":             true,
 		"saphana_interleave":                 true,
+		"saphanatopology_clone_node_max":     true,
+		"saphanatopology_interleave":         true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -242,6 +244,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	// This will get metrics for the <primitive> with type=SAPHanaTopology.
 	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(clonePrimitives, "SAPHanaTopology"))
+	setPacemakerHANATopologyCloneAttrs(labels, cloneResources)
 
 	setPacemakerAPIAccess(ctx, labels, projectID, bearerToken, params.Execute)
 	setPacemakerMaintenanceMode(ctx, labels, crmAvailable, params.Execute)
@@ -788,6 +791,34 @@ func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone
 	for _, nvPair := range metaAttrs {
 		if _, ok := pacemakerHANACloneAttrsKeys[nvPair.Name]; ok {
 			key := "saphana_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+			labels[key] = nvPair.Value
+		}
+	}
+}
+
+func setPacemakerHANATopologyCloneAttrs(labels map[string]string, cloneResources []Clone) {
+	labels["saphanatopology_clone_node_max"] = ""
+	labels["saphanatopology_interleave"] = ""
+	keys := map[string]bool{
+		"clone-node-max": true,
+		"interleave":     true,
+	}
+
+	var metaAttrs []NVPair
+	for _, clone := range cloneResources {
+		for _, p := range clone.Primitives {
+			if p.ClassType == "SAPHanaTopology" {
+				// For simplicity, combine all meta attributes into a single slice.
+				metaAttrs = append(metaAttrs, clone.Attributes.NVPairs...)
+				metaAttrs = append(metaAttrs, p.MetaAttributes.NVPairs...)
+				break
+			}
+		}
+	}
+
+	for _, nvPair := range metaAttrs {
+		if _, ok := keys[nvPair.Name]; ok {
+			key := "saphanatopology_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 			labels[key] = nvPair.Value
 		}
 	}

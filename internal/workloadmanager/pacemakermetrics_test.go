@@ -142,6 +142,8 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"saphana_clone_max":                  "2",
 					"saphana_clone_node_max":             "1",
 					"saphana_interleave":                 "true",
+					"saphanatopology_clone_node_max":     "1",
+					"saphanatopology_interleave":         "true",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
