@@ -119,6 +119,9 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"op_timeout":                         true,
 		"stonith_enabled":                    true,
 		"stonith_timeout":                    true,
+		"saphana_automated_register":         true,
+		"saphana_duplicate_primary_timeout":  true,
+		"saphana_prefer_site_takeover":       true,
 		"saphana_notify":                     true,
 		"saphana_clone_max":                  true,
 		"saphana_clone_node_max":             true,
@@ -763,21 +766,31 @@ func setPacemakerStonithClusterProperty(labels map[string]string, cps []ClusterP
 }
 
 func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone) {
+	labels["saphana_automated_register"] = ""
+	labels["saphana_duplicate_primary_timeout"] = ""
+	labels["saphana_prefer_site_takeover"] = ""
 	labels["saphana_notify"] = ""
 	labels["saphana_clone_max"] = ""
 	labels["saphana_clone_node_max"] = ""
 	labels["saphana_interleave"] = ""
-	pacemakerHANACloneAttrsKeys := map[string]bool{
+	instanceAttributeKeys := map[string]bool{
+		"AUTOMATED_REGISTER":        true,
+		"DUPLICATE_PRIMARY_TIMEOUT": true,
+		"PREFER_SITE_TAKEOVER":      true,
+	}
+	metaAttributeKeys := map[string]bool{
 		"notify":         true,
 		"clone-max":      true,
 		"clone-node-max": true,
 		"interleave":     true,
 	}
 
+	var instanceAttrs []NVPair
 	var metaAttrs []NVPair
 	for _, clone := range cloneResources {
 		for _, p := range clone.Primitives {
 			if p.ClassType == "SAPHana" {
+				instanceAttrs = p.InstanceAttributes.NVPairs
 				// For RHEL, the meta attributes exist within the <primitive> tag.
 				// For SLES, the meta attributes exist at the same level as the <primitive> tag.
 				// For simplicity, just combine all attributes into a single slice.
@@ -788,8 +801,14 @@ func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone
 		}
 	}
 
+	for _, nvPair := range instanceAttrs {
+		if _, ok := instanceAttributeKeys[nvPair.Name]; ok {
+			key := "saphana_" + strings.ToLower(nvPair.Name)
+			labels[key] = nvPair.Value
+		}
+	}
 	for _, nvPair := range metaAttrs {
-		if _, ok := pacemakerHANACloneAttrsKeys[nvPair.Name]; ok {
+		if _, ok := metaAttributeKeys[nvPair.Name]; ok {
 			key := "saphana_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 			labels[key] = nvPair.Value
 		}

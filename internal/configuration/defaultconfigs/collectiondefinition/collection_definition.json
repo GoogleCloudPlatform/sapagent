@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 18,
+    "version": 19,
     "validation_system": {
       "system_metrics": [
         {
@@ -848,6 +848,30 @@
               "min_version": "3.7"
             },
             "value": "SAPHANA_INTERLEAVE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_automated_register",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_AUTOMATED_REGISTER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_duplicate_primary_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_DUPLICATE_PRIMARY_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_prefer_site_takeover",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_PREFER_SITE_TAKEOVER"
           },
           {
             "metric_info": {
