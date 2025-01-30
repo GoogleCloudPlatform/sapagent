@@ -10,6 +10,8 @@ replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
 replace github.com/GoogleCloudPlatform/workloadagentplatform/integration/common => ./workloadagentplatform/integration/common
 
+replace github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos => ./workloadagentplatform/sharedprotos
+
 require (
   cloud.google.com/go/aiplatform v1.58.2
   cloud.google.com/go/iam v1.1.6
@@ -17,7 +19,8 @@ require (
   cloud.google.com/go/monitoring v1.17.1
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
-  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20241216220000-e80b9b366dbe
+  github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20250130120719-3629ab2f4c43
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250130120719-3629ab2f4c43
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2
@@ -39,7 +42,7 @@ require (
   google.golang.org/api v0.168.0
   google.golang.org/genproto v0.0.0-20240205150955-31a09d347014
   google.golang.org/genproto/googleapis/api v0.0.0-20240205150955-31a09d347014
-  google.golang.org/protobuf v1.34.3-0.20240708074925-b46f280f9725
+  google.golang.org/protobuf v1.36.4
 )
 
 require (

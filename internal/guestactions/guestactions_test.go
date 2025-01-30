@@ -30,7 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 type fakeRestarter struct{}

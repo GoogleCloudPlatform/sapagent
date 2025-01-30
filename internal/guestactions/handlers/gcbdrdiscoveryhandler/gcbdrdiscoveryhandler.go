@@ -33,7 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the gcbdr-discovery guest action has been handled.

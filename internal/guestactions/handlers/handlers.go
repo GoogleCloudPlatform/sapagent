@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 // ParseAgentCommandParameters parses the command parameters from the

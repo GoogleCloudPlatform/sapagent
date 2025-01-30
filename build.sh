@@ -32,7 +32,7 @@ if [ ! -d "workloadagentplatform" ]; then
   echo "**************  Adding the workloadagent submodule"
     git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
     # replace the proto imports in the platform that reference the platform
-    find workloadagentplatform/integration/common/shared/protos -type f -exec sed -i 's|"integration/common/shared/protos|"workloadagentplatform/integration/common/shared/protos|g' {} +
+    find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
 fi
 
 echo "**************  Getting go 1.23.2"
@@ -68,7 +68,7 @@ mkdir -p "${pb_dest}"
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 echo "**************  Compiling protobufs"
-protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/integration/common/shared/protos/**/*.proto --go_out=.
+protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/sharedprotos/**/*.proto --go_out=.
 
 mkdir -p buildoutput
 echo "**************  Generating the latest go.mod and go.sum dependencies"

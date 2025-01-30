@@ -19,7 +19,7 @@ jobs:
     - name: Add workloadagentplatform submodule
       run: |
         git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
-        find workloadagentplatform/integration/common/shared/protos -type f -exec sed -i 's|"integration/common/shared/protos|"workloadagentplatform/integration/common/shared/protos|g' {} +
+        find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
 
     - name: Set up Go
       uses: actions/setup-go@v3
@@ -36,7 +36,7 @@ jobs:
     - name: Compile protocol buffers
       run: |
         export PATH=${PATH}:`go env GOPATH`/bin
-        protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/integration/common/shared/protos/**/*.proto --go_out=.
+        protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/sharedprotos/**/*.proto --go_out=.
 
     - name: Get the latest dependency versions
       run: |

@@ -39,9 +39,9 @@ import (
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
 )
 
 /*

@@ -46,9 +46,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/statushelper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
 const (

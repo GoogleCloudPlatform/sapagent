@@ -54,7 +54,7 @@ import (
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 func TestMain(t *testing.M) {

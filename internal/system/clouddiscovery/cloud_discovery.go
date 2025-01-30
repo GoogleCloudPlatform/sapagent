@@ -31,7 +31,7 @@ import (
 	"google.golang.org/api/file/v1"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (

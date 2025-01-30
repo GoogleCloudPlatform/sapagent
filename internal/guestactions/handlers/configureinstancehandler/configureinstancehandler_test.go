@@ -24,7 +24,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 func TestConfigureInstanceHandler(t *testing.T) {

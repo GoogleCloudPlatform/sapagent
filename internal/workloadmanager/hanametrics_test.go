@@ -44,7 +44,7 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 // fakeDiskMapper provides a testable fake implementation of the DiskMapper interface

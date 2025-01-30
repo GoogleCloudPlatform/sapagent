@@ -30,7 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the instancemetadata guest action has been handled.

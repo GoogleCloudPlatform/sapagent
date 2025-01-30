@@ -36,7 +36,7 @@ import (
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (

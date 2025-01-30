@@ -31,7 +31,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
 
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 // RestartAgent indicates that the agent should be restarted after the configure instance guest action has been handled.

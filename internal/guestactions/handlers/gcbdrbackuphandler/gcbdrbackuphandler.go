@@ -33,7 +33,7 @@ import (
 
 	apb "google.golang.org/protobuf/types/known/anypb"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 // RestartAgent indicates if the agent should be restarted after the gcbdr-backup guest action has been handled.

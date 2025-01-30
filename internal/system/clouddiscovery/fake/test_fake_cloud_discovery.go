@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 // DiscoverComputeResourcesArgs encapsulates arguments sent to the DiscoverComputeResources function.

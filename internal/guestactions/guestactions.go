@@ -41,9 +41,9 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/uap"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 const (

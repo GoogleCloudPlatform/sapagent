@@ -50,7 +50,7 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/status"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
 const (

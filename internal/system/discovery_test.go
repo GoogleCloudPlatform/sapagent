@@ -46,8 +46,8 @@ import (
 	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
 	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/datawarehouse"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/system"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (

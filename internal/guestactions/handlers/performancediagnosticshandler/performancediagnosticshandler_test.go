@@ -23,7 +23,7 @@ import (
 	"github.com/google/subcommands"
 
 	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/protos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
 func TestPerformanceDiagnosticsHandler(t *testing.T) {
