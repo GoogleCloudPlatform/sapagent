@@ -457,6 +457,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		BackOffs:                cloudmonitoring.NewDefaultBackOffIntervals(),
 		TimeSeriesCreator:       hanaMonitoringMetricClient,
 		HRC:                     sapdiscovery.HANAReplicationConfig,
+		SystemDiscovery:        systemDiscovery,
 		ConnectionRetryInterval: 300 * time.Second,
 	})
 
