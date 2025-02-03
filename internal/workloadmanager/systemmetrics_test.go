@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "19"
+	collectionConfigVersion = "20"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -143,6 +143,12 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdErr: "",
 						}
 					}
+					if params.Executable == "sh" {
+						return commandlineexecutor.Result{
+							StdOut: "true",
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
 						StdOut: "",
 						StdErr: "",
@@ -159,6 +165,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"gsutil":                    "true",
 				"agent_state":               "running",
 				"os_settings":               "",
+				"uefi_enabled":              "true",
 				"collection_config_version": collectionConfigVersion,
 			},
 		},

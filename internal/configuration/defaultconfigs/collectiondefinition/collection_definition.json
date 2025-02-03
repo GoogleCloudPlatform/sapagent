@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 19,
+    "version": 20,
     "validation_system": {
       "system_metrics": [
         {
@@ -138,6 +138,29 @@
                 }
               }
             ]
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "uefi_enabled"
+          },
+          "os_vendor": "ALL",
+          "command": "sh",
+          "args": ["-c", "if [ -d \"/sys/firmware/efi\" ]; then echo \"true\"; fi"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_equals": "true"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
           }
         }
       ]
