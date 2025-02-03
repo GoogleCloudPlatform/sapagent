@@ -7,8 +7,6 @@ name: go-build-protos
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - 'protos/**.proto'
 
 jobs:
   build-protos:
@@ -55,6 +53,6 @@ jobs:
       if: ${{ failure() }}
       uses: cinotify/github-action@main
       with:
-        to: 'workload-agent-github-dev@google.com'
-        subject: '[Failure] GitHub Workload Agent Protocol Buffer Build and Commit failed'
-        body: 'There was a failure for the GitHub Workload Agent workflow go-build-protos action.\n\n https://github.com/GoogleCloudPlatform/workloadagent/actions/runs/${{ github.run_id }}'
+        to: 'sapagent-github-dev@google.com'
+        subject: '[Failure] GitHub Agent for SAP Protocol Buffer Build and Commit failed'
+        body: 'There was a failure for the GitHub Agent for SAP workflow go-build-protos action.\n\n https://github.com/GoogleCloudPlatform/sapagent/actions/runs/${{ github.run_id }}'

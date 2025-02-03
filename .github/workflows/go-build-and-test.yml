@@ -79,6 +79,6 @@ jobs:
       if: ${{ failure() && contains(github.ref, 'main') }}
       uses: cinotify/github-action@main
       with:
-        to: 'workload-agent-github-dev@google.com'
-        subject: '[Failure] GitHub Workload Agent build failure'
-        body: 'There was a failure for the GitHub Workload Agent workflow action.\n\n https://github.com/GoogleCloudPlatform/workloadagent/actions/runs/${{ github.run_id }}'
+        to: 'sapagent-github-dev@google.com'
+        subject: '[Failure] GitHub Agent for SAP build failure'
+        body: 'There was a failure for the GitHub Agent for SAP workflow action.\n\n https://github.com/GoogleCloudPlatform/sapagent/actions/runs/${{ github.run_id }}'
