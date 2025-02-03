@@ -1,0 +1,60 @@
+
+# This workflow will build all of the protos and commit them to the repo.
+# This will pull the current workloadagentplatform submodule so the shared protos can be imported.
+
+name: go-build-protos
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'protos/**.proto'
+
+jobs:
+  build-protos:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: '1.23.2'
+
+    - name: Add workloadagentplatform submodule
+      run: |
+        git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
+        cd workloadagentplatform
+        git checkout c271b7e1b5adb90dff344c969bb44ee1133d0f8c
+        cd ..
+        find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v3
+
+    - name: Install protoc-gen-go
+      run: |
+        go install github.com/golang/protobuf/protoc-gen-go@latest
+        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+    - name: Compile protocol buffers
+      run: |
+        export PATH=${PATH}:`go env GOPATH`/bin
+        protoc --go_opt=paths=source_relative protos/**/*.proto --go_out=.
+
+    - name: Commit the compiled protos
+      run: |
+        git rm -f workloadagentplatform
+        git config --global user.name 'Git bot'
+        git config --global user.email 'bot@noreply.github.com'
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+        git add protos
+        git commit -m "Auto updated compiled protocol buffers" && git push || echo "No changes to commit"
+
+    - name: Notify on failure
+      if: ${{ failure() }}
+      uses: cinotify/github-action@main
+      with:
+        to: 'workload-agent-github-dev@google.com'
+        subject: '[Failure] GitHub Workload Agent Protocol Buffer Build and Commit failed'
+        body: 'There was a failure for the GitHub Workload Agent workflow go-build-protos action.\n\n https://github.com/GoogleCloudPlatform/workloadagent/actions/runs/${{ github.run_id }}'

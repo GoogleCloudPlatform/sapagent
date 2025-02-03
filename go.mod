@@ -8,10 +8,6 @@ replace github.com/GoogleCloudPlatform/sapagent/shared => ./shared
 
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
-replace github.com/GoogleCloudPlatform/workloadagentplatform/integration/common => ./workloadagentplatform/integration/common
-
-replace github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos => ./workloadagentplatform/sharedprotos
-
 require (
   cloud.google.com/go/aiplatform v1.58.2
   cloud.google.com/go/iam v1.1.6
@@ -20,7 +16,7 @@ require (
   cloud.google.com/go/secretmanager v1.11.5
   cloud.google.com/go/storage v1.36.0
   github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20250130120719-3629ab2f4c43
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250130120719-3629ab2f4c43
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250130133413-c271b7e1b5ad
   github.com/SAP/go-hdb v1.8.0
   github.com/cenkalti/backoff/v4 v4.1.3
   github.com/fsouza/fake-gcs-server v1.45.2

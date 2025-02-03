@@ -27,6 +27,10 @@ github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15 h1:Nfrki2YgdAkq5U7e+CBfHdDZiqHAlCn5V9OW1NZkQrk=
 github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20240320012052-cefaf62f7c15/go.mod h1:Zw96j4gRzfoC3G09m4CrBZuyAF0Fy1nMwdd4pojUNVE=
+github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20250130120719-3629ab2f4c43 h1:75m2fnDIVHp87TRiqHNJU6NTRY7+YJwF48+ZuXbHWqA=
+github.com/GoogleCloudPlatform/workloadagentplatform/integration/common v0.0.0-20250130120719-3629ab2f4c43/go.mod h1:2hnJdfkqASwOWG3NqhFMGDjCja1+RB4vr9nnid+BrGE=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250130133413-c271b7e1b5ad h1:4/mqjDy7mX9rhX8Kqh03gF3gpI+RBVp8DOk1WD+W78g=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250130133413-c271b7e1b5ad/go.mod h1:SI7fYmbniDIoVITS6rG9iqA2omufwj8GrkFu/EarxkE=
 github.com/SAP/go-hdb v1.8.0 h1:keRMLcfSzamjol3PVCdwX0RB+iUeE3Jg+ZvPKthOzRM=
 github.com/SAP/go-hdb v1.8.0/go.mod h1:8NptOH2Y6LNVClNTEiY3nZi/EvUdagh8I1/0gtRLuqg=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=

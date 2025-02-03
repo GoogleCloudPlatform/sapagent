@@ -19,18 +19,45 @@
 # the buildoutput/ dir.
 #
 
+# Use the following command to build the sapagent if there are outstanding protocol
+# buffer changes in the protos directory:
 #
-# If the build is failing because of dependencies then update the go.mod and
-# go.sum with the latest versions from the buildoutput/ directory.
+# ./build.sh -c
 #
 
 set -exu
 
+POSITIONAL_ARGS=()
+COMPILE_PROTOS="FALSE"
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -c|--compileprotos)
+      COMPILE_PROTOS="TRUE"
+      shift # past argument
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
 echo "Starting the build process for the SAP Agent..."
 
-if [ ! -d "workloadagentplatform" ]; then
+if [ "${COMPILE_PROTOS}" == "TRUE" ] && [ ! -d "workloadagentplatform" ]; then
   echo "**************  Adding the workloadagent submodule"
     git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
+    cd workloadagentplatform
+    # this is the hash of the workloadagentplatform submodule that has the
+    # sharedprotos directory, should match the hash for the version in go.mod
+    # to get the hash run: go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
+    git checkout c271b7e1b5adb90dff344c969bb44ee1133d0f8c
+    cd ..
     # replace the proto imports in the platform that reference the platform
     find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
 fi
@@ -53,22 +80,24 @@ export GOBIN=$GOROOT/bin
 
 PATH=${GOBIN}:${GOROOT}/packages/bin:$PATH
 
-echo "**************  Getting unzip 5.51"
-curl -sLOS https://oss.oracle.com/el4/unzip/unzip.tar
-tar -C /tmp/sapagent -xf unzip.tar
+if [ "${COMPILE_PROTOS}" == "TRUE" ]; then
+  echo "**************  Getting unzip 5.51"
+  curl -sLOS https://oss.oracle.com/el4/unzip/unzip.tar
+  tar -C /tmp/sapagent -xf unzip.tar
 
-echo "**************  Getting protoc 28.2"
-pb_rel="https://github.com/protocolbuffers/protobuf/releases"
-pb_dest="/tmp/sapagent/protobuf"
-curl -sLOS ${pb_rel}/download/v28.2/protoc-28.2-linux-x86_64.zip
-rm -fr "${pb_dest}"
-mkdir -p "${pb_dest}"
-/tmp/sapagent/unzip -q protoc-28.2-linux-x86_64.zip -d "${pb_dest}"
+  echo "**************  Getting protoc 28.2"
+  pb_rel="https://github.com/protocolbuffers/protobuf/releases"
+  pb_dest="/tmp/sapagent/protobuf"
+  curl -sLOS ${pb_rel}/download/v28.2/protoc-28.2-linux-x86_64.zip
+  rm -fr "${pb_dest}"
+  mkdir -p "${pb_dest}"
+  /tmp/sapagent/unzip -q protoc-28.2-linux-x86_64.zip -d "${pb_dest}"
 
-go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
-echo "**************  Compiling protobufs"
-protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/sharedprotos/**/*.proto --go_out=.
+  echo "**************  Compiling protobufs"
+  protoc --go_opt=paths=source_relative protos/**/*.proto workloadagentplatform/sharedprotos/**/*.proto --go_out=.
+fi
 
 mkdir -p buildoutput
 echo "**************  Generating the latest go.mod and go.sum dependencies"
