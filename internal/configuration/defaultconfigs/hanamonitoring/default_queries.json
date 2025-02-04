@@ -577,6 +577,73 @@
                 "name_override": "disk/readtime"
             }
         ]
+    },
+    {
+        "name": "log_backup_catalog_queries",
+        "sql": "SELECT C.BACKUP_ID, C.ENTRY_TYPE_NAME AS BACKUP_TYPE, C.SYS_START_TIME AS BACKUP_START_TIME, C.SYS_END_TIME AS BACKUP_END_TIME, MIN(F.DESTINATION_PATH) AS BACKUP_PATH, C.COMMENT AS BACKUP_COMMENT, CAST(COALESCE(TO_DECIMAL((SECONDS_BETWEEN(C.SYS_START_TIME, C.SYS_END_TIME)), 10, 2), 0.00) AS VARCHAR(20)) AS BACKUP_DURATION_S, CAST(COALESCE(TO_DECIMAL(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024), 10, 2), 0.00) AS VARCHAR(20)) AS BACKUP_SIZE_MB, CAST(COALESCE( ROUND(( COALESCE(TO_DECIMAL(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024), 10, 2), 0.00) / NULLIF(COALESCE(TO_DECIMAL(SECONDS_BETWEEN(C.SYS_START_TIME, C.SYS_END_TIME)), 10, 2), 0) ), 2), COALESCE(TO_DECIMAL(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024), 10, 2), 0.00) ) AS VARCHAR(20)) AS BACKUP_THROUGHPUT_MBS, CAST(C.STATE_NAME AS VARCHAR(20)) AS BACKUP_STATE, (SELECT VALUE FROM M_SYSTEM_OVERVIEW WHERE NAME='Instance ID') AS SID, CASE WHEN C.STATE_NAME = 'successful' THEN 1 ELSE 0 END AS VALUE FROM M_BACKUP_CATALOG AS C JOIN M_BACKUP_CATALOG_FILES AS F ON C.BACKUP_ID = F.BACKUP_ID WHERE C.ENTRY_TYPE_NAME LIKE '%log backup%' AND SOURCE_TYPE_NAME='volume' AND C.STATE_NAME!='running' GROUP BY C.BACKUP_ID, C.ENTRY_TYPE_NAME, C.SYS_START_TIME, C.SYS_END_TIME,C.STATE_NAME, C.COMMENT ORDER BY C.SYS_START_TIME DESC LIMIT 20",
+        "columns": [
+            {
+                "name": "BACKUP_ID",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_TYPE",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_START_TIME",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_END_TIME",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_PATH",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_COMMENT",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_DURATION_S",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_SIZE_MB",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_THROUGHPUT_MBS",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "BACKUP_STATE",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "SID",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "VALUE",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override": "backups/log/catalog"
+            }
+        ]
     }
   ]
 }
