@@ -779,6 +779,23 @@
                 "value_type": "VALUE_STRING"
             }
         ]
+    },
+    {
+        "name": "backup_catalog_size_queries",
+        "sql": "SELECT LPAD(TO_DECIMAL(BACKUP_CATALOG_SIZE, 10, 2), 15) AS BACKUP_CATALOG_SIZE_MB, (SELECT VALUE FROM M_SYSTEM_OVERVIEW WHERE NAME='Instance ID') AS SID FROM (SELECT TOP 1 BF.BACKUP_SIZE / 1024 / 1024 AS BACKUP_CATALOG_SIZE FROM M_BACKUP_CATALOG C INNER JOIN M_BACKUP_CATALOG_FILES BF ON C.BACKUP_ID = BF.BACKUP_ID WHERE BF.SOURCE_TYPE_NAME = 'catalog' AND C.STATE_NAME = 'successful' ORDER BY C.SYS_START_TIME DESC)",
+        "columns": [
+            {
+                "name": "BACKUP_CATALOG_SIZE_MB",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_DOUBLE",
+                "name_override":"backups/catalog/size_mb"
+            },
+            {
+                "name": "SID",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            }
+        ]
     }
   ]
 }
