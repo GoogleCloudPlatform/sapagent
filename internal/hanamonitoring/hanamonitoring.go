@@ -583,7 +583,6 @@ func createGaugeMetric(c *cpb.Column, val any, labels map[string]string, queryNa
 		Timestamp:    timestamp,
 		BareMetal:    params.Config.GetBareMetal(),
 	}
-
 	// Type asserting to pointers due to the coupling with sql.Rows.Scan() populating the columns as such.
 	switch c.GetValueType() {
 	case cpb.ValueType_VALUE_INT64:
