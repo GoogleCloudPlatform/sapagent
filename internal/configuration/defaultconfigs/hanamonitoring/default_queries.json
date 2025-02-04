@@ -711,6 +711,40 @@
                 "name_override": "backups/data/catalog"
             }
         ]
+    },
+    {
+        "name": "latest_data_backup_queries",
+        "sql": "SELECT C.ENTRY_TYPE_NAME AS BACKUP_TYPE, COALESCE(CAST(SECONDS_BETWEEN(C.SYS_START_TIME, C.SYS_END_TIME) AS FLOAT), 0.00) AS LATEST_BACKUP_DURATION_S, ROUND(COALESCE(CAST(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024) AS FLOAT), 0.00), 2) AS LATEST_BACKUP_SIZE_MB, COALESCE( ROUND(( COALESCE(CAST(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024) AS FLOAT), 0.00) / NULLIF(COALESCE(CAST(SECONDS_BETWEEN(C.SYS_START_TIME, C.SYS_END_TIME) AS FLOAT), 0.00), 0) ), 2), ROUND(COALESCE(CAST(SUM(TO_DOUBLE(F.BACKUP_SIZE)/1024/1024) AS FLOAT), 0.00), 2) ) AS LATEST_BACKUP_THROUGHPUT_MBS, (SELECT VALUE FROM M_SYSTEM_OVERVIEW WHERE NAME='Instance ID') AS SID FROM M_BACKUP_CATALOG AS C JOIN M_BACKUP_CATALOG_FILES AS F ON C.BACKUP_ID = F.BACKUP_ID WHERE C.ENTRY_TYPE_NAME LIKE '%data backup%' AND C.STATE_NAME!='running' GROUP BY C.BACKUP_ID, C.ENTRY_TYPE_NAME, C.SYS_START_TIME, C.SYS_END_TIME, C.STATE_NAME ORDER BY C.SYS_END_TIME DESC LIMIT 1",
+        "columns": [
+            {
+                "name": "BACKUP_TYPE",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            },
+            {
+                "name": "LATEST_BACKUP_DURATION_S",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_DOUBLE",
+                 "name_override": "backups/data/duration_s"
+            },
+            {
+                "name": "LATEST_BACKUP_SIZE_MB",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_DOUBLE",
+                 "name_override": "backups/data/size_mb"
+            },
+            {
+                "name": "LATEST_BACKUP_THROUGHPUT_MBS",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_DOUBLE",
+                 "name_override": "backups/data/throughput_mb_s"
+            },
+            {
+                "name": "SID",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING"
+            }
+        ]
     }
   ]
 }
