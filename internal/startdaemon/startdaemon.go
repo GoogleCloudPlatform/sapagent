@@ -654,11 +654,6 @@ func (d *Daemon) lastModifiedTime(ctx context.Context) (time.Time, error) {
 }
 
 func (d *Daemon) startConfigPollerRoutine(cancel context.CancelFunc) {
-	// TODO: Remove the experimental metrics check once config poller implementation is complete.
-	if d.config == nil || d.config.GetCollectionConfiguration() == nil || !d.config.GetCollectionConfiguration().GetCollectExperimentalMetrics() {
-		log.Logger.Debug("Not starting config poller...")
-		return
-	}
 	pollConfigFileRoutine := &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, arg any) {
 			if cancelFunc, ok := arg.(context.CancelFunc); ok {
