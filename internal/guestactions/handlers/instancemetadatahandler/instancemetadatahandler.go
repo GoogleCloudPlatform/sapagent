@@ -33,15 +33,12 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the instancemetadata guest action has been handled.
-const RestartAgent = false
-
 // InstanceMetadataHandler is the handler for instancemetadata command.
-func InstanceMetadataHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func InstanceMetadataHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	return instanceMetadataHandlerHelper(ctx, command, cp, nil)
 }
 
-func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, frc instancemetadata.ReadCloser) (*gpb.CommandResult, bool) {
+func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, frc instancemetadata.ReadCloser) *gpb.CommandResult {
 	log.CtxLogger(ctx).Debugw("Instance metadata handler called.", "command", prototext.Format(command))
 	im := &instancemetadata.InstanceMetadata{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), im)
@@ -57,7 +54,7 @@ func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp
 			Stderr:   failureMessage,
 			ExitCode: int32(subcommands.ExitFailure),
 		}
-		return result, RestartAgent
+		return result
 	}
 	result := &gpb.CommandResult{
 		Command:  command,
@@ -65,5 +62,5 @@ func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp
 		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

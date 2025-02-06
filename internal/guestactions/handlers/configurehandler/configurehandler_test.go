@@ -92,7 +92,7 @@ func TestConfigureHandler(t *testing.T) {
 				}
 				defer os.Remove(f.Name())
 			}
-			res, _ := ConfigureHandler(context.Background(), tc.command, nil)
+			res := ConfigureHandler(context.Background(), tc.command, nil)
 			if res.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("ConfigureHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}

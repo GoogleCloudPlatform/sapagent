@@ -33,15 +33,12 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the supportbundle guest action has been handled.
-const RestartAgent = false
-
 // SupportBundleHandler is the handler for support bundle command.
-func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	return runCommand(ctx, command, cp, commandlineexecutor.ExecuteCommand)
 }
 
-func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
+func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPSupportBundleCommand)
 	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
 	sb := &supportbundle.SupportBundle{}
@@ -52,5 +49,5 @@ func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.Cl
 		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

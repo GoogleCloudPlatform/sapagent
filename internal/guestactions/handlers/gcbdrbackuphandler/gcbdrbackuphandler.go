@@ -36,11 +36,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates if the agent should be restarted after the gcbdr-backup guest action has been handled.
-const RestartAgent = false
-
 // GCBDRBackupHandler is the handler for gcbdr-backup command.
-func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPGCBDRBackupCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-backup handler called.", "command", prototext.Format(command))
 	b := &backup.Backup{}
@@ -55,7 +52,7 @@ func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadatas
 			Stdout:   failureMessage,
 			ExitCode: int32(subcommands.ExitFailure),
 		}
-		return result, RestartAgent
+		return result
 	}
 	result := &gpb.CommandResult{
 		Command:  command,
@@ -63,5 +60,5 @@ func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadatas
 		Stdout:   message,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

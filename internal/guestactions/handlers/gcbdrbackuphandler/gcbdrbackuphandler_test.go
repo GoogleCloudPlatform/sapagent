@@ -60,7 +60,7 @@ func TestGCBDRBackupHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := GCBDRBackupHandler(context.Background(), tc.command, nil)
+			res := GCBDRBackupHandler(context.Background(), tc.command, nil)
 			if res.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("GCBDRBackupHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}

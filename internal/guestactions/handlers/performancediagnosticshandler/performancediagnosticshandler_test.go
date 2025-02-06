@@ -52,7 +52,7 @@ func TestPerformanceDiagnosticsHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := runCommand(context.Background(), tc.command, nil, fakeExec)
+			res := runCommand(context.Background(), tc.command, nil, fakeExec)
 			if res.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("runCommand(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}

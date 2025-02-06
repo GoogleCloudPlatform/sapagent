@@ -29,11 +29,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the version guest action has been handled.
-const RestartAgent = false
-
 // VersionHandler is the handler for the version command.
-func VersionHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func VersionHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPVersionCommand)
 	log.CtxLogger(ctx).Infow("VersionHandler was called. Command passed in is", "command", prototext.Format(command))
 	msg := onetime.GetAgentVersion()
@@ -44,5 +41,5 @@ func VersionHandler(ctx context.Context, command *gpb.Command, cp *metadataserve
 		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

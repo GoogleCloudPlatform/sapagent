@@ -44,12 +44,11 @@ func fakeReadCloserError(path string) (io.ReadCloser, error) {
 
 func TestInstanceMetadataHandlerHelper(t *testing.T) {
 	tests := []struct {
-		name        string
-		command     *gpb.Command
-		cp          *ipb.CloudProperties
-		trc         instancemetadata.ReadCloser
-		want        *gpb.CommandResult
-		wantRestart bool
+		name    string
+		command *gpb.Command
+		cp      *ipb.CloudProperties
+		trc     instancemetadata.ReadCloser
+		want    *gpb.CommandResult
 	}{
 		{
 			name: "NegativeTestCase",
@@ -75,7 +74,6 @@ func TestInstanceMetadataHandlerHelper(t *testing.T) {
 				Stdout:   "could not read OS release info, error: error while reading file",
 				ExitCode: int32(subcommands.ExitFailure),
 			},
-			wantRestart: false,
 		},
 	}
 
@@ -83,12 +81,9 @@ func TestInstanceMetadataHandlerHelper(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, gotRestart := instanceMetadataHandlerHelper(ctx, tc.command, protostruct.ConvertCloudPropertiesToStruct(tc.cp), tc.trc)
+			got := instanceMetadataHandlerHelper(ctx, tc.command, protostruct.ConvertCloudPropertiesToStruct(tc.cp), tc.trc)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("InstanceMetadataHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.command, tc.cp, diff)
-			}
-			if gotRestart != tc.wantRestart {
-				t.Errorf("InstanceMetadataHandler(%v, %v) = %v, want: %v", tc.command, tc.cp, gotRestart, tc.wantRestart)
 			}
 		})
 	}

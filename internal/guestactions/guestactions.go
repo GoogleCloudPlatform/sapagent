@@ -57,15 +57,9 @@ const (
 // GuestActions is a struct that holds the state for guest actions.
 type GuestActions struct {
 	CancelFunc context.CancelFunc
-	Restarter  Restarter
 }
 
-type guestActionHandler func(context.Context, *gpb.Command, *metadataserver.CloudProperties) (*gpb.CommandResult, bool)
-
-// Restarter is an interface for restarting the agent services.
-type Restarter interface {
-	Restart(cancel context.CancelFunc) context.CancelFunc
-}
+type guestActionHandler func(context.Context, *gpb.Command, *metadataserver.CloudProperties) *gpb.CommandResult
 
 var guestActionsHandlers = map[string]guestActionHandler{
 	"backint":                backinthandler.BackintHandler,
@@ -121,7 +115,7 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 	}
 }
 
-func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, requiresRestart bool, cloudProperties *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, cloudProperties *metadataserver.CloudProperties) *gpb.CommandResult {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
 	handler, ok := guestActionsHandlers[agentCommand]
 	if !ok {
@@ -132,16 +126,11 @@ func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Comm
 			Stderr:   errMsg,
 			ExitCode: int32(1),
 		}
-		return result, requiresRestart
+		return result
 	}
-	result, restart := handler(ctx, command, cloudProperties)
-	requiresRestart = requiresRestart || restart
-	if requiresRestart {
-		log.CtxLogger(ctx).Info("requiresRestart is true, calling restarter")
-		g.CancelFunc = g.Restarter.Restart(g.CancelFunc)
-	}
+	result := handler(ctx, command, cloudProperties)
 	log.CtxLogger(ctx).Debugw("received result for agent command.", "result", prototext.Format(result))
-	return result, requiresRestart
+	return result
 }
 
 func errorResult(errMsg string) *gpb.CommandResult {
@@ -154,7 +143,6 @@ func errorResult(errMsg string) *gpb.CommandResult {
 }
 
 func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *metadataserver.CloudProperties) *gpb.GuestActionResponse {
-	requiresRestart := false
 	var results []*gpb.CommandResult
 	log.CtxLogger(ctx).Debugw("received GuestActionRequest to handle", "gar", prototext.Format(gar))
 	for _, command := range gar.GetCommands() {
@@ -171,7 +159,7 @@ func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionR
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
 		case fd.Name() == agentCommand:
-			result, requiresRestart = g.handleAgentCommand(ctx, command, requiresRestart, cloudProperties)
+			result = g.handleAgentCommand(ctx, command, cloudProperties)
 			results = append(results, result)
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))

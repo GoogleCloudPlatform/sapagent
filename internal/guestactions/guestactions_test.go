@@ -321,7 +321,6 @@ func TestMessageHandler(t *testing.T) {
 
 	ga := &GuestActions{
 		CancelFunc: func() {},
-		Restarter:  &fakeRestarter{},
 	}
 
 	for _, test := range tests {
@@ -379,7 +378,6 @@ func TestStartUAPCommunication(t *testing.T) {
 	ctx := context.Background()
 	ga := &GuestActions{
 		CancelFunc: func() {},
-		Restarter:  &fakeRestarter{},
 	}
 
 	for _, tc := range tests {

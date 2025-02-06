@@ -34,11 +34,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the configure instance guest action has been handled.
-const RestartAgent = false
-
 // ConfigureInstanceHandler is the handler for configure instance command.
-func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPConfigureInstanceCommand)
 	log.CtxLogger(ctx).Debugw("Configure Instance handler called.", "command", prototext.Format(command))
 	c := &configureinstance.ConfigureInstance{
@@ -54,5 +51,5 @@ func ConfigureInstanceHandler(ctx context.Context, command *gpb.Command, cp *met
 		Stdout:   message,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

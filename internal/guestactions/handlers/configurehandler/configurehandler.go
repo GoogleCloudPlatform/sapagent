@@ -32,16 +32,13 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the configure guest action has been handled.
-const RestartAgent = true
-
 func noOpRestart(ctx context.Context) subcommands.ExitStatus {
 	log.CtxLogger(ctx).Info("Delaying restart until after we respond to UAP.")
 	return subcommands.ExitSuccess
 }
 
 // ConfigureHandler is the handler for the configure command.
-func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPConfigureCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	c := &configure.Configure{
@@ -55,5 +52,5 @@ func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *metadataser
 		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

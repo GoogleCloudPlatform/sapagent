@@ -32,15 +32,12 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the performance diagnostics guest action has been handled.
-const RestartAgent = false
-
 // PerformanceDiagnosticsHandler is the handler for the performance diagnostics command.
-func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	return runCommand(ctx, command, cp, commandlineexecutor.ExecuteCommand)
 }
 
-func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) (*gpb.CommandResult, bool) {
+func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPPerformanceDiagnosticsCommand)
 	d := &performancediagnostics.Diagnose{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), d)
@@ -50,5 +47,5 @@ func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.Cl
 		Stdout:   message,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

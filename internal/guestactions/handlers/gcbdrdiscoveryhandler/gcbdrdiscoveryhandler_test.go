@@ -45,7 +45,7 @@ func TestGCBDRDiscoveryHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := GCBDRDiscoveryHandler(context.Background(), tc.command, nil)
+			res := GCBDRDiscoveryHandler(context.Background(), tc.command, nil)
 			if res.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("GCBDRDiscoveryHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}

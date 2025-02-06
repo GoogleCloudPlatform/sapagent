@@ -40,7 +40,7 @@ import (
 const RestartAgent = false
 
 // GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.
-func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
 	d := &discovery.Discovery{}
@@ -51,7 +51,7 @@ func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metada
 			Stdout:   fmt.Sprintf("Failed to get HANA discovery applications: %v", exitStatus),
 			ExitCode: int32(exitStatus),
 		}
-		return result, RestartAgent
+		return result
 	}
 	anyApplications, err := apb.New(applications)
 	if err != nil {
@@ -62,7 +62,7 @@ func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metada
 			Stdout:   failureMessage,
 			ExitCode: int32(subcommands.ExitFailure),
 		}
-		return result, RestartAgent
+		return result
 	}
 	result := &gpb.CommandResult{
 		Command:  command,
@@ -70,5 +70,5 @@ func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metada
 		Stdout:   "HANA Applications discovered",
 		ExitCode: int32(subcommands.ExitSuccess),
 	}
-	return result, RestartAgent
+	return result
 }

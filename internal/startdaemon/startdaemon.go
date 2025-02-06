@@ -457,7 +457,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		BackOffs:                cloudmonitoring.NewDefaultBackOffIntervals(),
 		TimeSeriesCreator:       hanaMonitoringMetricClient,
 		HRC:                     sapdiscovery.HANAReplicationConfig,
-		SystemDiscovery:        systemDiscovery,
+		SystemDiscovery:         systemDiscovery,
 		ConnectionRetryInterval: 300 * time.Second,
 	})
 
@@ -469,7 +469,6 @@ func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
 	guestActionsCtx := log.SetCtx(context.Background(), "context", "UAPCommunication")
 	ga := guestactions.GuestActions{
 		CancelFunc: cancel,
-		Restarter:  d,
 	}
 	ga.StartUAPCommunication(guestActionsCtx, d.config)
 }

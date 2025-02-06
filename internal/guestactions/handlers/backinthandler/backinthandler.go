@@ -31,11 +31,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates if the agent should be restarted after the backint guest action has been handled.
-const RestartAgent = false
-
 // BackintHandler is the handler for the backint command.
-func BackintHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func BackintHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPBackintCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
 	b := &backint.Backint{}
@@ -47,5 +44,5 @@ func BackintHandler(ctx context.Context, command *gpb.Command, cp *metadataserve
 		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }

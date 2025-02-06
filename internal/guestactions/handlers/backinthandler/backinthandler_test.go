@@ -72,7 +72,7 @@ func TestBackintHandler(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, _ := BackintHandler(context.Background(), tc.command, nil)
+			res := BackintHandler(context.Background(), tc.command, nil)
 			if res.ExitCode != int32(tc.wantExitStatus) {
 				t.Errorf("BackintHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
 			}

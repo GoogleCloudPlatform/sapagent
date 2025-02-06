@@ -30,11 +30,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the hanadiskbackup guest action has been handled.
-const RestartAgent = false
-
 // HANADiskBackupHandler is the handler for the hanadiskbackup command.
-func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) (*gpb.CommandResult, bool) {
+func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
 	s := &hanadiskbackup.Snapshot{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
@@ -44,5 +41,5 @@ func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *metada
 		Stdout:   message,
 		ExitCode: int32(exitStatus),
 	}
-	return result, RestartAgent
+	return result
 }
