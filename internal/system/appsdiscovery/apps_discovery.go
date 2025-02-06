@@ -489,6 +489,10 @@ func (d *SapDiscovery) discoverNetweaver(ctx context.Context, app *sappb.SAPInst
 		return details
 	}
 	details.DBHosts = []string{dbhost}
+	// For non-HANA DBs, we assume scale-up topology.
+	if dbType != spb.SapDiscovery_Component_DatabaseProperties_HANA {
+		details.DBComponent.TopologyType = spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP
+	}
 	return details
 }
 
