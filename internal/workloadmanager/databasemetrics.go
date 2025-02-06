@@ -22,7 +22,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 const sapValidationHANASecurity = "workload.googleapis.com/sap/validation/hanasecurity"

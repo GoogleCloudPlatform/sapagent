@@ -19,8 +19,8 @@ package workloadmanager
 import (
 	"context"
 
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/configurablemetrics"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 const sapValidationCorosync = "workload.googleapis.com/sap/validation/corosync"

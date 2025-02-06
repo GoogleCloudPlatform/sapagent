@@ -27,9 +27,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

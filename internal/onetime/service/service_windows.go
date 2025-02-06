@@ -21,7 +21,7 @@ import (
 
 	"flag"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 // Service has args for service subcommands.

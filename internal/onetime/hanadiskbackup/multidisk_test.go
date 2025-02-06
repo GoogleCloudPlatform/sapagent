@@ -29,7 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 )
 
 // TODO: Replace mocks with real implementations using httptest

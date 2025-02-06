@@ -30,8 +30,8 @@ import (
 	"google.golang.org/api/googleapi"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/rest"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 )
 
 type (

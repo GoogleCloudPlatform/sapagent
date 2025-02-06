@@ -28,7 +28,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/oauth2"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/rest"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 )
 
 type (

@@ -24,7 +24,7 @@ import (
 	"github.com/kardianos/service"
 	"github.com/google/subcommands"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 var winlogger service.Logger

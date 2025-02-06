@@ -33,9 +33,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 )
 
 const (

@@ -44,10 +44,10 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/statushelper"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 

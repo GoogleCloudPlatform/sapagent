@@ -19,7 +19,7 @@ package pacemaker
 import (
 	"encoding/xml"
 
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 /*

@@ -36,9 +36,9 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring/fake"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 func TestMain(t *testing.M) {
@@ -271,7 +271,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_BoolValue{true},
+								Value: &cpb.TypedValue_BoolValue{BoolValue: true},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -302,7 +302,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_BoolValue{true},
+								Value: &cpb.TypedValue_BoolValue{BoolValue: true},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -334,7 +334,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_BoolValue{false},
+								Value: &cpb.TypedValue_BoolValue{BoolValue: false},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -365,7 +365,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_BoolValue{false},
+								Value: &cpb.TypedValue_BoolValue{BoolValue: false},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -421,7 +421,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{0.0},
+								Value: &cpb.TypedValue_DoubleValue{DoubleValue: 0.0},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -441,7 +441,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{0},
+								Value: &cpb.TypedValue_DoubleValue{DoubleValue: 0},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
@@ -473,7 +473,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{1.2},
+								Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1.2},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,

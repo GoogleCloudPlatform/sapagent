@@ -31,11 +31,11 @@ import (
 	"google.golang.org/api/compute/v0.beta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/metricevents"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/metricevents"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 )
 
 // GCEBetaInterface provides a testable interface to gcebeta.

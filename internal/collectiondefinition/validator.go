@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/proto"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"

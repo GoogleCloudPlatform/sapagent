@@ -28,8 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/api/compute/v0.beta"
 	"google.golang.org/api/googleapi"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fakehttp"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fakehttp"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 func TestMain(t *testing.M) {

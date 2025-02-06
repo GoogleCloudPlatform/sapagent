@@ -34,8 +34,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/backint/parse"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/storage"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
 )
 
 func TestMain(t *testing.M) {

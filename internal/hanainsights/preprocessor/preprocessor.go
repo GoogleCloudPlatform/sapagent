@@ -26,7 +26,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 var (

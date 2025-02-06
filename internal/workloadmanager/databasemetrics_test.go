@@ -32,9 +32,9 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/ruleengine"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
 
-	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
+	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
 )
 

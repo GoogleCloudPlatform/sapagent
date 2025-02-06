@@ -27,7 +27,7 @@ import (
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

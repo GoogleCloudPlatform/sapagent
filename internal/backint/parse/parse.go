@@ -30,7 +30,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 // BackintRFC3339Millis is a reference for timestamps to Backint specifications.

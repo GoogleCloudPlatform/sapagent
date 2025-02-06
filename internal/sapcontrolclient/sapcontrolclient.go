@@ -22,7 +22,7 @@ import (
 	"fmt"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/soap"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 type (

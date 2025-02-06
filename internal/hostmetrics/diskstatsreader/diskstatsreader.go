@@ -26,8 +26,8 @@ import (
 
 	"golang.org/x/exp/maps"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	statspb "github.com/GoogleCloudPlatform/sapagent/protos/stats"

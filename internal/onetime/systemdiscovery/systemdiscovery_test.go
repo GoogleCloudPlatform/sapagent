@@ -32,8 +32,8 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -45,7 +45,7 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	sappb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
-	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log/fake"
+	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log/fake"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 

@@ -29,8 +29,8 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/file/v1"
 	"google.golang.org/protobuf/testing/protocmp"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"

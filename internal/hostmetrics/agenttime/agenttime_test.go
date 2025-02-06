@@ -23,7 +23,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/google/go-cmp/cmp"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 func TestMain(t *testing.M) {

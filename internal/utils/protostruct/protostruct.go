@@ -19,7 +19,7 @@ package protostruct
 
 import (
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 )
 
 // ConvertCloudPropertiesToStruct converts Cloud Properties proto to CloudProperties struct.

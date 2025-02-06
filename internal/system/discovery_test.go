@@ -43,9 +43,9 @@ import (
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	instancepb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/fake"
-	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log/fake"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	wlmfake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
+	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log/fake"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )

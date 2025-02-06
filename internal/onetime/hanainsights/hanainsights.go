@@ -34,8 +34,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	rpb "github.com/GoogleCloudPlatform/sapagent/protos/hanainsights"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 // HANAInsights has args for hanainsights subcommands.

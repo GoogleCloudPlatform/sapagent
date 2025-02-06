@@ -25,8 +25,8 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 )

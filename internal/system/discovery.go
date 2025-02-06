@@ -36,8 +36,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"

@@ -33,10 +33,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cfgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/recovery"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 )
 
 const (

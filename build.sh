@@ -56,7 +56,7 @@ if [ "${COMPILE_PROTOS}" == "TRUE" ] && [ ! -d "workloadagentplatform" ]; then
     # this is the hash of the workloadagentplatform submodule that has the
     # sharedprotos directory, should match the hash for the version in go.mod
     # to get the hash run: go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-    git checkout c271b7e1b5adb90dff344c969bb44ee1133d0f8c
+    git checkout f24f600738502969a69bc4a3edb1c475289c18fb
     cd ..
     # replace the proto imports in the platform that reference the platform
     find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +

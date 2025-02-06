@@ -38,7 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 // HanaChangeDiskType has args for changedisktype subcommands.

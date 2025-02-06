@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/zieckey/goini"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 type (

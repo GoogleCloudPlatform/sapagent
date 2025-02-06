@@ -30,7 +30,7 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/configurablemetrics"
 
 	"github.com/google/go-cmp/cmp"

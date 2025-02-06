@@ -62,8 +62,8 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/gce/metadataserver"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 const cn = "google_cloud_sap_agent"

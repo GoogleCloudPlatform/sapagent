@@ -20,7 +20,7 @@ import (
 	"context"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
 const sapValidationPacemaker = "workload.googleapis.com/sap/validation/pacemaker"

@@ -28,11 +28,11 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/googleapis/gax-go/v2"
 	"google.golang.org/api/iterator"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/metricsformatter"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"

@@ -27,8 +27,8 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/log"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/integration/common/shared/timeseries"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 
 	mpb "google.golang.org/genproto/googleapis/api/metric"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
