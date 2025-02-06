@@ -493,7 +493,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					Points: []*mrpb.Point{
 						{
 							Value: &cpb.TypedValue{
-								Value: &cpb.TypedValue_DoubleValue{1000},
+								Value: &cpb.TypedValue_DoubleValue{DoubleValue: 1000},
 							},
 							Interval: &cpb.TimeInterval{
 								StartTime: fakeTimestamp,
