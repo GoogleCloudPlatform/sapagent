@@ -266,10 +266,16 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"saphana_interleave":                "",
 		"saphanatopology_clone_node_max":    "",
 		"saphanatopology_interleave":        "",
+		"ascs_automatic_recover":            "",
 		"ascs_failure_timeout":              "",
 		"ascs_migration_threshold":          "",
 		"ascs_resource_stickiness":          "",
+		"ascs_monitor_interval":             "",
+		"ascs_monitor_timeout":              "",
+		"ers_automatic_recover":             "",
 		"is_ers":                            "",
+		"ers_monitor_interval":              "",
+		"ers_monitor_timeout":               "",
 		"op_timeout":                        "",
 	}
 }
@@ -317,10 +323,16 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"saphana_interleave":                 "true",
 		"saphanatopology_clone_node_max":     "1",
 		"saphanatopology_interleave":         "true",
+		"ascs_automatic_recover":             "",
 		"ascs_failure_timeout":               "",
 		"ascs_migration_threshold":           "",
 		"ascs_resource_stickiness":           "",
+		"ascs_monitor_interval":              "",
+		"ascs_monitor_timeout":               "",
+		"ers_automatic_recover":              "",
 		"is_ers":                             "",
+		"ers_monitor_interval":               "",
+		"ers_monitor_timeout":                "",
 		"op_timeout":                         "600",
 		"stonith_enabled":                    "true",
 		"stonith_timeout":                    "300",
@@ -354,10 +366,16 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ascs_instance":                      "",
 		"ers_instance":                       "",
 		"enqueue_server":                     "",
+		"ascs_automatic_recover":             "false",
 		"ascs_failure_timeout":               "60",
 		"ascs_migration_threshold":           "3",
 		"ascs_resource_stickiness":           "5000",
+		"ascs_monitor_interval":              "20",
+		"ascs_monitor_timeout":               "60",
+		"ers_automatic_recover":              "false",
 		"is_ers":                             "true",
+		"ers_monitor_interval":               "20",
+		"ers_monitor_timeout":                "60",
 		"op_timeout":                         "600",
 		"stonith_enabled":                    "true",
 		"stonith_timeout":                    "300",
@@ -401,10 +419,16 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"saphana_interleave":                "",
 		"saphanatopology_clone_node_max":    "",
 		"saphanatopology_interleave":        "",
+		"ascs_automatic_recover":            "",
 		"ascs_failure_timeout":              "",
 		"ascs_migration_threshold":          "",
 		"ascs_resource_stickiness":          "",
+		"ascs_monitor_interval":             "",
+		"ascs_monitor_timeout":              "",
+		"ers_automatic_recover":             "",
 		"is_ers":                            "",
+		"ers_monitor_interval":              "",
+		"ers_monitor_timeout":               "",
 		"op_timeout":                        "",
 	}
 }
@@ -2014,6 +2038,30 @@ systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/pr
 }
 
 func TestSetASCSConfigMetrics(t *testing.T) {
+	validInstanceAttributes := ClusterPropertySet{
+		NVPairs: []NVPair{
+			{Name: "AUTOMATIC_RECOVER", Value: "false"},
+		},
+	}
+	validMetaAttributes := ClusterPropertySet{
+		NVPairs: []NVPair{
+			{Name: "failure-timeout", Value: "60"},
+			{Name: "migration-threshold", Value: "3"},
+			{Name: "resource-stickiness", Value: "5000"},
+		},
+	}
+	validOperations := []Op{
+		{Name: "monitor", Interval: "20", Timeout: "60"},
+	}
+	wantEmpty := map[string]string{
+		"ascs_automatic_recover":   "",
+		"ascs_failure_timeout":     "",
+		"ascs_migration_threshold": "",
+		"ascs_resource_stickiness": "",
+		"ascs_monitor_interval":    "",
+		"ascs_monitor_timeout":     "",
+	}
+
 	tests := []struct {
 		name  string
 		group Group
@@ -2022,40 +2070,33 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 		{
 			name:  "ZeroValueGroup",
 			group: Group{},
-			want: map[string]string{
-				"ascs_failure_timeout":     "",
-				"ascs_migration_threshold": "",
-				"ascs_resource_stickiness": "",
-			},
+			want:  wantEmpty,
 		},
 		{
 			name: "NoSAPInstanceType",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
-						ClassType: "NotSAPInstance",
-						MetaAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "failure-timeout", Value: "60"},
-								{Name: "migration-threshold", Value: "3"},
-								{Name: "resource-stickiness", Value: "5000"},
-							},
-						},
+						ClassType:          "NotSAPInstance",
+						InstanceAttributes: validInstanceAttributes,
+						MetaAttributes:     validMetaAttributes,
+						Operations:         validOperations,
 					},
 				},
 			},
-			want: map[string]string{
-				"ascs_failure_timeout":     "",
-				"ascs_migration_threshold": "",
-				"ascs_resource_stickiness": "",
-			},
+			want: wantEmpty,
 		},
 		{
-			name: "MetadataKeyMismatch",
+			name: "KeyMismatch",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
 						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
+							},
+						},
 						MetaAttributes: ClusterPropertySet{
 							NVPairs: []NVPair{
 								{Name: "not-failure-timeout", Value: "60"},
@@ -2063,35 +2104,33 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 								{Name: "not-resource-stickiness", Value: "5000"},
 							},
 						},
+						Operations: []Op{
+							{Name: "not-monitor", Interval: "20", Timeout: "60"},
+						},
 					},
 				},
 			},
-			want: map[string]string{
-				"ascs_failure_timeout":     "",
-				"ascs_migration_threshold": "",
-				"ascs_resource_stickiness": "",
-			},
+			want: wantEmpty,
 		},
 		{
 			name: "Success",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
-						ClassType: "SAPInstance",
-						MetaAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "failure-timeout", Value: "60"},
-								{Name: "migration-threshold", Value: "3"},
-								{Name: "resource-stickiness", Value: "5000"},
-							},
-						},
+						ClassType:          "SAPInstance",
+						InstanceAttributes: validInstanceAttributes,
+						MetaAttributes:     validMetaAttributes,
+						Operations:         validOperations,
 					},
 				},
 			},
 			want: map[string]string{
+				"ascs_automatic_recover":   "false",
 				"ascs_failure_timeout":     "60",
 				"ascs_migration_threshold": "3",
 				"ascs_resource_stickiness": "5000",
+				"ascs_monitor_interval":    "20",
+				"ascs_monitor_timeout":     "60",
 			},
 		},
 	}
@@ -2108,6 +2147,22 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 }
 
 func TestSetERSConfigMetrics(t *testing.T) {
+	validInstanceAttributes := ClusterPropertySet{
+		NVPairs: []NVPair{
+			{Name: "AUTOMATIC_RECOVER", Value: "false"},
+			{Name: "IS_ERS", Value: "true"},
+		},
+	}
+	validOperations := []Op{
+		{Name: "monitor", Interval: "20", Timeout: "60"},
+	}
+	wantEmpty := map[string]string{
+		"ers_automatic_recover": "",
+		"is_ers":                "",
+		"ers_monitor_interval":  "",
+		"ers_monitor_timeout":   "",
+	}
+
 	tests := []struct {
 		name  string
 		group Group
@@ -2116,62 +2171,57 @@ func TestSetERSConfigMetrics(t *testing.T) {
 		{
 			name:  "ZeroValueGroup",
 			group: Group{},
-			want: map[string]string{
-				"is_ers": "",
-			},
+			want:  wantEmpty,
 		},
 		{
 			name: "NoSAPInstanceType",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
-						ClassType: "NotSAPInstance",
-						InstanceAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "IS_ERS", Value: "true"},
-							},
-						},
+						ClassType:          "NotSAPInstance",
+						InstanceAttributes: validInstanceAttributes,
+						Operations:         validOperations,
 					},
 				},
 			},
-			want: map[string]string{
-				"is_ers": "",
-			},
+			want: wantEmpty,
 		},
 		{
-			name: "MetadataKeyMismatch",
+			name: "KeyMismatch",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
 						ClassType: "SAPInstance",
 						InstanceAttributes: ClusterPropertySet{
 							NVPairs: []NVPair{
+								{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
 								{Name: "not-IS_ERS", Value: "true"},
 							},
+						},
+						Operations: []Op{
+							{Name: "not-monitor", Interval: "20", Timeout: "60"},
 						},
 					},
 				},
 			},
-			want: map[string]string{
-				"is_ers": "",
-			},
+			want: wantEmpty,
 		},
 		{
 			name: "Success",
 			group: Group{
 				Primitives: []PrimitiveClass{
 					PrimitiveClass{
-						ClassType: "SAPInstance",
-						InstanceAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "IS_ERS", Value: "true"},
-							},
-						},
+						ClassType:          "SAPInstance",
+						InstanceAttributes: validInstanceAttributes,
+						Operations:         validOperations,
 					},
 				},
 			},
 			want: map[string]string{
-				"is_ers": "true",
+				"ers_automatic_recover": "false",
+				"is_ers":                "true",
+				"ers_monitor_interval":  "20",
+				"ers_monitor_timeout":   "60",
 			},
 		},
 	}

@@ -112,10 +112,16 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ascs_instance":                      true,
 		"ers_instance":                       true,
 		"enqueue_server":                     true,
+		"ascs_automatic_recover":             true,
 		"ascs_failure_timeout":               true,
 		"ascs_migration_threshold":           true,
 		"ascs_resource_stickiness":           true,
+		"ascs_monitor_interval":              true,
+		"ascs_monitor_timeout":               true,
+		"ers_automatic_recover":              true,
 		"is_ers":                             true,
+		"ers_monitor_interval":               true,
+		"ers_monitor_timeout":                true,
 		"op_timeout":                         true,
 		"stonith_enabled":                    true,
 		"stonith_timeout":                    true,
@@ -691,23 +697,36 @@ func collectEnqueueServer(ctx context.Context, labels map[string]string, exec co
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
 func setASCSConfigMetrics(labels map[string]string, group Group) {
+	labels["ascs_automatic_recover"] = ""
 	labels["ascs_failure_timeout"] = ""
 	labels["ascs_migration_threshold"] = ""
 	labels["ascs_resource_stickiness"] = ""
-	metaAttributesKeys := map[string]bool{
-		"failure-timeout":     true,
-		"migration-threshold": true,
-		"resource-stickiness": true,
+	labels["ascs_monitor_interval"] = ""
+	labels["ascs_monitor_timeout"] = ""
+	metaAttributesKeys := map[string]string{
+		"failure-timeout":     "ascs_failure_timeout",
+		"migration-threshold": "ascs_migration_threshold",
+		"resource-stickiness": "ascs_resource_stickiness",
 	}
 
 	for _, primitive := range group.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
+		for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+			if nvPair.Name == "AUTOMATIC_RECOVER" {
+				labels["ascs_automatic_recover"] = nvPair.Value
+			}
+		}
 		for _, nvPair := range primitive.MetaAttributes.NVPairs {
-			if _, ok := metaAttributesKeys[nvPair.Name]; ok {
-				key := "ascs_" + strings.ReplaceAll(nvPair.Name, "-", "_")
+			if key, ok := metaAttributesKeys[nvPair.Name]; ok {
 				labels[key] = nvPair.Value
+			}
+		}
+		for _, op := range primitive.Operations {
+			if op.Name == "monitor" {
+				labels["ascs_monitor_interval"] = op.Interval
+				labels["ascs_monitor_timeout"] = op.Timeout
 			}
 		}
 	}
@@ -715,14 +734,28 @@ func setASCSConfigMetrics(labels map[string]string, group Group) {
 
 // setERSConfigMetrics sets the metrics collected from the ERS resource group.
 func setERSConfigMetrics(labels map[string]string, group Group) {
+	labels["ers_automatic_recover"] = ""
 	labels["is_ers"] = ""
+	labels["ers_monitor_interval"] = ""
+	labels["ers_monitor_timeout"] = ""
+	instanceAttributes := map[string]string{
+		"AUTOMATIC_RECOVER": "ers_automatic_recover",
+		"IS_ERS":            "is_ers",
+	}
+
 	for _, primitive := range group.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
 		for _, nvPair := range primitive.InstanceAttributes.NVPairs {
-			if nvPair.Name == "IS_ERS" {
-				labels["is_ers"] = nvPair.Value
+			if key, ok := instanceAttributes[nvPair.Name]; ok {
+				labels[key] = nvPair.Value
+			}
+		}
+		for _, op := range primitive.Operations {
+			if op.Name == "monitor" {
+				labels["ers_monitor_interval"] = op.Interval
+				labels["ers_monitor_timeout"] = op.Timeout
 			}
 		}
 	}

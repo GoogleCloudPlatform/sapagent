@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 20,
+    "version": 21,
     "validation_system": {
       "system_metrics": [
         {
@@ -1111,6 +1111,54 @@
               "min_version": "3.7"
             },
             "value": "IS_ERS"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_automatic_recover",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_AUTOMATIC_RECOVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_automatic_recover",
+              "min_version": "3.7"
+            },
+            "value": "ERS_AUTOMATIC_RECOVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_MONITOR_TIMEOUT"
           }
         ],
         "op_option_metrics": [
