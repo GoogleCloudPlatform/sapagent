@@ -116,9 +116,6 @@ func TestExecute(t *testing.T) {
 				Feature: "host_metrics",
 				Enable:  true,
 				Path:    path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus {
-					return subcommands.ExitSuccess
-				},
 			},
 			want: subcommands.ExitSuccess,
 			args: []any{
@@ -373,9 +370,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable3",
 			c: &Configure{
-				Setting:      "log_to_cloud",
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Setting: "log_to_cloud",
+				Path:    t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{},
 			newConfig: &cpb.Configuration{},
@@ -385,9 +381,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfFeature|Setting",
 			c: &Configure{
-				Enable:       true,
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable: true,
+				Path:   t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{
 				ProvideSapHostAgentMetrics:  &wpb.BoolValue{Value: true},
@@ -407,9 +402,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfEnable|Disable2",
 			c: &Configure{
-				Setting:      "log_to_cloud",
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Setting: "log_to_cloud",
+				Path:    t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{},
 			newConfig: &cpb.Configuration{},
@@ -419,9 +413,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AbsenceOfFeature|Setting",
 			c: &Configure{
-				Enable:       true,
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable: true,
+				Path:   t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{},
 			newConfig: &cpb.Configuration{},
@@ -445,9 +438,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "InvalidLogConfig",
 			c: &Configure{
-				LogLevel:     "warning",
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				LogLevel: "warning",
+				Path:     t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,
@@ -463,9 +455,8 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "ValidLogConfig",
 			c: &Configure{
-				LogLevel:     "warn",
-				Path:         t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				LogLevel: "warn",
+				Path:     t.TempDir() + "/configuration.json",
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   cpb.Configuration_INFO,
@@ -502,9 +493,6 @@ func TestModifyConfig(t *testing.T) {
 				Setting: "log_to_cloud",
 				Disable: true,
 				Path:    t.TempDir() + "/configuration.json",
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus {
-					return subcommands.ExitSuccess
-				},
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,
@@ -537,10 +525,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableHostMetrics",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "host_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "host_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: false},
@@ -558,10 +545,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableHostMetrics",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "host_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "host_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
@@ -579,10 +565,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableProcessMetrics",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "process_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "process_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 3,
@@ -604,10 +589,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableProcessMetrics",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "process_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "process_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -633,7 +617,6 @@ func TestModifyConfig(t *testing.T) {
 				FastMetricsFrequency: 30,
 				SlowMetricsFrequency: 50,
 				Path:                 path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -661,7 +644,6 @@ func TestModifyConfig(t *testing.T) {
 				FastMetricsFrequency: -30,
 				SlowMetricsFrequency: 50,
 				Path:                 path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -689,7 +671,6 @@ func TestModifyConfig(t *testing.T) {
 				FastMetricsFrequency: 0,
 				SlowMetricsFrequency: 0,
 				Path:                 path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -717,7 +698,6 @@ func TestModifyConfig(t *testing.T) {
 				FastMetricsFrequency: 30,
 				SlowMetricsFrequency: -50,
 				Path:                 path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:         func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -741,11 +721,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "AddSkipMetrics",
 			c: &Configure{
-				Feature:      "process_metrics",
-				SkipMetrics:  "/sap/networkstats/rtt, /sap/networkstats/rcv_rtt, /sap/hana/utilization",
-				Add:          true,
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Feature:     "process_metrics",
+				SkipMetrics: "/sap/networkstats/rtt, /sap/networkstats/rcv_rtt, /sap/hana/utilization",
+				Add:         true,
+				Path:        path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -777,11 +756,10 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "RemoveSkipMetrics",
 			c: &Configure{
-				Feature:      "process_metrics",
-				SkipMetrics:  "/sap/networkstats/rtt",
-				Remove:       true,
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Feature:     "process_metrics",
+				SkipMetrics: "/sap/networkstats/rtt",
+				Remove:      true,
+				Path:        path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -808,10 +786,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableWorkloadValidation",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "workload_evaluation",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "workload_evaluation",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -833,10 +810,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableWorkloadValidation",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "workload_evaluation",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "workload_evaluation",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -862,7 +838,6 @@ func TestModifyConfig(t *testing.T) {
 				ValidationMetricsFrequency: 30,
 				DbFrequency:                50,
 				Path:                       path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -892,7 +867,6 @@ func TestModifyConfig(t *testing.T) {
 				ValidationMetricsFrequency: -30,
 				DbFrequency:                50,
 				Path:                       path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -920,7 +894,6 @@ func TestModifyConfig(t *testing.T) {
 				ValidationMetricsFrequency: 30,
 				DbFrequency:                -50,
 				Path:                       path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -948,7 +921,6 @@ func TestModifyConfig(t *testing.T) {
 				ValidationMetricsFrequency: 0,
 				DbFrequency:                0,
 				Path:                       path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:               func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -972,10 +944,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableSapDiscovery",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "sap_discovery",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "sap_discovery",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -997,10 +968,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableSapDiscovery",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "sap_discovery",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "sap_discovery",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1022,10 +992,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableAgentMetrics",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "agent_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "agent_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1047,10 +1016,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableAgentMetrics",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "agent_metrics",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "agent_metrics",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1077,7 +1045,6 @@ func TestModifyConfig(t *testing.T) {
 				AgentHealthFrequency:  20,
 				HeartbeatFrequency:    10,
 				Path:                  path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1110,7 +1077,6 @@ func TestModifyConfig(t *testing.T) {
 				AgentHealthFrequency:  20,
 				HeartbeatFrequency:    10,
 				Path:                  path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1139,7 +1105,6 @@ func TestModifyConfig(t *testing.T) {
 				AgentHealthFrequency:  -20,
 				HeartbeatFrequency:    10,
 				Path:                  path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1168,7 +1133,6 @@ func TestModifyConfig(t *testing.T) {
 				AgentHealthFrequency:  20,
 				HeartbeatFrequency:    -10,
 				Path:                  path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1197,7 +1161,6 @@ func TestModifyConfig(t *testing.T) {
 				AgentHealthFrequency:  0,
 				HeartbeatFrequency:    0,
 				Path:                  path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:          func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel: 2,
@@ -1221,10 +1184,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "EnableHANAMonitoring",
 			c: &Configure{
-				Enable:       true,
-				Feature:      "hana_monitoring",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Enable:  true,
+				Feature: "hana_monitoring",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:                    2,
@@ -1242,10 +1204,9 @@ func TestModifyConfig(t *testing.T) {
 		{
 			name: "DisableHANAMonitoring",
 			c: &Configure{
-				Disable:      true,
-				Feature:      "hana_monitoring",
-				Path:         path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent: func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
+				Disable: true,
+				Feature: "hana_monitoring",
+				Path:    path.Join(t.TempDir(), "/configuration.json"),
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:                    2,
@@ -1267,7 +1228,6 @@ func TestModifyConfig(t *testing.T) {
 				SampleIntervalSec: 2,
 				QueryTimeoutSec:   10,
 				Path:              path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:      func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:                    2,
@@ -1292,7 +1252,6 @@ func TestModifyConfig(t *testing.T) {
 				Feature:           "hana_monitoring",
 				SampleIntervalSec: -3,
 				Path:              path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:      func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,
@@ -1319,7 +1278,6 @@ func TestModifyConfig(t *testing.T) {
 				Feature:         "hana_monitoring",
 				QueryTimeoutSec: -10,
 				Path:            path.Join(t.TempDir(), "/configuration.json"),
-				RestartAgent:    func(ctx context.Context) subcommands.ExitStatus { return subcommands.ExitSuccess },
 			},
 			oldConfig: &cpb.Configuration{
 				LogLevel:   2,

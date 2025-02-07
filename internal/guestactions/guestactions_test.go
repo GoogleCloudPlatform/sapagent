@@ -33,12 +33,6 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-type fakeRestarter struct{}
-
-func (f *fakeRestarter) Restart(cancel context.CancelFunc) context.CancelFunc {
-	return cancel
-}
-
 func TestHandleShellCommand(t *testing.T) {
 	tests := []struct {
 		name    string

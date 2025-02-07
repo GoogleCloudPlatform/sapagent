@@ -28,49 +28,43 @@ import (
 	"strings"
 
 	"flag"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/safetext/shsprintf"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/restart"
+	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
-
-	wpb "google.golang.org/protobuf/types/known/wrapperspb"
-	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 )
 
 // Configure has args for backint subcommands.
 type Configure struct {
-	Feature                    string       `json:"feature"`
-	LogLevel                   string       `json:"loglevel"`
-	Setting                    string       `json:"setting"`
-	Path                       string       `json:"path"`
-	SkipMetrics                string       `json:"process_metrics_to_skip"`
-	ValidationMetricsFrequency int64        `json:"workload_evaluation_metrics_frequency,string"`
-	DbFrequency                int64        `json:"workload_evaluation_db_metrics_frequency,string"`
-	FastMetricsFrequency       int64        `json:"process_metrics_frequency,string"`
-	SlowMetricsFrequency       int64        `json:"slow_process_metrics_frequency,string"`
-	AgentMetricsFrequency      int64        `json:"agent_metrics_frequency,string"`
-	AgentHealthFrequency       int64        `json:"agent_health_frequency,string"`
-	HeartbeatFrequency         int64        `json:"heartbeat_frequency,string"`
-	SampleIntervalSec          int64        `json:"sample_interval_sec,string"`
-	QueryTimeoutSec            int64        `json:"query_timeout_sec,string"`
-	Help                       bool         `json:"help,string"`
-	Enable                     bool         `json:"enable,string"`
-	Disable                    bool         `json:"disable,string"`
-	Showall                    bool         `json:"showall,string"`
-	Add                        bool         `json:"add,string"`
-	Remove                     bool         `json:"remove,string"`
-	RestartAgent               RestartAgent `json:"-"`
-	LogPath                    string       `json:"log-path"`
+	Feature                    string `json:"feature"`
+	LogLevel                   string `json:"loglevel"`
+	Setting                    string `json:"setting"`
+	Path                       string `json:"path"`
+	SkipMetrics                string `json:"process_metrics_to_skip"`
+	ValidationMetricsFrequency int64  `json:"workload_evaluation_metrics_frequency,string"`
+	DbFrequency                int64  `json:"workload_evaluation_db_metrics_frequency,string"`
+	FastMetricsFrequency       int64  `json:"process_metrics_frequency,string"`
+	SlowMetricsFrequency       int64  `json:"slow_process_metrics_frequency,string"`
+	AgentMetricsFrequency      int64  `json:"agent_metrics_frequency,string"`
+	AgentHealthFrequency       int64  `json:"agent_health_frequency,string"`
+	HeartbeatFrequency         int64  `json:"heartbeat_frequency,string"`
+	SampleIntervalSec          int64  `json:"sample_interval_sec,string"`
+	QueryTimeoutSec            int64  `json:"query_timeout_sec,string"`
+	Help                       bool   `json:"help,string"`
+	Enable                     bool   `json:"enable,string"`
+	Disable                    bool   `json:"disable,string"`
+	Showall                    bool   `json:"showall,string"`
+	Add                        bool   `json:"add,string"`
+	Remove                     bool   `json:"remove,string"`
+	LogPath                    string `json:"log-path"`
 	usageFunc                  func()
 	oteLogger                  *onetime.OTELogger
 }
-
-// RestartAgent abstracts restart functions(windows & linux) for testability.
-type RestartAgent func(context.Context) subcommands.ExitStatus
 
 const (
 	hostMetrics        = "host_metrics"
@@ -172,16 +166,9 @@ func (c *Configure) Run(ctx context.Context, runOpts *onetime.RunOptions, args .
 		return c.showFeatures(ctx)
 	}
 
-	if c.RestartAgent == nil {
-		c.RestartAgent = restart.LinuxRestartAgent
-		if runtime.GOOS == "windows" {
-			c.RestartAgent = restart.WindowsRestartAgent
-		}
-	}
-
 	newCfg, res := c.modifyConfig(ctx, os.ReadFile)
 	if res == subcommands.ExitSuccess {
-		c.oteLogger.LogMessageToConsole("Successfully modified configuration.json and restarted the agent.")
+		c.oteLogger.LogMessageToConsole("Successfully modified configuration.json.")
 	}
 	return newCfg, res
 }
@@ -264,7 +251,7 @@ func (c *Configure) showFeatures(ctx context.Context) (string, subcommands.ExitS
 	return output, subcommands.ExitSuccess
 }
 
-// modifyConfig takes user input and enables/disables features in configuration.json and restarts the agent.
+// modifyConfig takes user input and enables/disables features in configuration.json.
 func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadConfigFile) (string, subcommands.ExitStatus) {
 	log.Logger.Infow("Beginning execution of features command")
 	config, _ := configuration.Read(c.Path, read)
@@ -322,7 +309,7 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 		c.oteLogger.LogErrorToFileAndConsole(ctx, "Unable to write configuration.json", err)
 		return newCfg, subcommands.ExitUsageError
 	}
-	return newCfg, c.RestartAgent(ctx)
+	return newCfg, subcommands.ExitSuccess
 }
 
 // modifyFeature takes user input and modifies fields related to a particular feature, which could simply

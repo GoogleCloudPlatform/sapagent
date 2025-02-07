@@ -36,9 +36,6 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// RestartAgent indicates that the agent should be restarted after the gcbdr-discovery guest action has been handled.
-const RestartAgent = false
-
 // GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.
 func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)

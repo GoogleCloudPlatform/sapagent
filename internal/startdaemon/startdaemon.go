@@ -668,7 +668,7 @@ func (d *Daemon) startConfigPollerRoutine(cancel context.CancelFunc) {
 	pollConfigFileRoutine.StartRoutine(configPollerCtx)
 }
 
-// Restart restarts the daemon services and makes Daemon implement Restarter.
+// Restart restarts the daemon services.
 func (d *Daemon) Restart(cancel context.CancelFunc) context.CancelFunc {
 	log.Logger.Info("Restarting daemon services")
 	cancel()

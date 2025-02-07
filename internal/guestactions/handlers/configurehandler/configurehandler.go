@@ -20,7 +20,6 @@ package configurehandler
 import (
 	"context"
 
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -32,18 +31,11 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-func noOpRestart(ctx context.Context) subcommands.ExitStatus {
-	log.CtxLogger(ctx).Info("Delaying restart until after we respond to UAP.")
-	return subcommands.ExitSuccess
-}
-
 // ConfigureHandler is the handler for the configure command.
 func ConfigureHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPConfigureCommand)
 	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
-	c := &configure.Configure{
-		RestartAgent: noOpRestart,
-	}
+	c := &configure.Configure{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), c)
 	msg, exitStatus := c.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
 	log.CtxLogger(ctx).Debugw("handled command result -", "msg", msg, "exitStatus", exitStatus)
