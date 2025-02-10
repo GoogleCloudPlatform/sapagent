@@ -277,6 +277,18 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ers_monitor_interval":              "",
 		"ers_monitor_timeout":               "",
 		"op_timeout":                        "",
+		"healthcheck_monitor_interval":      "",
+		"healthcheck_monitor_timeout":       "",
+		"ilb_monitor_interval":              "",
+		"ilb_monitor_timeout":               "",
+		"ascs_healthcheck_monitor_interval": "",
+		"ascs_healthcheck_monitor_timeout":  "",
+		"ascs_ilb_monitor_interval":         "",
+		"ascs_ilb_monitor_timeout":          "",
+		"ers_healthcheck_monitor_interval":  "",
+		"ers_healthcheck_monitor_timeout":   "",
+		"ers_ilb_monitor_interval":          "",
+		"ers_ilb_monitor_timeout":           "",
 	}
 }
 
@@ -336,6 +348,18 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"op_timeout":                         "600",
 		"stonith_enabled":                    "true",
 		"stonith_timeout":                    "300",
+		"healthcheck_monitor_interval":       "10",
+		"healthcheck_monitor_timeout":        "20",
+		"ilb_monitor_interval":               "3600",
+		"ilb_monitor_timeout":                "60",
+		"ascs_healthcheck_monitor_interval":  "",
+		"ascs_healthcheck_monitor_timeout":   "",
+		"ascs_ilb_monitor_interval":          "",
+		"ascs_ilb_monitor_timeout":           "",
+		"ers_healthcheck_monitor_interval":   "",
+		"ers_healthcheck_monitor_timeout":    "",
+		"ers_ilb_monitor_interval":           "",
+		"ers_ilb_monitor_timeout":            "",
 	}
 }
 
@@ -388,6 +412,18 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"saphana_interleave":                 "true",
 		"saphanatopology_clone_node_max":     "1",
 		"saphanatopology_interleave":         "true",
+		"healthcheck_monitor_interval":       "",
+		"healthcheck_monitor_timeout":        "",
+		"ilb_monitor_interval":               "",
+		"ilb_monitor_timeout":                "",
+		"ascs_healthcheck_monitor_interval":  "10",
+		"ascs_healthcheck_monitor_timeout":   "20",
+		"ascs_ilb_monitor_interval":          "3600",
+		"ascs_ilb_monitor_timeout":           "60",
+		"ers_healthcheck_monitor_interval":   "10",
+		"ers_healthcheck_monitor_timeout":    "20",
+		"ers_ilb_monitor_interval":           "3600",
+		"ers_ilb_monitor_timeout":            "60",
 	}
 }
 
@@ -430,6 +466,18 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ers_monitor_interval":              "",
 		"ers_monitor_timeout":               "",
 		"op_timeout":                        "",
+		"healthcheck_monitor_interval":      "",
+		"healthcheck_monitor_timeout":       "",
+		"ilb_monitor_interval":              "",
+		"ilb_monitor_timeout":               "",
+		"ascs_healthcheck_monitor_interval": "",
+		"ascs_healthcheck_monitor_timeout":  "",
+		"ascs_ilb_monitor_interval":         "",
+		"ascs_ilb_monitor_timeout":          "",
+		"ers_healthcheck_monitor_interval":  "",
+		"ers_healthcheck_monitor_timeout":   "",
+		"ers_ilb_monitor_interval":          "",
+		"ers_ilb_monitor_timeout":           "",
 	}
 }
 
@@ -2569,6 +2617,129 @@ func TestSetPacemakerHANATopologyCloneAttrs(t *testing.T) {
 			setPacemakerHANATopologyCloneAttrs(got, test.clones)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerHANATopologyCloneAttrs() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
+	tests := []struct {
+		name   string
+		groups []Group
+		want   map[string]string
+	}{
+		{
+			name:   "NoGroups",
+			groups: []Group{},
+			want: map[string]string{
+				"healthcheck_monitor_interval":      "",
+				"healthcheck_monitor_timeout":       "",
+				"ilb_monitor_interval":              "",
+				"ilb_monitor_timeout":               "",
+				"ascs_healthcheck_monitor_interval": "",
+				"ascs_healthcheck_monitor_timeout":  "",
+				"ascs_ilb_monitor_interval":         "",
+				"ascs_ilb_monitor_timeout":          "",
+				"ers_healthcheck_monitor_interval":  "",
+				"ers_healthcheck_monitor_timeout":   "",
+				"ers_ilb_monitor_interval":          "",
+				"ers_ilb_monitor_timeout":           "",
+			},
+		},
+		{
+			name: "DatabaseSettings",
+			groups: []Group{
+				Group{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "haproxy",
+							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"healthcheck_monitor_interval":      "10",
+				"healthcheck_monitor_timeout":       "20",
+				"ilb_monitor_interval":              "3600",
+				"ilb_monitor_timeout":               "60",
+				"ascs_healthcheck_monitor_interval": "",
+				"ascs_healthcheck_monitor_timeout":  "",
+				"ascs_ilb_monitor_interval":         "",
+				"ascs_ilb_monitor_timeout":          "",
+				"ers_healthcheck_monitor_interval":  "",
+				"ers_healthcheck_monitor_timeout":   "",
+				"ers_ilb_monitor_interval":          "",
+				"ers_ilb_monitor_timeout":           "",
+			},
+		},
+		{
+			name: "CentralServicesSettings",
+			groups: []Group{
+				Group{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "anything",
+							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
+						},
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS01_alidascs01"}},
+							},
+						},
+					},
+				},
+				Group{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "anything",
+							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
+						},
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS01_aliders01"}},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"healthcheck_monitor_interval":      "",
+				"healthcheck_monitor_timeout":       "",
+				"ilb_monitor_interval":              "",
+				"ilb_monitor_timeout":               "",
+				"ascs_healthcheck_monitor_interval": "10",
+				"ascs_healthcheck_monitor_timeout":  "20",
+				"ascs_ilb_monitor_interval":         "3600",
+				"ascs_ilb_monitor_timeout":          "60",
+				"ers_healthcheck_monitor_interval":  "10",
+				"ers_healthcheck_monitor_timeout":   "20",
+				"ers_ilb_monitor_interval":          "3600",
+				"ers_ilb_monitor_timeout":           "60",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setHealthCheckInternalLoadBalancerMetrics(got, test.groups)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setHealthCheckInternalLoadBalancerMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

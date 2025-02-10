@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 21,
+    "version": 22,
     "validation_system": {
       "system_metrics": [
         {
@@ -911,6 +911,38 @@
               "min_version": "3.7"
             },
             "value": "SAPHANATOPOLOGY_INTERLEAVE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ILB_MONITOR_TIMEOUT"
           }
         ],
         "rsc_location_metrics": [
@@ -1159,6 +1191,70 @@
               "min_version": "3.7"
             },
             "value": "ERS_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_ILB_MONITOR_TIMEOUT"
           }
         ],
         "op_option_metrics": [

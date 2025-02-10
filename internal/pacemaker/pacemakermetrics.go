@@ -134,6 +134,18 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"saphana_interleave":                 true,
 		"saphanatopology_clone_node_max":     true,
 		"saphanatopology_interleave":         true,
+		"healthcheck_monitor_interval":       true,
+		"healthcheck_monitor_timeout":        true,
+		"ilb_monitor_interval":               true,
+		"ilb_monitor_timeout":                true,
+		"ascs_healthcheck_monitor_interval":  true,
+		"ascs_healthcheck_monitor_timeout":   true,
+		"ascs_ilb_monitor_interval":          true,
+		"ascs_ilb_monitor_timeout":           true,
+		"ers_healthcheck_monitor_interval":   true,
+		"ers_healthcheck_monitor_timeout":    true,
+		"ers_ilb_monitor_interval":           true,
+		"ers_ilb_monitor_timeout":            true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -267,6 +279,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	// sets the OP options from the pacemaker configuration.
 	setOPOptions(labels, pacemakerDocument.Configuration.OPDefaults)
+
+	setHealthCheckInternalLoadBalancerMetrics(labels, pacemakerDocument.Configuration.Resources.Groups)
 
 	return 1.0, labels
 }
@@ -872,6 +886,61 @@ func setPacemakerHANATopologyCloneAttrs(labels map[string]string, cloneResources
 		if _, ok := keys[nvPair.Name]; ok {
 			key := "saphanatopology_" + strings.ReplaceAll(nvPair.Name, "-", "_")
 			labels[key] = nvPair.Value
+		}
+	}
+}
+
+func setHealthCheckInternalLoadBalancerMetrics(labels map[string]string, groups []Group) {
+	labels["healthcheck_monitor_interval"] = ""
+	labels["healthcheck_monitor_timeout"] = ""
+	labels["ilb_monitor_interval"] = ""
+	labels["ilb_monitor_timeout"] = ""
+	labels["ascs_healthcheck_monitor_interval"] = ""
+	labels["ascs_healthcheck_monitor_timeout"] = ""
+	labels["ascs_ilb_monitor_interval"] = ""
+	labels["ascs_ilb_monitor_timeout"] = ""
+	labels["ers_healthcheck_monitor_interval"] = ""
+	labels["ers_healthcheck_monitor_timeout"] = ""
+	labels["ers_ilb_monitor_interval"] = ""
+	labels["ers_ilb_monitor_timeout"] = ""
+
+	for _, group := range groups {
+		var settings = make(map[string]string)
+		var prefix string
+		for _, primitive := range group.Primitives {
+			switch primitive.ClassType {
+			case "anything", "haproxy":
+				// Health Check settings
+				for _, op := range primitive.Operations {
+					if op.Name == "monitor" {
+						settings["healthcheck_monitor_interval"] = op.Interval
+						settings["healthcheck_monitor_timeout"] = op.Timeout
+					}
+				}
+			case "IPaddr2":
+				// Internal Load Balancer settings
+				for _, op := range primitive.Operations {
+					if op.Name == "monitor" {
+						settings["ilb_monitor_interval"] = op.Interval
+						settings["ilb_monitor_timeout"] = op.Timeout
+					}
+				}
+			case "SAPInstance":
+				// If this primitive is present, determine if the resource group is ASCS or ERS.
+				for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+					if nvPair.Name == "START_PROFILE" {
+						switch {
+						case strings.Contains(nvPair.Value, "SCS"):
+							prefix = "ascs_"
+						case strings.Contains(nvPair.Value, "ERS"):
+							prefix = "ers_"
+						}
+					}
+				}
+			}
+		}
+		for k, v := range settings {
+			labels[prefix+k] = strings.ReplaceAll(v, "s", "")
 		}
 	}
 }

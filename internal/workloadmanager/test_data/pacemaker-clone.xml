@@ -84,6 +84,16 @@ limitations under the License.
         </operations>
       </primitive>
       <group id="ascs_ip_group">
+        <primitive id="gcp_ascs_healthcheck" class="ocf" provider="heartbeat" type="anything">
+          <operations>
+            <op id="gcp_ascs_healthcheck-monitor-interval-10s" interval="10s" name="monitor" timeout="20s"/>
+          </operations>
+        </primitive>
+        <primitive id="gcp_ipaddr2_ascs" class="ocf" provider="heartbeat" type="IPaddr2">
+          <operations>
+            <op id="gcp_ipaddr2_ascs-monitor-interval-3600s" interval="3600s" name="monitor" timeout="60s"/>
+          </operations>
+        </primitive>
         <primitive class="ocf" id="ascs_PRD" provider="heartbeat" type="SAPInstance">
           <instance_attributes id="ascs_PRD-instance_attributes">
             <nvpair id="ascs_PRD-instance_attributes-AUTOMATIC_RECOVER" name="AUTOMATIC_RECOVER" value="false"/>
@@ -107,6 +117,16 @@ limitations under the License.
         </primitive>
       </group>
       <group id="ers_ip_group">
+        <primitive id="gcp_ers_healthcheck" class="ocf" provider="heartbeat" type="haproxy">
+          <operations>
+            <op id="gcp_ers_healthcheck-monitor-interval-10" interval="10" name="monitor" timeout="20"/>
+          </operations>
+        </primitive>
+        <primitive id="gcp_ipaddr2_ers" class="ocf" provider="heartbeat" type="IPaddr2">
+          <operations>
+            <op id="gcp_ipaddr2_ers-monitor-interval-3600s" interval="3600s" name="monitor" timeout="60s"/>
+          </operations>
+        </primitive>
         <primitive class="ocf" id="ers_PRD" provider="heartbeat" type="SAPInstance">
           <instance_attributes id="ers_PRD-instance_attributes">
             <nvpair id="ers_PRD-instance_attributes-AUTOMATIC_RECOVER" name="AUTOMATIC_RECOVER" value="false"/>
