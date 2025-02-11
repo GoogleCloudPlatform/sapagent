@@ -289,6 +289,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ers_healthcheck_monitor_timeout":   "",
 		"ers_ilb_monitor_interval":          "",
 		"ers_ilb_monitor_timeout":           "",
+		"has_alias_ip":                      "false",
 	}
 }
 
@@ -360,6 +361,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ers_healthcheck_monitor_timeout":    "",
 		"ers_ilb_monitor_interval":           "",
 		"ers_ilb_monitor_timeout":            "",
+		"has_alias_ip":                       "false",
 	}
 }
 
@@ -424,6 +426,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ers_healthcheck_monitor_timeout":    "20",
 		"ers_ilb_monitor_interval":           "3600",
 		"ers_ilb_monitor_timeout":            "60",
+		"has_alias_ip":                       "false",
 	}
 }
 
@@ -478,6 +481,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ers_healthcheck_monitor_timeout":   "",
 		"ers_ilb_monitor_interval":          "",
 		"ers_ilb_monitor_timeout":           "",
+		"has_alias_ip":                      "false",
 	}
 }
 
@@ -2644,6 +2648,7 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				"ers_healthcheck_monitor_timeout":   "",
 				"ers_ilb_monitor_interval":          "",
 				"ers_ilb_monitor_timeout":           "",
+				"has_alias_ip":                      "false",
 			},
 		},
 		{
@@ -2652,11 +2657,15 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				Group{
 					Primitives: []PrimitiveClass{
 						PrimitiveClass{
-							ClassType: "haproxy",
+							ClassType:  "haproxy",
 							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
 						},
 						PrimitiveClass{
 							ClassType: "IPaddr2",
+							Provider:  "gcp",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "type", Value: "alias"}},
+							},
 							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
 						},
 					},
@@ -2675,6 +2684,7 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				"ers_healthcheck_monitor_timeout":   "",
 				"ers_ilb_monitor_interval":          "",
 				"ers_ilb_monitor_timeout":           "",
+				"has_alias_ip":                      "true",
 			},
 		},
 		{
@@ -2683,11 +2693,15 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				Group{
 					Primitives: []PrimitiveClass{
 						PrimitiveClass{
-							ClassType: "anything",
+							ClassType:  "anything",
 							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
 						},
 						PrimitiveClass{
 							ClassType: "IPaddr2",
+							Provider:  "gcp",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "type", Value: "alias"}},
+							},
 							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
 						},
 						PrimitiveClass{
@@ -2701,11 +2715,11 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				Group{
 					Primitives: []PrimitiveClass{
 						PrimitiveClass{
-							ClassType: "anything",
+							ClassType:  "anything",
 							Operations: []Op{{Name: "monitor", Interval: "10s", Timeout: "20s"}},
 						},
 						PrimitiveClass{
-							ClassType: "IPaddr2",
+							ClassType:  "IPaddr2",
 							Operations: []Op{{Name: "monitor", Interval: "3600s", Timeout: "60s"}},
 						},
 						PrimitiveClass{
@@ -2730,6 +2744,7 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				"ers_healthcheck_monitor_timeout":   "20",
 				"ers_ilb_monitor_interval":          "3600",
 				"ers_ilb_monitor_timeout":           "60",
+				"has_alias_ip":                      "true",
 			},
 		},
 	}

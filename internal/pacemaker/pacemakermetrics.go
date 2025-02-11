@@ -146,6 +146,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ers_healthcheck_monitor_timeout":    true,
 		"ers_ilb_monitor_interval":           true,
 		"ers_ilb_monitor_timeout":            true,
+		"has_alias_ip":                      true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -903,6 +904,7 @@ func setHealthCheckInternalLoadBalancerMetrics(labels map[string]string, groups 
 	labels["ers_healthcheck_monitor_timeout"] = ""
 	labels["ers_ilb_monitor_interval"] = ""
 	labels["ers_ilb_monitor_timeout"] = ""
+	labels["has_alias_ip"] = "false"
 
 	for _, group := range groups {
 		var settings = make(map[string]string)
@@ -923,6 +925,13 @@ func setHealthCheckInternalLoadBalancerMetrics(labels map[string]string, groups 
 					if op.Name == "monitor" {
 						settings["ilb_monitor_interval"] = op.Interval
 						settings["ilb_monitor_timeout"] = op.Timeout
+					}
+				}
+				if primitive.Provider == "gcp" {
+					for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+						if nvPair.Name == "type" && nvPair.Value == "alias" {
+							labels["has_alias_ip"] = "true"
+						}
 					}
 				}
 			case "SAPInstance":

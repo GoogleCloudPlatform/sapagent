@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 22,
+    "version": 23,
     "validation_system": {
       "system_metrics": [
         {
@@ -943,6 +943,14 @@
               "min_version": "3.7"
             },
             "value": "ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "has_alias_ip",
+              "min_version": "3.7"
+            },
+            "value": "HAS_ALIAS_IP"
           }
         ],
         "rsc_location_metrics": [
