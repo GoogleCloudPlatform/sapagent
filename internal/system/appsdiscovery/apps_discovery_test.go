@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
@@ -261,7 +260,159 @@ dbms/name = DEH
 dbid = DEH
 SAPDBHOST = otherHostname
 	`
-	defaultLandscapeID = "5b91d2e8-e104-e541-9749-6ae7b2ebcfe9"
+	defaultLandscapeID   = "5b91d2e8-e104-e541-9749-6ae7b2ebcfe9"
+	defaultLogPath       = "basepath_logvolumes = /hana/log/SID"
+	defaultDataPath      = "basepath_datavolumes = /hana/data/SID"
+	defaultLogBackupPath = "basepath_logbackup = /hanabackup/SID/log"
+	defaultLsblkOutput   = `
+{
+   "blockdevices": [
+      {
+         "name": "sda",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sda1",
+               "mountpoints": [
+                   null
+               ]
+            },{
+               "name": "sda2",
+               "mountpoints": [
+                   "/boot/efi"
+               ]
+            },{
+               "name": "sda3",
+               "mountpoints": [
+                   "/"
+               ]
+            }
+         ]
+      },{
+         "name": "sdc",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_data-lv_hana_data",
+               "mountpoints": [
+                   "/hana/data"
+               ]
+            }
+         ]
+      },{
+         "name": "sdd",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_log-lv_hana_log",
+               "mountpoints": [
+                   "/hana/log"
+               ]
+            }
+         ]
+      },{
+         "name": "sdf",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hanabackup-lv_hanabackup",
+               "mountpoints": [
+                   "/hanabackup"
+               ]
+            }
+         ]
+      },{
+         "name": "sdg",
+         "mountpoints": [
+             null
+         ]
+      }
+   ]
+}
+`
+	defaultDiskLsOutput = `
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-persistent-disk-0 -> ../../sda
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-new-test-disk-device -> ../../sdg
+lrwxrwxrwx 1 root root 10 Feb 10 08:52 /dev/disk/by-id/google-persistent-disk-0-part2 -> ../../sda2
+lrwxrwxrwx 1 root root 10 Feb 10 08:52 /dev/disk/by-id/google-persistent-disk-0-part1 -> ../../sda1
+lrwxrwxrwx 1 root root 10 Feb 10 08:52 /dev/disk/by-id/google-persistent-disk-0-part3 -> ../../sda3
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../../sdc
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hanabackup -> ../../sdf
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-usr-sap -> ../../sdb
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-shared -> ../../sde
+lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-log-0 -> ../../sdd`
+	multipleMatchLsblkOutput = `
+{
+   "blockdevices": [
+      {
+         "name": "sdb",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_data-lv_hana_data",
+               "mountpoints": [
+                   "/hana"
+               ]
+            }
+         ]
+      },{
+         "name": "sdc",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_data-lv_hana_data",
+               "mountpoints": [
+                   "/hana/data"
+               ]
+            }
+         ]
+      },{
+         "name": "sdd",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_log-lv_hana_log",
+               "mountpoints": [
+                   "/hana/log"
+               ]
+            }
+         ]
+      },{
+         "name": "sdf",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hanabackup-lv_hanabackup",
+               "mountpoints": [
+                   "/hanabackup"
+               ]
+            }
+         ]
+      },{
+         "name": "sdg",
+         "mountpoints": [
+             null
+         ]
+      }
+   ]
+}
+`
 )
 
 var (
@@ -402,6 +553,21 @@ var (
 	defaultLandscapeIDResult = commandlineexecutor.Result{
 		StdOut: "id = 5b91d2e8-e104-e541-9749-6ae7b2ebcfe9",
 	}
+	defaultDataPathResult = commandlineexecutor.Result{
+		StdOut: defaultDataPath,
+	}
+	defaultLogPathResult = commandlineexecutor.Result{
+		StdOut: defaultLogPath,
+	}
+	defaultLogBackupPathResult = commandlineexecutor.Result{
+		StdOut: defaultLogBackupPath,
+	}
+	defaultLsblkResult = commandlineexecutor.Result{
+		StdOut: defaultLsblkOutput,
+	}
+	defaultDiskLsResult = commandlineexecutor.Result{
+		StdOut: defaultDiskLsOutput,
+	}
 )
 
 func TestMain(t *testing.M) {
@@ -444,7 +610,7 @@ func (a ScpByName) Less(i, j int) bool { return a[i].Name < a[j].Name }
 func (a ScpByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func (f *fakeCommandExecutor) Execute(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-	log.Logger.Infof("fakeCommandExecutor.Execute: %v", params)
+	log.Logger.Infof("fakeCommandExecutor.Execute %d: %v", f.executeCallCount, params)
 	defer func() { f.executeCallCount++ }()
 	opts := []cmp.Option{}
 	if f.params[f.executeCallCount].Args == nil {
@@ -2326,7 +2492,7 @@ func TestDiscoverHANA(t *testing.T) {
 	tests := []struct {
 		name     string
 		app      *sappb.SAPInstance
-		execute  commandlineexecutor.Execute
+		execute  fakeCommandExecutor
 		topology string
 		want     []SapSystemDetails
 	}{{
@@ -2336,21 +2502,62 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				if strings.Contains(params.Args[3], "HDB") {
-					return defaultHANAVersionResult
-				}
-				return landscapeSingleNodeResult
-			case "df":
-				return hanaMountResult
-			default:
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("Unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "df",
+				Args:       []string{"-h"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeSingleNodeResult, // GetSystemInstanceList
+				hanaMountResult,           // df
+				defaultHANAVersionResult,  // HDB version
+				defaultLandscapeIDResult,  // landscape ID
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2371,6 +2578,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2385,6 +2593,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Sapsid:         "abc",
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
+			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2394,21 +2607,62 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				if strings.Contains(params.Args[3], "HDB") {
-					return defaultHANAVersionResult
-				}
-				return landscapeMultipleNodesResult
-			case "df":
-				return hanaMountResult
-			default:
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("Unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "df",
+				Args:       []string{"-h"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeMultipleNodesResult, // GetSystemInstanceList
+				hanaMountResult,              // df
+				defaultHANAVersionResult,     // HDB version
+				defaultLandscapeIDResult,     // landscape ID
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2429,6 +2683,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -2443,6 +2698,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Sapsid:         "abc",
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
+			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2452,21 +2712,62 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				if strings.Contains(params.Args[3], "HDB") {
-					return defaultHANAVersionResult
-				}
-				return landscapeSingleNodeResult
-			case "df":
-				return hanaMountResult
-			default:
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("Unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "df",
+				Args:       []string{"-h"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeSingleNodeResult, // GetSystemInstanceList
+				hanaMountResult,           // df
+				defaultHANAVersionResult,  // HDB version
+				defaultLandscapeIDResult,  // landscape ID
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2493,6 +2794,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2507,6 +2809,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Sapsid:         "abc",
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
+			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2518,6 +2825,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 			},
@@ -2532,6 +2840,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Sapsid:         "abc",
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
+			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2541,21 +2854,62 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				if strings.Contains(params.Args[3], "HDB") {
-					return defaultHANAVersionResult
-				}
-				return landscapeMultipleNodesResult
-			case "df":
-				return hanaMountResult
-			default:
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("Unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}, {
+				Executable: "df",
+				Args:       []string{"-h"},
+			}, {
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
+			}, {
+				Executable: "grep",
+				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeMultipleNodesResult, // GetSystemInstanceList
+				hanaMountResult,              // df
+				defaultHANAVersionResult,     // HDB version
+				defaultLandscapeIDResult,     // landscape ID
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2582,6 +2936,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -2596,6 +2951,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Sapsid:         "abc",
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
+			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2607,6 +2967,7 @@ func TestDiscoverHANA(t *testing.T) {
 						DatabaseVersion: "HANA 2.12 Rev 56",
 						DatabaseSid:     "abc",
 						InstanceNumber:  "00",
+						LandscapeId:     defaultLandscapeID,
 					}},
 				TopologyType: spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT,
 			},
@@ -2622,6 +2983,11 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
+			DBDiskMap: map[string]string{
+				logPathName:       "sap-hana-log-0",
+				dataPathName:      "sap-hana-data-0",
+				logBackupPathName: "sap-hanabackup",
+			},
 		}},
 	}, {
 		name: "errGettingNodes",
@@ -2630,21 +2996,27 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdErr:   "Landscape error",
-				Error:    errors.New("Landscape error"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultErrorResult,
+			},
 		},
 		want: nil,
 	}, {
 		name: "EmptyInstance",
 		app:  &sappb.SAPInstance{},
-		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			return commandlineexecutor.Result{
-				StdOut: landscapeOutputSingleNode,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeSingleNodeResult, // GetSystemInstanceList
+			},
 		},
 		want: nil,
 	}, {
@@ -2654,19 +3026,14 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				return landscapeZeroNodeResult
-			case "df":
-				return hanaMountResult
-			case "HDB":
-				return defaultHANAVersionResult
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				landscapeZeroNodeResult, // GetSystemInstanceList
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2685,22 +3052,14 @@ func TestDiscoverHANA(t *testing.T) {
 			Type:           sappb.InstanceType_HANA,
 			InstanceNumber: "00",
 		},
-		execute: func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-			switch params.Executable {
-			case "sudo":
-				return commandlineexecutor.Result{
-					Error:    errors.New("expected error for test"),
-					ExitCode: 1,
-				}
-			case "df":
-				return hanaMountResult
-			case "HDB":
-				return defaultHANAVersionResult
-			}
-			return commandlineexecutor.Result{
-				Error:    errors.New("unexpected command"),
-				ExitCode: 1,
-			}
+		execute: fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "sudo",
+				Args:       []string{"-i", "-u", "abcadm", "sapcontrol", "-nr", "00", "-function", "GetSystemInstanceList"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultErrorResult, // GetSystemInstanceList
+			},
 		},
 		topology: `{
 			"topology": {
@@ -2718,8 +3077,11 @@ func TestDiscoverHANA(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.execute.t = t
 			d := SapDiscovery{
-				Execute: tc.execute,
+				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+					return tc.execute.Execute(c, p)
+				},
 				FileSystem: &fakefs.FileSystem{
 					ReadFileResp: [][]byte{[]byte(tc.topology)},
 					ReadFileErr:  []error{nil},
@@ -5598,6 +5960,432 @@ app11, 0, 50013, 50014, 3, ABAP|GATEWAY|ICMAN|IGS, GREEN`,
 			if diff := cmp.Diff(tc.wantApp, got3, protocmp.Transform()); diff != "" {
 				t.Errorf("discoverNetweaverHosts(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
+		})
+	}
+}
+
+func TestFindDiskForHANABasePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		pathName string
+		exec     *fakeCommandExecutor
+		want     string
+		wantErr  error
+	}{{
+		name:     "success",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult},
+		},
+		want: "sap-hana-data-0",
+	}, {
+		name:     "findsBestMountMatch",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: multipleMatchLsblkOutput,
+				},
+				defaultDiskLsResult},
+		},
+		want: "sap-hana-data-0",
+	}, {
+		name:     "notInGlobalINI",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: "",
+				Error:  errors.New("error"),
+			}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "badGrepOutput",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: "bad output",
+			}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "lsblkError",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: "",
+					Error:  errors.New("error"),
+				}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "lsblkNotJSON",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: `this isnt { valid {}, json`,
+				}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "noDeviceInLsblkOutput",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: "{}",
+				}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "lsError",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult,
+				defaultLsblkResult,
+				{
+					StdOut: "",
+					Error:  cmpopts.AnyError,
+				},
+			},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "diskNotInLsOutput",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult,
+				defaultLsblkResult, {
+					StdOut: "empty output",
+				}},
+		},
+		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "mismatchedLineInLsOutput",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult,
+				defaultLsblkResult, {
+					StdOut: `
+lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../../sdc`,
+				}},
+		},
+		wantErr: cmpopts.AnyError,
+	}}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			execFunc := func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				return tc.exec.Execute(ctx, p)
+			}
+			got, err := findDiskForHANABasePath(ctx, tc.pathName, "global.ini", execFunc)
+			if got != tc.want {
+				t.Errorf("findDiskForHANABasePath(%v) = %q, want: %q", tc.pathName, got, tc.want)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("findDiskForHANABasePath(%v) returned an unexpected error: %v", tc.pathName, err)
+			}
+		})
+	}
+}
+
+func TestDiscoverHANADisks(t *testing.T) {
+	tests := []struct {
+		name    string
+		app     *sappb.SAPInstance
+		exec    *fakeCommandExecutor
+		want    map[string]string
+		wantErr error
+	}{{
+		name: "success",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
+		},
+		want: map[string]string{
+			logPathName:       "sap-hana-log-0",
+			dataPathName:      "sap-hana-data-0",
+			logBackupPathName: "sap-hanabackup",
+		},
+	}, {
+		name: "noLogPath",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{{
+				StdOut: "",
+			},
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult},
+		},
+		want: map[string]string{
+			dataPathName:      "sap-hana-data-0",
+			logBackupPathName: "sap-hanabackup",
+		},
+	}, {
+		name: "noDataPath",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult, {
+					StdOut: "",
+				},
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult},
+		},
+		want: map[string]string{
+			logPathName:       "sap-hana-log-0",
+			logBackupPathName: "sap-hanabackup",
+		},
+	}, {
+		name: "noLogBackupPath",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult, {
+					StdOut: "",
+				}},
+		},
+		want: map[string]string{
+			logPathName:  "sap-hana-log-0",
+			dataPathName: "sap-hana-data-0",
+		},
+	}}
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.exec.t = t
+			d := SapDiscovery{
+				Execute: func(c context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+					return tc.exec.Execute(c, p)
+				},
+			}
+			got, err := d.discoverHANADisks(ctx, tc.app)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("discoverHANADisks(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
+			}
+			if !errors.Is(err, tc.wantErr) {
+				t.Errorf("discoverHANADisks(%v) returned an unexpected error: %v", tc.app, err)
+			}
+
 		})
 	}
 }

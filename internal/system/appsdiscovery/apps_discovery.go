@@ -70,7 +70,30 @@ const (
 	sqlServerName        = "mss"
 	oracleName           = "ora"
 	sybaseASEName        = "syb"
+	dataPathName         = "basepath_datavolumes"
+	logPathName          = "basepath_logvolumes"
+	logBackupPathName    = "basepath_logbackup"
+	hanaConfigDir        = "/usr/sap/%s/SYS/global/hdb/custom/config"
 )
+
+type lsblkdevicechild struct {
+	Name        string
+	Type        string
+	Mountpoints []string `json:"mountpoints"`
+	Size        json.RawMessage
+}
+
+type lsblkdevice struct {
+	Name        string
+	Type        string
+	Mountpoints []string `json:"mountpoints"`
+	Size        json.RawMessage
+	Children    []lsblkdevicechild
+}
+
+type lsblk struct {
+	BlockDevices []lsblkdevice `json:"blockdevices"`
+}
 
 type fileReader func(filename string) ([]byte, error)
 
@@ -86,6 +109,7 @@ type SapSystemDetails struct {
 	DBComponent         *spb.SapDiscovery_Component
 	AppHosts, DBHosts   []string
 	AppOnHost, DBOnHost bool
+	DBDiskMap           map[string]string
 	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
 	InstanceProperties  []*spb.SapDiscovery_Resource_InstanceProperties
 	AppInstance         *sappb.SAPInstance
@@ -545,7 +569,7 @@ func (d *SapDiscovery) discoverNetweaverHosts(ctx context.Context, app *sappb.SA
 	return ascsHosts, ersHosts, appHosts
 }
 
-func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid, dbProductVersion string) SapSystemDetails {
+func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid, dbProductVersion string, diskMap map[string]string) SapSystemDetails {
 	t := spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP
 	if len(dbHosts) > 1 {
 		t = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
@@ -567,6 +591,7 @@ func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Compone
 			}},
 		},
 		DBInstance: app,
+		DBDiskMap:  diskMap,
 	}
 }
 
@@ -590,12 +615,17 @@ func (d *SapDiscovery) discoverHANA(ctx context.Context, app *sappb.SAPInstance)
 	dbSIDs, err := d.discoverHANATenantDBs(ctx, app, dbHosts[0])
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Encountered error during call to discoverHANATenantDBs. Only discovering primary HANA system.", "error", err)
-		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid, dbProductVersion)}
+		return []SapSystemDetails{hanaSystemDetails(app, dbProps, dbHosts, app.Sapsid, dbProductVersion, nil)}
+	}
+
+	diskMap, err := d.discoverHANADisks(ctx, app)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Encountered error during call to discoverHANADisks. Unable to determine HANA disk map.", "error", err)
 	}
 
 	systems := []SapSystemDetails{}
 	for _, s := range dbSIDs {
-		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s, dbProductVersion))
+		systems = append(systems, hanaSystemDetails(app, dbProps, dbHosts, s, dbProductVersion, diskMap))
 	}
 
 	return systems
@@ -1465,4 +1495,178 @@ func (d *SapDiscovery) discoverHANALandscapeId(ctx context.Context, app *sappb.S
 		return "", errors.New("unable to identify HANA landscape id")
 	}
 	return lid[1], nil
+}
+
+func (d *SapDiscovery) discoverHANADisks(ctx context.Context, app *sappb.SAPInstance) (map[string]string, error) {
+	mountMap := map[string]string{}
+	log.CtxLogger(ctx).Debugw("Entered discoverHANADisks")
+	sidUpper := strings.ToUpper(app.Sapsid)
+	configPath := fmt.Sprintf(hanaConfigDir, sidUpper)
+	globalINIPath := filepath.Join(configPath, "global.ini")
+	deviceName, err := findDiskForHANABasePath(ctx, logPathName, globalINIPath, d.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Error finding disk for log path", "error", err)
+	} else {
+		mountMap[logPathName] = deviceName
+	}
+
+	deviceName, err = findDiskForHANABasePath(ctx, dataPathName, globalINIPath, d.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Error finding disk for data path", "error", err)
+	} else {
+		mountMap[dataPathName] = deviceName
+	}
+
+	deviceName, err = findDiskForHANABasePath(ctx, logBackupPathName, globalINIPath, d.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Error finding disk for log backup path", "error", err)
+	} else {
+		mountMap[logBackupPathName] = deviceName
+	}
+
+	log.CtxLogger(ctx).Debugw("End of discoverHANADisks", "mountMap", mountMap)
+	return mountMap, nil
+}
+
+func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath string, exec commandlineexecutor.Execute) (string, error) {
+	// Get paths for desired mounts from global.ini
+	p := commandlineexecutor.Params{
+		Executable: "grep",
+		Args:       []string{pathName, globalINIPath},
+	}
+	res := exec(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+	if res.StdOut == "" {
+		return "", errors.New("path not found in global.ini " + pathName)
+	}
+
+	// Expected output should be like:
+	// basepath_datavolumes = /path/to/mount
+	parts := strings.Split(res.StdOut, "=")
+	if len(parts) < 2 {
+		return "", errors.New("unable to find path for mount")
+	}
+	mount := strings.TrimSpace(parts[1])
+	// Remove trailing slash if present
+	mount = strings.TrimSuffix(mount, "/")
+	log.CtxLogger(ctx).Debugw("Found mount", "mount", mount)
+
+	// Find what is mounted to that path.
+	p = commandlineexecutor.Params{
+		Executable: "lsblk",
+		Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+	}
+	res = exec(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing lsblk", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+	// Output is json
+	var result lsblk
+	err := json.Unmarshal([]byte(res.StdOut), &result)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Error unmarshalling lsblk output", "error", err, "stdOut", res.StdOut)
+		return "", err
+	}
+
+	var deviceName string
+	splitFn := func(c rune) bool {
+		return c == '/'
+	}
+	bestMatchLength := 0
+	mountParts := strings.FieldsFunc(mount, splitFn)
+	// Find the block device with the best match to mount
+	for _, blockDevice := range result.BlockDevices {
+		log.CtxLogger(ctx).Debugw("Block device", "blockDevice", blockDevice)
+		for _, mountpoint := range blockDevice.Mountpoints {
+			mountPointParts := strings.FieldsFunc(mountpoint, splitFn)
+			minLen := min(len(mountParts), len(mountPointParts))
+			matchLen := 0
+			for i := 0; i < minLen; i++ {
+				if mountParts[i] != mountPointParts[i] {
+					break
+				}
+				matchLen++
+			}
+			if matchLen > bestMatchLength {
+				bestMatchLength = matchLen
+				deviceName = blockDevice.Name
+			}
+		}
+		if slices.Contains(blockDevice.Mountpoints, mount) {
+			deviceName = blockDevice.Name
+		}
+		for _, child := range blockDevice.Children {
+			log.CtxLogger(ctx).Debugw("Child device", "child", child)
+			for _, mountpoint := range child.Mountpoints {
+				mountPointParts := strings.FieldsFunc(mountpoint, splitFn)
+				minLen := min(len(mountParts), len(mountPointParts))
+				matchLen := 0
+				for i := 0; i < minLen; i++ {
+					if mountParts[i] != mountPointParts[i] {
+						break
+					}
+					matchLen++
+				}
+				if matchLen > bestMatchLength {
+					bestMatchLength = matchLen
+					deviceName = blockDevice.Name
+				}
+			}
+		}
+	}
+	if deviceName == "" {
+		return "", errors.New("unable to find disk for mount")
+	}
+	log.CtxLogger(ctx).Debugw("Found device name", "deviceName", deviceName)
+
+	// Find disk name for that device.
+	p = commandlineexecutor.Params{
+		Executable: "ls",
+		Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+	}
+	res = exec(ctx, p)
+	if res.Error != nil {
+		log.CtxLogger(ctx).Infow("Error executing ls", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
+		return "", res.Error
+	}
+
+	// Output will look like:
+	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-persistent-disk-0 -> ../../sda
+	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-sap-posdb00-hana-shared -> ../../sdf
+	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-sap-posdb00-hana-data-0 -> ../../sdc
+	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-sap-posdb00-usr-sap -> ../../sdb
+
+	for _, line := range strings.Split(res.StdOut, "\n") {
+		log.CtxLogger(ctx).Debugw("ls output", "line", line)
+		if strings.Contains(line, deviceName) {
+			log.CtxLogger(ctx).Debugw("Found device name in ls output")
+			parts := strings.Fields(line)
+			// Expected parts:
+			// 0: permissions
+			// 1: links
+			// 2: owner
+			// 3: group
+			// 4: size
+			// 5: month
+			// 6: day
+			// 7: time
+			// 8: path
+			// 9: ->
+			// 10: device
+			log.CtxLogger(ctx).Debugw("parts", "parts", parts)
+			if len(parts) < 11 {
+				continue
+			}
+			devicePath := parts[8]
+			// Strip up up to the end of /google-
+			devicePath = strings.TrimPrefix(devicePath, "/dev/disk/by-id/google-")
+			// Maybe need to handle disk partitions
+			return devicePath, nil
+		}
+	}
+	return "", errors.New("unable to find disk for mount")
 }
