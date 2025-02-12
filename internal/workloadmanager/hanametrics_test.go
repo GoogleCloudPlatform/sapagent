@@ -44,6 +44,7 @@ import (
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	configpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
+	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
@@ -168,7 +169,19 @@ var (
                ]
             }
          ]
-      }
+      },
+			{
+				"name": "/dev/sdc",
+				"type": "disk",
+				"mountpoint": "/hana/log",
+				"size": "4096"
+			},
+			{
+				"name": "/dev/sdf",
+				"type": "disk",
+				"mountpoint": "/export/backup",
+				"size": "4096"
+			}
    ]
 }
 `
@@ -183,6 +196,7 @@ num_submit_queues = 12
 basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
 basepath_persistent_memory_volumes = /hana/memory/ISC
+basepath_databackup = /export/backup/ISC
 `
 	defaultIndexserverINI = `
 [global]
@@ -198,6 +212,10 @@ Mounted on
 	dfTargetLog = `
 Mounted on
 /hana/log
+`
+	dfTargetBackup = `
+Mounted on
+/export/backup
 `
 	defaultDiskMapper = &fakeDiskMapper{err: nil, out: "disk-mapping"}
 	defaultMapperFunc = func() (map[instanceinfo.InterfaceName][]instanceinfo.NetworkAddress, error) {
@@ -229,6 +247,14 @@ Mounted on
 						Name: "hana-disk-name",
 						Type: "/some/path/default-disk-type",
 					},
+					{
+						Name: "hana-disk-name-2",
+						Type: "/some/path/default-disk-type",
+					},
+					{
+						Name: "hana-disk-name-3",
+						Type: "/some/path/default-disk-type",
+					},
 				},
 			},
 		},
@@ -251,6 +277,16 @@ Mounted on
 				{
 					Source:     "/some/path/hana-disk-name",
 					DeviceName: "sdb",
+					Type:       "PERSISTENT",
+				},
+				{
+					Source:     "/some/path/hana-disk-name-2",
+					DeviceName: "sdc",
+					Type:       "PERSISTENT",
+				},
+				{
+					Source:     "/some/path/hana-disk-name-3",
+					DeviceName: "sdf",
 					Type:       "PERSISTENT",
 				},
 			},
@@ -368,294 +404,360 @@ func GlobalINITest4Exec(ctx context.Context, params commandlineexecutor.Params) 
 func TestDiskInfo(t *testing.T) {
 	tests := []struct {
 		name              string
-		basePathVolume    string
 		globalINILocation string
+		params            Parameters
+		volume            *wpb.HANADiskVolumeMetric
 		exec              commandlineexecutor.Execute
-		iir               *instanceinfo.Reader
-		config            *configpb.Configuration
 		mapper            instanceinfo.NetworkInterfaceAddressMapper
 		want              map[string]string
 	}{
 		{
 			name:              "TestDiskInfoNoGrep",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec:              defaultExec,
-			iir:               defaultIIR,
-			config:            defaultConfiguration,
-			mapper:            defaultMapperFunc,
-			want:              map[string]string{},
+			params: Parameters{
+				Execute:            defaultExec,
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
+			},
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
+			mapper: defaultMapperFunc,
+			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoNoGrep2",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: defaultHanaINI,
+						StdErr: "",
+						Error:  errors.New("Command failed"),
+					}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoNoGrepError",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-					Error:  errors.New("Command failed"),
-				}
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: defaultHanaINI,
+						StdErr: "",
+						Error:  errors.New("Command failed"),
+					}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoBadINIFormat",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolume /hana/data/ISC",
-					StdErr: "",
-				}
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: "basepath_datavolume /hana/data/ISC",
+						StdErr: "",
+					}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoInvalidLSBLKOutput",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: "",
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: "",
+						StdOut: defaultHanaINI,
 						StdErr: "",
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoInvalidLSBLKOutput2",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: "This is invalid lsblk output",
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: "This is invalid lsblk output",
+						StdOut: defaultHanaINI,
 						StdErr: "",
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoInvalidLSBLKOutput3",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-						Error:  errors.New("This is invalid lsblk output"),
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: DefaultJSONDiskList,
+							StdErr: "",
+							Error:  errors.New("This is invalid lsblk output"),
+						}
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+					return commandlineexecutor.Result{
+						StdOut: defaultHanaINI,
+						StdErr: "",
+					}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoErrorDF",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "df" {
-					return commandlineexecutor.Result{
-						Error: errors.New("Command failed"),
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "df" {
+						return commandlineexecutor.Result{
+							Error: errors.New("Command failed"),
+						}
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+					return commandlineexecutor.Result{
+						StdOut: "basepath_datavolumes = /hana/data/ISC",
+						StdErr: "",
+					}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoInvalidDF",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "df" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "df" {
+						return commandlineexecutor.Result{
+							StdOut: "\nMounted on\n/hana/data\ninvalid line\n",
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: "\nMounted on\n/hana/data\ninvalid line\n",
+						StdOut: "basepath_datavolumes = /hana/data/ISC",
 						StdErr: "",
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoNoMatches",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: DefaultJSONDiskList,
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
+						StdOut: defaultHanaINI,
 						StdErr: "",
 					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: defaultHanaINI,
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoSomeMatches",
-			basePathVolume:    "/dev/sdb",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: DefaultJSONDiskList,
+							StdErr: "",
+						}
+					}
+					if params.Executable == "df" {
+						return commandlineexecutor.Result{
+							StdOut: dfTargetData,
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
+						StdOut: "basepath_datavolumes = /hana/data/ISC",
 						StdErr: "",
 					}
-				}
-				if params.Executable == "df" {
-					return commandlineexecutor.Result{
-						StdOut: dfTargetData,
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sdb",
+			},
 			mapper: defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "/hana/data",
 				"instancedisktype": "default-disk-type",
 				"size":             "2048",
 				"pdsize":           "4096",
+				"blockdevice":      "/dev/sdb",
 			},
 		},
 		{
 			name:              "TestDiskInfoNoDevices",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: EmptyJSONDiskList,
+							StdErr: "",
+						}
+					}
+					if params.Executable == "df" {
+						return commandlineexecutor.Result{
+							StdOut: dfTargetData,
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: EmptyJSONDiskList,
+						StdOut: "basepath_datavolumes = /hana/data/ISC",
 						StdErr: "",
 					}
-				}
-				if params.Executable == "df" {
-					return commandlineexecutor.Result{
-						StdOut: dfTargetData,
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want:   map[string]string{},
 		},
 		{
 			name:              "TestDiskInfoNoChildren",
-			basePathVolume:    "/dev/sda",
 			globalINILocation: "/etc/config/test.ini",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "lsblk" {
+			params: Parameters{
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "lsblk" {
+						return commandlineexecutor.Result{
+							StdOut: NoChildrenJSONDiskList,
+							StdErr: "",
+						}
+					}
+					if params.Executable == "df" {
+						return commandlineexecutor.Result{
+							StdOut: dfTargetData,
+							StdErr: "",
+						}
+					}
 					return commandlineexecutor.Result{
-						StdOut: NoChildrenJSONDiskList,
+						StdOut: "basepath_datavolumes = /hana/data/ISC",
 						StdErr: "",
 					}
-				}
-				if params.Executable == "df" {
-					return commandlineexecutor.Result{
-						StdOut: dfTargetData,
-						StdErr: "",
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: "basepath_datavolumes = /hana/data/ISC",
-					StdErr: "",
-				}
+				},
+				InstanceInfoReader: *defaultIIR,
+				Config:             defaultConfiguration,
 			},
-			iir:    defaultIIR,
-			config: defaultConfiguration,
+			volume: &wpb.HANADiskVolumeMetric{
+				MetricSource:   wpb.HANADiskVolumeMetricSource_GLOBAL_INI,
+				BasepathVolume: "/dev/sda",
+			},
 			mapper: defaultMapperFunc,
 			want: map[string]string{
 				"mountpoint":       "/hana/data",
 				"instancedisktype": "default-disk-type",
 				"size":             "4096",
 				"pdsize":           "4096",
+				"blockdevice":      "/dev/sdb",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			test.iir.Read(context.Background(), test.config, test.mapper)
-			got := diskInfo(context.Background(), test.basePathVolume, test.globalINILocation, test.exec, *test.iir)
+			test.params.InstanceInfoReader.Read(context.Background(), test.params.Config, test.mapper)
+			got := diskInfo(context.Background(), test.volume, test.globalINILocation, test.params)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, diskInfo returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
 			}
@@ -703,6 +805,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
+				"blockdevice":      "disk-device-name",
 			},
 		},
 		{
@@ -725,6 +828,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
+				"blockdevice":      "other-disk-device-name",
 			},
 		},
 	}
@@ -970,6 +1074,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": "",
 				"transparent_hugepages":                     "disabled",
 				"ha_in_same_zone":                           "",
+				"hana_data_volume":                          "",
+				"hana_log_volume":                           "",
+				"hana_backup_volume":                        "",
+				"hana_shared_volume":                        "",
+				"usr_sap_volume":                            "",
 			},
 		},
 		{
@@ -995,6 +1104,16 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 							StdOut: sapservicesGrepOut,
 							StdErr: "",
 						}
+					} else if strings.Contains(params.ArgsToSplit, "basepath_logvolumes") {
+						return commandlineexecutor.Result{
+							StdOut: "basepath location /hana/log",
+							StdErr: "",
+						}
+					} else if strings.Contains(params.ArgsToSplit, "basepath_databackup") {
+						return commandlineexecutor.Result{
+							StdOut: "basepath location /export/backup",
+							StdErr: "",
+						}
 					}
 					return commandlineexecutor.Result{
 						StdOut: "basepath location /hana/data",
@@ -1005,6 +1124,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 					if strings.Contains(params.ArgsToSplit, "/hana/data") {
 						return commandlineexecutor.Result{
 							StdOut: dfTargetData,
+							StdErr: "",
+						}
+					} else if strings.Contains(params.ArgsToSplit, "/export/backup") {
+						return commandlineexecutor.Result{
+							StdOut: dfTargetBackup,
 							StdErr: "",
 						}
 					}
@@ -1071,9 +1195,9 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_data_pd_size":                         "4096",
 				"disk_data_size":                            "2048",
 				"disk_data_type":                            "default-disk-type",
-				"disk_log_mount":                            "/hana/data",
+				"disk_log_mount":                            "/hana/log",
 				"disk_log_pd_size":                          "4096",
-				"disk_log_size":                             "2048",
+				"disk_log_size":                             "4096",
 				"disk_log_type":                             "default-disk-type",
 				"fast_restart":                              "enabled",
 				"ha_sr_hook_configured":                     "yes",
@@ -1090,6 +1214,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 				"transparent_hugepages":                     "enabled",
 				"ha_in_same_zone":                           "other-instance-1",
+				"hana_data_volume":                          "/dev/sdb",
+				"hana_log_volume":                           "/dev/sdc",
+				"hana_backup_volume":                        "/dev/sdf",
+				"hana_shared_volume":                        "",
+				"usr_sap_volume":                            "",
 			},
 		},
 	}

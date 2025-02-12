@@ -48,6 +48,7 @@ enum DiskVariable {
   MOUNT = 2;
   SIZE = 3;
   PD_SIZE = 4;
+  BLOCK_DEVICE = 5;
 }
 
 enum HANABackupVariable {
@@ -158,6 +159,13 @@ enum OPOptionVariable {
   OP_TIMEOUT = 1;
 }
 
+enum HANADiskVolumeMetricSource {
+  HANA_DISK_VOLUME_METRIC_SOURCE_UNSPECIFIED = 0;
+  GLOBAL_INI = 1;
+  HDB_INDEXSERVER_PATH = 2;
+  DIR_INSTANCE_ENV = 3;
+}
+
 message WorkloadValidation {
   ValidationSystem validation_system = 1;
   ValidationCorosync validation_corosync = 2;
@@ -210,6 +218,7 @@ message ValidationHANA {
 message HANADiskVolumeMetric {
   string basepath_volume = 1;
   repeated HANADiskMetric metrics = 2;
+  HANADiskVolumeMetricSource metric_source = 3;
 }
 
 message HANADiskMetric {
