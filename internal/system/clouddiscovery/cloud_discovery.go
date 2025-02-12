@@ -406,6 +406,11 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 
 	toAdd := []toDiscover{}
 	for _, disk := range ci.Disks {
+		ir.InstanceProperties.DiskDeviceNames = append(ir.InstanceProperties.DiskDeviceNames,
+			&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+				Source:     disk.Source,
+				DeviceName: disk.DeviceName,
+			})
 		toAdd = append(toAdd, toDiscover{
 			name:   disk.Source,
 			region: region,
@@ -664,7 +669,6 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 			ipRange: ipRange,
 			network: cloudNet,
 		})
-		nr.RelatedResources = append(nr.RelatedResources, cs.SelfLink)
 	}
 	d.networks[networkURI] = cloudNet
 	log.CtxLogger(ctx).Debugw("discoverNetwork result", "nr", nr, "cloudNet", cloudNet)

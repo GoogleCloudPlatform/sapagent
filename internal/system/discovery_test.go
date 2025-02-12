@@ -114,7 +114,7 @@ var (
 		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource{}, "related_resources"),
 		protocmp.SortRepeatedFields(&spb.SapDiscovery_Component{}, "resources"),
 		cmpopts.SortSlices(resourceLess),
-		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource_InstanceProperties{}, "app_instances"),
+		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource_InstanceProperties{}, "app_instances", "disk_device_names", "disk_mounts"),
 		cmpopts.SortSlices(appInstanceLess),
 	}
 	defaultInstanceResource = &spb.SapDiscovery_Resource{
@@ -289,6 +289,131 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						VirtualHostname: "some-db-host",
+					},
+				}, {
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}},
+				HostProject: "12345",
+			},
+			ProjectNumber: "12345",
+		}},
+	}, {
+		name:   "hanaWithDiskMounts",
+		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
+		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
+			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
+				DBComponent: &spb.SapDiscovery_Component{
+					Sid: "ABC",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							SharedNfsUri:   "some-shared-nfs-uri",
+							InstanceNumber: "00",
+						},
+					},
+				},
+				DBHosts: []string{"some-db-host"},
+				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					VirtualHostname: "some-db-host",
+				}},
+				DBOnHost:  true,
+				DBDiskMap: map[string]string{"/hana/data": "hana-data", "/hana/log": "hana-log"},
+			}}},
+		},
+		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  defaultInstanceURI,
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+						&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+							DeviceName: "hana-data",
+							Source:     "hana-data-source",
+						},
+						&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+							DeviceName: "hana-log",
+							Source:     "hana-log-source",
+						},
+					},
+				},
+			}}, {},
+				{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceUri:  "some-shared-nfs-uri",
+				}}, {{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+				}}},
+			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
+				Parent:   nil,
+				HostList: []string{defaultInstanceURI},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-shared-nfs-uri"},
+				CP:       defaultCloudProperties,
+			}, {
+				Parent:   defaultInstanceResource,
+				HostList: []string{"some-db-host"},
+				CP:       defaultCloudProperties,
+			}},
+		},
+		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
+			DiscoverCurrentHostResp: [][]string{{}},
+		},
+		want: []*spb.SapDiscovery{{
+			DatabaseLayer: &spb.SapDiscovery_Component{
+				Sid: "ABC",
+				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+						SharedNfsUri:   "some-shared-nfs-uri",
+						InstanceNumber: "00",
+					},
+				},
+				Resources: []*spb.SapDiscovery_Resource{{
+					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceUri:  defaultInstanceURI,
+					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						VirtualHostname: "some-db-host",
+						DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+							&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+								DeviceName: "hana-data",
+								Source:     "hana-data-source",
+							},
+							&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+								DeviceName: "hana-log",
+								Source:     "hana-log-source",
+							},
+						},
+						DiskMounts: []*spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+								Name:       "hana-log-source",
+								MountPoint: "/hana/log",
+							},
+							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+								Name:       "hana-data-source",
+								MountPoint: "/hana/data",
+							},
+						},
 					},
 				}, {
 					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,

@@ -279,6 +279,18 @@ func runDiscovery(ctx context.Context, a any) {
 				sys.ProjectNumber = cp.GetNumericProjectId()
 				sys.UpdateTime = timestamppb.Now()
 				sys.UseDrReconciliation = true
+				// Remove fields only used for local discovery:
+				// resource.instanceProperties.diskDeviceNames
+				for _, app := range sys.GetApplicationLayer().GetResources() {
+					if app.GetInstanceProperties() != nil {
+						app.InstanceProperties.DiskDeviceNames = nil
+					}
+				}
+				for _, db := range sys.GetDatabaseLayer().GetResources() {
+					if db.GetInstanceProperties() != nil {
+						db.InstanceProperties.DiskDeviceNames = nil
+					}
+				}
 				log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
 				// Send System to DW API
 				insightRequest := &dwpb.WriteInsightRequest{
@@ -446,6 +458,22 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			log.CtxLogger(ctx).Debugw("Database Resources", "res", dbRes)
 			if s.DBOnHost {
 				dbRes = removeDuplicates(append(dbRes, hostResources...))
+			}
+
+			if s.DBDiskMap != nil {
+				for mountPath, deviceName := range s.DBDiskMap {
+					// instanceResource instance properties disk mounts is a list of the attached disks with
+					// where name is the disk's source and mountPoint is the device name.
+					for _, disk := range instanceResource.InstanceProperties.DiskDeviceNames {
+						if disk.GetDeviceName() == deviceName {
+							instanceResource.InstanceProperties.DiskMounts = append(instanceResource.InstanceProperties.DiskMounts,
+								&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+									Name:       disk.GetSource(),
+									MountPoint: mountPath,
+								})
+						}
+					}
+				}
 			}
 			// Make a resource map for quicker lookup
 			resourcesByType := make(map[spb.SapDiscovery_Resource_ResourceKind][]*spb.SapDiscovery_Resource)

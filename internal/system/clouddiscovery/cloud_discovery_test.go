@@ -384,33 +384,49 @@ func TestDiscoverResourceCache(t *testing.T) {
 			GetInstanceErr: []error{nil, cmpopts.AnyError},
 		},
 		firstWant: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
+			},
 		},
 		firstWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
+				},
+				ResourceUri: "projects/test-project/zones/test-zone/instances/test-instance",
 			},
 		}},
 		secondWant: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
-			ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
+			},
+			ResourceUri: "projects/test-project/zones/test-zone/instances/test-instance",
 		},
 		secondWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
+				},
 			},
 		}},
 	}, {
@@ -436,6 +452,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 				VirtualHostname: "test-instance",
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
 			},
 		},
 		firstWantToDiscover: []toDiscover{{
@@ -446,6 +465,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-instance",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
 				},
 			},
 		}},
@@ -455,6 +477,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 				VirtualHostname: "test-instance",
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
 			},
 		},
 		secondWantToDiscover: []toDiscover{{
@@ -465,6 +490,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-instance",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
 				},
 			},
 		}},
@@ -493,6 +521,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 				VirtualHostname: "test-instance",
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
 			},
 		},
 		firstWantToDiscover: []toDiscover{{
@@ -503,6 +534,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-instance",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
 				},
 			},
 		}},
@@ -512,6 +546,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 				VirtualHostname: "test-instance",
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk",
+				}},
 			},
 		},
 		secondWantToDiscover: []toDiscover{{
@@ -522,6 +559,9 @@ func TestDiscoverResourceCache(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-instance",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk",
+					}},
 				},
 			},
 		}},
@@ -561,33 +601,49 @@ func TestDiscoverResourceCache(t *testing.T) {
 			},
 		},
 		firstWant: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk2",
+				}},
+			},
 		},
 		firstWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk2",
+					}},
+				},
 			},
 		}},
 		secondWant: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "projects/test-project/zones/test-zone/disks/test-disk2",
+				}},
+			},
 		},
 		secondWantToDiscover: []toDiscover{{
 			name: "projects/test-project/zones/test-zone/disks/test-disk2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "projects/test-project/zones/test-zone/disks/test-disk2",
+					}},
+				},
 			},
 		}},
 	}}
@@ -670,6 +726,11 @@ func TestDiscoverResource(t *testing.T) {
 			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 				VirtualHostname: "test-host",
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "test-disk",
+				}, {
+					Source: "test-disk2",
+				}},
 			},
 		},
 		wantToDiscover: []toDiscover{{
@@ -680,6 +741,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -690,6 +756,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -701,6 +772,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -712,6 +788,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -723,6 +804,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -734,6 +820,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -745,6 +836,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}, {
@@ -756,6 +852,11 @@ func TestDiscoverResource(t *testing.T) {
 				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
 				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "test-host",
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}},
 				},
 			},
 		}},
@@ -916,80 +1017,125 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			GetInstanceErr: []error{nil},
 		},
 		wantResource: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "test-disk",
+				}, {
+					Source: "test-disk2",
+				}}},
 		},
 		wantToDiscover: []toDiscover{{
 			name: "test-disk",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name: "test-disk2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "test-network",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "test-network2",
 			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "test-subnetwork",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "test-subnetwork2",
 			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "1.2.3.4",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}, {
 			name:    "5.6.7.8",
 			network: "test-network2",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "projects/test-project/zones/test-zone/instances/test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "projects/test-project/zones/test-zone/instances/test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-disk2",
+					}}},
 			},
 		}},
 	}, {
@@ -1280,10 +1426,6 @@ func TestDiscoverResourceForURI(t *testing.T) {
 			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_NETWORK,
 			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_NETWORK,
 			ResourceUri:  "projects/test-project/zones/test-zone/networks/test-network",
-			RelatedResources: []string{
-				"projects/test-project/regions/test-region/subnetworks/test-subnetwork",
-				"projects/test-project/regions/test-region2/subnetworks/test-subnetwork2",
-			},
 		},
 	}, {
 		name:    "unsupportedURIFailure",
@@ -1402,53 +1544,90 @@ func TestDiscoverInstance(t *testing.T) {
 			GetInstanceErr: []error{nil},
 		},
 		wantResource: &spb.SapDiscovery_Resource{
-			ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-			ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-			ResourceUri:        "test-instance",
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+			ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "test-instance",
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+					Source: "test-disk",
+				}, {
+					Source: "test-other-disk",
+				}},
+			},
 		},
 		wantToDiscover: []toDiscover{{
 			name: "test-disk",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-other-disk",
+					}},
+				},
 			},
 		}, {
 			name: "test-other-disk",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-other-disk",
+					}},
+				},
 			},
 		}, {
 			name:    "test-network",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-other-disk",
+					}},
+				},
 			},
 		}, {
 			name:    "test-subnet",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-other-disk",
+					}},
+				},
 			},
 		}, {
 			name:    "test-network-ip",
 			network: "test-network",
 			parent: &spb.SapDiscovery_Resource{
-				ResourceType:       spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:       spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceUri:        "test-instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{},
+				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceUri:  "test-instance",
+				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{{
+						Source: "test-disk",
+					}, {
+						Source: "test-other-disk",
+					}},
+				},
 			},
 		},
 		},
