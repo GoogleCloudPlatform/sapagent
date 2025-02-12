@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 23,
+    "version": 24,
     "validation_system": {
       "system_metrics": [
         {
@@ -660,6 +660,13 @@
                 "label": "disk_data_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_data_volume"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         },
@@ -693,6 +700,13 @@
                 "label": "disk_log_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_log_volume"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         }
