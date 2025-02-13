@@ -1626,7 +1626,7 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	// Find disk name for that device.
 	p = commandlineexecutor.Params{
 		Executable: "ls",
-		Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+		Args:       []string{"-lart", "/dev/disk/by-id/"},
 	}
 	res = exec(ctx, p)
 	if res.Error != nil {
@@ -1663,7 +1663,7 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 			}
 			devicePath := parts[8]
 			// Strip up up to the end of /google-
-			devicePath = strings.TrimPrefix(devicePath, "/dev/disk/by-id/google-")
+			devicePath = strings.TrimPrefix(devicePath, "/dev/disk/by-id/")
 			// Maybe need to handle disk partitions
 			return devicePath, nil
 		}

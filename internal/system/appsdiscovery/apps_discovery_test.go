@@ -2523,7 +2523,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2532,7 +2532,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2541,7 +2541,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, // GetSystemInstanceList
@@ -2595,9 +2595,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2628,7 +2628,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2637,7 +2637,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2646,7 +2646,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeMultipleNodesResult, // GetSystemInstanceList
@@ -2700,9 +2700,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2733,7 +2733,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2742,7 +2742,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2751,7 +2751,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, // GetSystemInstanceList
@@ -2811,9 +2811,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2842,9 +2842,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}},
 	}, {
@@ -2875,7 +2875,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2884,7 +2884,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2893,7 +2893,7 @@ func TestDiscoverHANA(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeMultipleNodesResult, // GetSystemInstanceList
@@ -2953,9 +2953,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2984,9 +2984,9 @@ func TestDiscoverHANA(t *testing.T) {
 				InstanceNumber: "00",
 			},
 			DBDiskMap: map[string]string{
-				logPathName:       "sap-hana-log-0",
-				dataPathName:      "sap-hana-data-0",
-				logBackupPathName: "sap-hanabackup",
+				logPathName:       "google-sap-hana-log-0",
+				dataPathName:      "google-sap-hana-data-0",
+				logBackupPathName: "google-sap-hanabackup",
 			},
 		}},
 	}, {
@@ -5983,14 +5983,14 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult,
 				defaultLsblkResult,
 				defaultDiskLsResult},
 		},
-		want: "sap-hana-data-0",
+		want: "google-sap-hana-data-0",
 	}, {
 		name:     "findsBestMountMatch",
 		pathName: "/hana/data",
@@ -6003,7 +6003,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult, {
@@ -6011,7 +6011,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				},
 				defaultDiskLsResult},
 		},
-		want: "sap-hana-data-0",
+		want: "google-sap-hana-data-0",
 	}, {
 		name:     "notInGlobalINI",
 		pathName: "/hana/data",
@@ -6086,7 +6086,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult, {
@@ -6106,7 +6106,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult,
@@ -6130,7 +6130,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult,
@@ -6151,7 +6151,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultDataPathResult,
@@ -6201,7 +6201,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6210,7 +6210,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6219,7 +6219,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultLogPathResult,
@@ -6234,9 +6234,9 @@ func TestDiscoverHANADisks(t *testing.T) {
 			},
 		},
 		want: map[string]string{
-			logPathName:       "sap-hana-log-0",
-			dataPathName:      "sap-hana-data-0",
-			logBackupPathName: "sap-hanabackup",
+			logPathName:       "google-sap-hana-log-0",
+			dataPathName:      "google-sap-hana-data-0",
+			logBackupPathName: "google-sap-hanabackup",
 		},
 	}, {
 		name: "noLogPath",
@@ -6256,7 +6256,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6265,7 +6265,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{{
 				StdOut: "",
@@ -6278,8 +6278,8 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultDiskLsResult},
 		},
 		want: map[string]string{
-			dataPathName:      "sap-hana-data-0",
-			logBackupPathName: "sap-hanabackup",
+			dataPathName:      "google-sap-hana-data-0",
+			logBackupPathName: "google-sap-hanabackup",
 		},
 	}, {
 		name: "noDataPath",
@@ -6296,7 +6296,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6308,7 +6308,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultLogPathResult,
@@ -6321,8 +6321,8 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultDiskLsResult},
 		},
 		want: map[string]string{
-			logPathName:       "sap-hana-log-0",
-			logBackupPathName: "sap-hanabackup",
+			logPathName:       "google-sap-hana-log-0",
+			logBackupPathName: "google-sap-hanabackup",
 		},
 	}, {
 		name: "noLogBackupPath",
@@ -6339,7 +6339,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6348,7 +6348,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
 			}, {
 				Executable: "ls",
-				Args:       []string{"-lart", "/dev/disk/by-id/google-*"},
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
 			}, {
 				Executable: "grep",
 				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
@@ -6364,8 +6364,8 @@ func TestDiscoverHANADisks(t *testing.T) {
 				}},
 		},
 		want: map[string]string{
-			logPathName:  "sap-hana-log-0",
-			dataPathName: "sap-hana-data-0",
+			logPathName:  "google-sap-hana-log-0",
+			dataPathName: "google-sap-hana-data-0",
 		},
 	}}
 	ctx := context.Background()

@@ -281,14 +281,25 @@ func runDiscovery(ctx context.Context, a any) {
 				sys.UseDrReconciliation = true
 				// Remove fields only used for local discovery:
 				// resource.instanceProperties.diskDeviceNames
-				for _, app := range sys.GetApplicationLayer().GetResources() {
-					if app.GetInstanceProperties() != nil {
-						app.InstanceProperties.DiskDeviceNames = nil
-					}
+				var comps []*spb.SapDiscovery_Component
+				if sys.ApplicationLayer != nil {
+					comps = append(comps, sys.ApplicationLayer)
 				}
-				for _, db := range sys.GetDatabaseLayer().GetResources() {
-					if db.GetInstanceProperties() != nil {
-						db.InstanceProperties.DiskDeviceNames = nil
+				if sys.DatabaseLayer != nil {
+					comps = append(comps, sys.DatabaseLayer)
+				}
+				for len(comps) > 0 {
+					comp := comps[len(comps)-1]
+					comps = comps[:len(comps)-1]
+					if comp.ReplicationSites != nil {
+						for _, site := range comp.ReplicationSites {
+							comps = append(comps, site.Component)
+						}
+					}
+					for _, res := range comp.GetResources() {
+						if res.GetInstanceProperties() != nil {
+							res.InstanceProperties.DiskDeviceNames = nil
+						}
 					}
 				}
 				log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
@@ -461,11 +472,13 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 			}
 
 			if s.DBDiskMap != nil {
+				log.CtxLogger(ctx).Debugw("DB Disk Map", "map", s.DBDiskMap)
 				for mountPath, deviceName := range s.DBDiskMap {
 					// instanceResource instance properties disk mounts is a list of the attached disks with
 					// where name is the disk's source and mountPoint is the device name.
 					for _, disk := range instanceResource.InstanceProperties.DiskDeviceNames {
-						if disk.GetDeviceName() == deviceName {
+						if strings.Contains(deviceName, disk.GetDeviceName()) {
+							log.CtxLogger(ctx).Debugw("Disk for device name", "disk", disk, "mountPath", mountPath, "deviceName", deviceName)
 							instanceResource.InstanceProperties.DiskMounts = append(instanceResource.InstanceProperties.DiskMounts,
 								&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
 									Name:       disk.GetSource(),
