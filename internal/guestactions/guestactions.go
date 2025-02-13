@@ -19,10 +19,12 @@ package guestactions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/backinthandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
@@ -78,6 +80,25 @@ type guestActionsOptions struct {
 	channel         string
 	endpoint        string
 	cloudProperties *ipb.CloudProperties
+}
+
+func anyResponse(ctx context.Context, gar *gpb.GuestActionResponse) *anypb.Any {
+	any, err := anypb.New(gar)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Failed to marshal response to any.", "err", err)
+		any = &anypb.Any{}
+	}
+	return any
+}
+
+func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GuestActionRequest, error) {
+	gaReq := &gpb.GuestActionRequest{}
+	if err := msg.UnmarshalTo(gaReq); err != nil {
+		errMsg := fmt.Sprintf("failed to unmarshal message: %v", err)
+		return nil, errors.New(errMsg)
+	}
+	log.CtxLogger(ctx).Debugw("successfully unmarshalled message.", "gar", prototext.Format(gaReq))
+	return gaReq, nil
 }
 
 func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GuestActionResponse {
@@ -142,8 +163,13 @@ func errorResult(errMsg string) *gpb.CommandResult {
 	}
 }
 
-func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionRequest, cloudProperties *metadataserver.CloudProperties) *gpb.GuestActionResponse {
+func (g *GuestActions) messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metadataserver.CloudProperties) (*anypb.Any, error) {
 	var results []*gpb.CommandResult
+	gar, err := parseRequest(ctx, req)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("failed to parse request.", "err", err)
+		return nil, err
+	}
 	log.CtxLogger(ctx).Debugw("received GuestActionRequest to handle", "gar", prototext.Format(gar))
 	for _, command := range gar.GetCommands() {
 		log.CtxLogger(ctx).Debugw("processing command.", "command", prototext.Format(command))
@@ -154,7 +180,7 @@ func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionR
 		case fd == nil:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return guestActionResponse(ctx, results, errMsg)
+			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		case fd.Name() == shellCommand:
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
@@ -164,15 +190,15 @@ func (g *GuestActions) messageHandler(ctx context.Context, gar *gpb.GuestActionR
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return guestActionResponse(ctx, results, errMsg)
+			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		}
 		// Exit early if we get an error
 		if result.GetExitCode() != int32(0) {
 			errMsg := fmt.Sprintf("received nonzero exit code with output: %s", result.GetStdout())
-			return guestActionResponse(ctx, results, errMsg)
+			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		}
 	}
-	return guestActionResponse(ctx, results, "")
+	return anyResponse(ctx, guestActionResponse(ctx, results, "")), nil
 }
 
 func (g *GuestActions) start(ctx context.Context, a any) {

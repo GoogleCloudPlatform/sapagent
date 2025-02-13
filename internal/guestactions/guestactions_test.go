@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -167,7 +168,7 @@ func TestMessageHandler(t *testing.T) {
 		name    string
 		message *gpb.GuestActionRequest
 		want    *gpb.GuestActionResponse
-		wantErr error
+		wantErr bool
 	}{
 		{
 			name:    "NoCommands",
@@ -176,7 +177,7 @@ func TestMessageHandler(t *testing.T) {
 				CommandResults: []*gpb.CommandResult{},
 				Error:          &gpb.GuestActionError{ErrorMessage: ""},
 			},
-			wantErr: nil,
+			wantErr: false,
 		},
 		{
 			name: "UnknownCommandType",
@@ -194,6 +195,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "AgentCommand",
@@ -221,6 +223,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: false,
 		},
 		{
 			name: "UnknownAgentCommand",
@@ -256,6 +259,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "ShellCommandError",
@@ -283,6 +287,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "ShellCommandSuccess",
@@ -310,6 +315,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: false,
 		},
 	}
 
@@ -320,9 +326,14 @@ func TestMessageHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			got := ga.messageHandler(ctx, test.message, nil)
-			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
-				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.message, diff)
+			msg, _ := anypb.New(test.message)
+			got, err := ga.messageHandler(ctx, msg, nil)
+			if test.wantErr && err == nil {
+				t.Errorf("messageHandler(%v) returned nil error, want error", test.name)
+			}
+			wantAny, _ := anypb.New(test.want)
+			if diff := cmp.Diff(wantAny, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
+				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.name, diff)
 			}
 		})
 	}
