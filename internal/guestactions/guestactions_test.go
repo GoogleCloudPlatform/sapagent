@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -32,6 +33,104 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
+
+func TestAnyResponse(t *testing.T) {
+	tests := []struct {
+		name    string
+		gar     *gpb.GuestActionResponse
+		want    *anypb.Any
+		wantErr bool
+	}{
+		{
+			name: "Standard",
+			gar: &gpb.GuestActionResponse{
+				CommandResults: []*gpb.CommandResult{
+					{
+						Command: &gpb.Command{
+							CommandType: &gpb.Command_AgentCommand{
+								AgentCommand: &gpb.AgentCommand{Command: "version"},
+							},
+						},
+						Stdout:   fmt.Sprintf("Google Cloud Agent for SAP version %s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+						Stderr:   "",
+						ExitCode: 0,
+					},
+				},
+				Error: &gpb.GuestActionError{ErrorMessage: ""},
+			},
+			want: &anypb.Any{
+				TypeUrl: "type.googleapis.com/workloadagentplatform.sharedprotos.guestactions.GuestActionResponse",
+			},
+		},
+		{
+			name: "Nil",
+			gar:  nil,
+			want: &anypb.Any{
+				TypeUrl: "type.googleapis.com/workloadagentplatform.sharedprotos.guestactions.GuestActionResponse",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			got := anyResponse(ctx, test.gar)
+			if diff := cmp.Diff(test.want.GetTypeUrl(), got.GetTypeUrl()); diff != "" {
+				t.Errorf("anyResponse(%v) returned diff (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
+
+func TestParseRequest(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     *anypb.Any
+		want    *gpb.GuestActionRequest
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			msg: &anypb.Any{
+				TypeUrl: "type.googleapis.com/workloadagentplatform.sharedprotos.guestactions.GuestActionRequest",
+				Value:   []byte{},
+			},
+			want:    &gpb.GuestActionRequest{},
+			wantErr: false,
+		},
+		{
+			name: "InvalidMsgValue",
+			msg: &anypb.Any{
+				TypeUrl: "type.googleapis.com/workloadagentplatform.sharedprotos.guestactions.GuestActionRequest",
+				Value:   []byte("invalid"),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "InvalidMsgType",
+			msg: &anypb.Any{
+				TypeUrl: "type.googleapis.com/workloadagentplatform.invalid.proto.GuestActionRequest",
+				Value:   []byte{},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			got, err := parseRequest(ctx, test.msg)
+			if test.wantErr && err == nil {
+				t.Errorf("parseRequest(%v) returned nil error, want error", test.name)
+			}
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("parseRequest(%v) returned diff (-want +got):\n%s", test.name, diff)
+			}
+		})
+	}
+}
 
 func TestHandleShellCommand(t *testing.T) {
 	tests := []struct {
@@ -166,8 +265,9 @@ func TestMessageHandler(t *testing.T) {
 	tests := []struct {
 		name    string
 		message *gpb.GuestActionRequest
+		anyMsg  *anypb.Any
 		want    *gpb.GuestActionResponse
-		wantErr error
+		wantErr bool
 	}{
 		{
 			name:    "NoCommands",
@@ -176,7 +276,14 @@ func TestMessageHandler(t *testing.T) {
 				CommandResults: []*gpb.CommandResult{},
 				Error:          &gpb.GuestActionError{ErrorMessage: ""},
 			},
-			wantErr: nil,
+			wantErr: false,
+		},
+		{
+			name:    "BadRequest",
+			message: &gpb.GuestActionRequest{},
+			anyMsg:  &anypb.Any{TypeUrl: "type.googleapis.com/workloadagentplatform.sharedprotos.guestactions.GuestActionRequest", Value: []byte("invalid")},
+			want:    &gpb.GuestActionResponse{},
+			wantErr: true,
 		},
 		{
 			name: "UnknownCommandType",
@@ -194,6 +301,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "AgentCommand",
@@ -221,6 +329,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: false,
 		},
 		{
 			name: "UnknownAgentCommand",
@@ -256,6 +365,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "ShellCommandError",
@@ -283,6 +393,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: true,
 		},
 		{
 			name: "ShellCommandSuccess",
@@ -310,6 +421,7 @@ func TestMessageHandler(t *testing.T) {
 				},
 				Error: &gpb.GuestActionError{ErrorMessage: ""},
 			},
+			wantErr: false,
 		},
 	}
 
@@ -320,9 +432,18 @@ func TestMessageHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			got := ga.messageHandler(ctx, test.message, nil)
-			if diff := cmp.Diff(test.want, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
-				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.message, diff)
+			msg, _ := anypb.New(test.message)
+			if test.anyMsg != nil {
+				msg = test.anyMsg
+			}
+			got, err := ga.messageHandler(ctx, msg, nil)
+			wantAny, _ := anypb.New(test.want)
+			if test.wantErr {
+				if err == nil {
+					t.Errorf("messageHandler(%v) returned nil error, want error", test.name)
+				}
+			} else if diff := cmp.Diff(wantAny, got, protocmp.Transform(), protocmp.IgnoreFields(&gpb.GuestActionError{}, "error_message")); diff != "" {
+				t.Errorf("messageHandler(%v) returned diff (-want +got):\n%s", test.name, diff)
 			}
 		})
 	}
