@@ -1480,8 +1480,8 @@ func (d *SapDiscovery) discoverHANALandscapeId(ctx context.Context, app *sappb.S
 	sidUpper := strings.ToUpper(app.Sapsid)
 	path := fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config/nameserver.ini", sidUpper)
 	p := commandlineexecutor.Params{
-		Executable: "grep",
-		Args:       []string{"'id ='", path},
+		Executable: "sh",
+		Args:       []string{"-c", `grep "id =" ` + path},
 	}
 	res := d.Execute(ctx, p)
 	if res.Error != nil {
@@ -1504,6 +1504,7 @@ func (d *SapDiscovery) discoverHANADisks(ctx context.Context, app *sappb.SAPInst
 	configPath := fmt.Sprintf(hanaConfigDir, sidUpper)
 	globalINIPath := filepath.Join(configPath, "global.ini")
 	deviceName, err := findDiskForHANABasePath(ctx, logPathName, globalINIPath, d.Execute)
+
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error finding disk for log path", "error", err)
 	} else {

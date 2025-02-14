@@ -534,7 +534,7 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 }
 
 func (d *CloudDiscovery) discoverInstanceGroupInstances(ctx context.Context, groupURI string) ([]string, error) {
-	log.CtxLogger(ctx).Debug("discoverInstanceGroupInstances", "groupURI", groupURI)
+	log.CtxLogger(ctx).Debugw("discoverInstanceGroupInstances", "groupURI", groupURI)
 	project := ExtractFromURI(groupURI, projectsURIPart)
 	zone := ExtractFromURI(groupURI, zonesURIPart)
 	name := ExtractFromURI(groupURI, instanceGroupsURIPart)

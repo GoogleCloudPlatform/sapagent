@@ -2513,8 +2513,8 @@ func TestDiscoverHANA(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2618,8 +2618,8 @@ func TestDiscoverHANA(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2723,8 +2723,8 @@ func TestDiscoverHANA(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -2865,8 +2865,8 @@ func TestDiscoverHANA(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "abcadm", "/usr/sap/ABC/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/ABC/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{logPathName, "/usr/sap/ABC/SYS/global/hdb/custom/config/global.ini"},
@@ -3276,7 +3276,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				// HANA landscape id
-				Executable: "grep",
+				Executable: "sh",
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult,
@@ -3649,7 +3649,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				// HANA Landscape ID
-				Executable: "grep",
+				Executable: "sh",
 			}, {
 				Executable: "sudo",
 			}, {
@@ -3659,7 +3659,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 			}, {
 				// HANA Landscape ID
-				Executable: "grep",
+				Executable: "sh",
 			}},
 			results: []commandlineexecutor.Result{
 				landscapeSingleNodeResult, hanaMountResult, defaultHANAVersionResult, defaultLandscapeIDResult,
@@ -3783,8 +3783,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini`},
 			}},
 			results: []commandlineexecutor.Result{
 				defaultProfileResult,
@@ -3911,8 +3911,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "dehadm", "/usr/sap/DEH/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/DEH/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{"rdisp/mshost", "/sapmnt/abc/profile/DEFAULT.PFL"},
@@ -4093,8 +4093,8 @@ func TestDiscoverSAPApps(t *testing.T) {
 				Executable: "sudo",
 				Args:       []string{"-i", "-u", "db2adm", "/usr/sap/DB2/HDB00/HDB", "version"},
 			}, {
-				Executable: "grep",
-				Args:       []string{"'id ='", "/usr/sap/DB2/SYS/global/hdb/custom/config/nameserver.ini"},
+				Executable: "sh",
+				Args:       []string{"-c", `grep "id =" /usr/sap/DB2/SYS/global/hdb/custom/config/nameserver.ini`},
 			}, {
 				Executable: "grep",
 				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
