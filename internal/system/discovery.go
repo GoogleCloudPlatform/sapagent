@@ -278,7 +278,6 @@ func runDiscovery(ctx context.Context, a any) {
 			for _, sys := range sapSystems {
 				sys.ProjectNumber = cp.GetNumericProjectId()
 				sys.UpdateTime = timestamppb.Now()
-				sys.UseDrReconciliation = true
 				// Remove fields only used for local discovery:
 				// resource.instanceProperties.diskDeviceNames
 				var comps []*spb.SapDiscovery_Component
@@ -665,6 +664,7 @@ resLoop:
 					repComp.Resources = removeDuplicates(append(repComp.Resources, childRepSite.Component.Resources...))
 					// Add the child site's replication sites to this component.
 					repComp.ReplicationSites = append(repComp.ReplicationSites, childRepSite.Component.ReplicationSites...)
+					repComp.HaHosts = append(repComp.HaHosts, lbGroup.instanceURIs...)
 					break
 				}
 			}
