@@ -136,6 +136,8 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 				l[k] = diskInfo["size"]
 			case wpb.DiskVariable_PD_SIZE:
 				l[k] = diskInfo["pdsize"]
+			case wpb.DiskVariable_BLOCK_DEVICE:
+				l[k] = diskInfo["blockdevice"]
 			}
 		}
 	}
@@ -303,6 +305,7 @@ func setDiskInfoForDevice(
 			diskInfo["instancedisktype"] = strings.ToLower(disk.GetDeviceType())
 			diskInfo["size"] = matchedSize
 			diskInfo["pdsize"] = strconv.FormatInt(matchedBlockDeviceSize, 10)
+			diskInfo["blockdevice"] = matchedBlockDevice.Name
 			break
 		}
 	}

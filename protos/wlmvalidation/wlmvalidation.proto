@@ -48,6 +48,7 @@ enum DiskVariable {
   MOUNT = 2;
   SIZE = 3;
   PD_SIZE = 4;
+  BLOCK_DEVICE = 5;
 }
 
 enum HANABackupVariable {

@@ -589,6 +589,7 @@ func TestDiskInfo(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "2048",
 				"pdsize":           "4096",
+				"blockdevice":      "/dev/sdb",
 			},
 		},
 		{
@@ -648,6 +649,7 @@ func TestDiskInfo(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "4096",
 				"pdsize":           "4096",
+				"blockdevice":      "/dev/sdb",
 			},
 		},
 	}
@@ -703,6 +705,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
+				"blockdevice":      "disk-device-name",
 			},
 		},
 		{
@@ -725,6 +728,7 @@ func TestSetDiskInfoForDevice(t *testing.T) {
 				"instancedisktype": "default-disk-type",
 				"size":             "1024",
 				"pdsize":           "2048",
+				"blockdevice":      "other-disk-device-name",
 			},
 		},
 	}
@@ -970,6 +974,8 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": "",
 				"transparent_hugepages":                     "disabled",
 				"ha_in_same_zone":                           "",
+				"hana_data_volume":                          "",
+				"hana_log_volume":                           "",
 			},
 		},
 		{
@@ -1090,6 +1096,8 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 				"transparent_hugepages":                     "enabled",
 				"ha_in_same_zone":                           "other-instance-1",
+				"hana_data_volume":                          "/dev/sdb",
+				"hana_log_volume":                           "/dev/sdb",
 			},
 		},
 	}
