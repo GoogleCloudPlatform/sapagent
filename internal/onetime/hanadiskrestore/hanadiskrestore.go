@@ -384,9 +384,6 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		}
 	} else {
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupRestoreStarted)
-		if err := r.validateDisksBelongToCG(ctx); err != nil {
-			return err
-		}
 
 		disksDetached := []*multiDisks{}
 		for _, d := range r.disks {
@@ -637,6 +634,11 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	} else {
 		r.NewDiskType = fmt.Sprintf("projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, r.NewDiskType)
 	}
+
+	if err := r.validateDisksBelongToCG(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 

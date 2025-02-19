@@ -863,7 +863,7 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "EmptyNewTypeGroupSnapshotNoErr",
+			name: "EmptyNewTypeGroupSnapshotCGErr",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
@@ -912,7 +912,7 @@ func TestCheckPreConditions(t *testing.T) {
 				isGroupSnapshot: true,
 			},
 			exec:    scaleupExec,
-			wantErr: nil,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "NewTypePresent",
@@ -954,6 +954,154 @@ func TestCheckPreConditions(t *testing.T) {
 					DiskAttachedToInstanceDeviceName: "test-device-name",
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{cmpopts.AnyError},
+				},
+				isGroupSnapshot: true,
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotValidateCGErr",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName:   "test-disk-name",
+							DeviceName: "pd-balanced",
+							Type:       "PERSISTENT",
+						},
+					},
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName:   "test-disk-name-1",
+							DeviceName: "pd-balanced",
+							Type:       "PERSISTENT",
+						},
+					},
+				},
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+							{
+								Name:       "test-snapshot-1",
+								SourceDisk: "test-disk-1",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							Name:             "test-disk-1",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							Name:             "test-disk-2",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg-1"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				isGroupSnapshot: true,
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotValidateCGSuccess",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "a", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "c", nil
+			},
+			r: &Restorer{
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName:   "test-disk-name",
+							DeviceName: "pd-balanced",
+							Type:       "PERSISTENT",
+						},
+					},
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName:   "test-disk-name-1",
+							DeviceName: "pd-balanced",
+							Type:       "PERSISTENT",
+						},
+					},
+				},
+				GroupSnapshot: "test-group-snapshot",
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+					GetInstanceErr:  []error{nil},
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot",
+								SourceDisk: "test-disk",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+							{
+								Name:       "test-snapshot-1",
+								SourceDisk: "test-disk-1",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{
+							Name:             "test-disk-1",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+						&compute.Disk{
+							Name:             "test-disk-2",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
 				},
 				isGroupSnapshot: true,
 			},
@@ -965,6 +1113,7 @@ func TestCheckPreConditions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.r.checkPreConditions(context.Background(), test.cp, test.checkDataDir, test.checkLogDir, test.exec)
+			fmt.Println("got", got)
 			if diff := cmp.Diff(got, test.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("checkPreConditions() returned diff (-want +got):\n%s", diff)
 			}
@@ -1083,47 +1232,6 @@ func TestPrepare(t *testing.T) {
 				}
 			},
 			want: nil,
-		},
-		{
-			name: "GroupSnapshotValidateCGErr",
-			r: &Restorer{
-				disks: []*multiDisks{
-					&multiDisks{
-						disk: &ipb.Disk{
-							DiskName: "disk-name-1",
-						},
-					},
-					&multiDisks{
-						disk: &ipb.Disk{
-							DiskName: "disk-name-2",
-						},
-					},
-				},
-				gceService: &fake.TestGCE{
-					GetDiskResp: []*compute.Disk{
-						&compute.Disk{
-							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
-						},
-						&compute.Disk{
-							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg-1"},
-						},
-					},
-					GetDiskErr: []error{nil, nil},
-				},
-				isGroupSnapshot: true,
-			},
-			cp: defaultCloudProperties,
-			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
-				return nil
-			},
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 0,
-					Error:    nil,
-					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
-				}
-			},
-			want: cmpopts.AnyError,
 		},
 		{
 			name: "GroupSnapshotDetachDiskErr",
