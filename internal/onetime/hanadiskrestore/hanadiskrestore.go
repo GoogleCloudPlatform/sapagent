@@ -363,7 +363,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	if err := waitForIndexServerStop(ctx, r.HanaSidAdm, exec); err != nil {
 		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
 	}
-	if err := hanabackup.Unmount(ctx, mountPath, exec); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, exec, r.isScaleout); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
@@ -424,7 +424,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
 	}
-	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand, r.isScaleout); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 	if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
