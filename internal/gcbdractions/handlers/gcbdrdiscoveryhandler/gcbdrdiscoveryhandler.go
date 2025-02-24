@@ -33,7 +33,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	apb "google.golang.org/protobuf/types/known/anypb"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 // GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.

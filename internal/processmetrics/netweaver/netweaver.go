@@ -271,7 +271,7 @@ func collectServiceMetrics(ctx context.Context, p *InstanceProperties, procs map
 		log.CtxLogger(ctx).Debugw("Creating metrics for process",
 			"metric", nwServicePath, "process", proc.Name, "instanceid", p.SAPInstance.GetInstanceId(), "value", value)
 		metricevents.AddEvent(ctx, metricevents.Parameters{
-			Path:       nwServicePath,
+			Path:       metricURL + nwServicePath,
 			Message:    fmt.Sprintf("NetWeaver service process status for process %s", proc.Name),
 			Value:      strconv.FormatInt(value, 10),
 			Labels:     metricLabels(p, extraLabels),

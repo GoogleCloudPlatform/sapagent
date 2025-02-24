@@ -20,7 +20,7 @@ jobs:
       run: |
         git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
         cd workloadagentplatform
-        git checkout b32c70057c1e100fe4877584b94effb025b32988
+        git checkout 3ee11cd1f3a5916364d9e278722c589021ebb009
         cd ..
         find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
 
