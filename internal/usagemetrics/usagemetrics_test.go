@@ -262,6 +262,9 @@ func TestErrorConstants(t *testing.T) {
 	if MultipartUploadFailure != 80 {
 		t.Errorf("MultipartUploadFailure = %v, want 80", MultipartUploadFailure)
 	}
+	if GCBDRActionsFailure != 81 {
+		t.Errorf("GCBDRActionsFailure = %v, want 81", GCBDRActionsFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -513,5 +516,8 @@ func TestActionConstants(t *testing.T) {
 	}
 	if MultipartUploadFinished != 82 {
 		t.Errorf("MultipartUploadFinished = %v, want 82", MultipartUploadFinished)
+	}
+	if GCBDRActionsStarted != 83 {
+		t.Errorf("GCBDRActionsStarted = %v, want 83", GCBDRActionsStarted)
 	}
 }

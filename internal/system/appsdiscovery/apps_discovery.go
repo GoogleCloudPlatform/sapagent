@@ -702,7 +702,7 @@ func (d *SapDiscovery) discoverAppToDBConnection(ctx context.Context, sid string
 		}
 	} else {
 		sidUpper := strings.ToUpper(sid)
-		profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/*", sidUpper)
+		profilePath := fmt.Sprintf("/usr/sap/%s/SYS/profile/DEFAULT.PFL", sidUpper)
 		result := d.Execute(ctx, commandlineexecutor.Params{
 			Executable:  "sh",
 			ArgsToSplit: `-c 'grep "SAPDBHOST" ` + profilePath + `'`,
