@@ -3769,7 +3769,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable:  "sh",
-				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/DEFAULT.PFL'`,
 			}, {
 				Executable: "grep",
 				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
@@ -3938,7 +3938,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable:  "sh",
-				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/DEFAULT.PFL'`,
 			}, {
 				Executable: "grep",
 				Args:       []string{"dbms/type", "/sapmnt/abc/profile/DEFAULT.PFL"},
@@ -4080,7 +4080,7 @@ func TestDiscoverSAPApps(t *testing.T) {
 				ArgsToSplit: `-c 'grep "dbid\|dbms/name\|j2ee/dbname\|dbs/hdb/dbname" /usr/sap/ABC/SYS/profile/*'`,
 			}, {
 				Executable:  "sh",
-				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/*'`,
+				ArgsToSplit: `-c 'grep "SAPDBHOST" /usr/sap/ABC/SYS/profile/DEFAULT.PFL'`,
 			}, {
 				Executable: "grep", // Get profile
 			}, {

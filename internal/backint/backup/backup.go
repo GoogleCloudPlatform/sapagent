@@ -189,6 +189,11 @@ func backupFile(ctx context.Context, p parameters) string {
 		}
 		p.reader = f
 	}
+	storageClass := p.config.GetStorageClass().String()
+	if storageClass == "STORAGE_CLASS_UNSPECIFIED" {
+		// An empty string allows the bucket default to be used.
+		storageClass = ""
+	}
 
 	rw := storage.ReadWriter{
 		Reader:                     p.reader,
@@ -200,7 +205,7 @@ func backupFile(ctx context.Context, p parameters) string {
 		TotalBytes:                 p.fileSize,
 		LogDelay:                   time.Duration(p.config.GetLogDelaySec()) * time.Second,
 		Compress:                   p.config.GetCompress(),
-		StorageClass:               p.config.GetStorageClass().String(),
+		StorageClass:               storageClass,
 		DumpData:                   p.config.GetDumpData(),
 		RateLimitBytes:             p.config.GetRateLimitMb() * 1024 * 1024,
 		EncryptionKey:              p.config.GetEncryptionKey(),

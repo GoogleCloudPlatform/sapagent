@@ -23,7 +23,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"github.com/google/subcommands"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -33,7 +33,7 @@ import (
 
 	apb "google.golang.org/protobuf/types/known/anypb"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 // GCBDRBackupHandler is the handler for gcbdr-backup command.

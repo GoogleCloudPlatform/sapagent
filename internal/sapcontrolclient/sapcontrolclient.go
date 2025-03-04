@@ -20,10 +20,14 @@ package sapcontrolclient
 import (
 	"encoding/xml"
 	"fmt"
+	"slices"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/soap"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
+
+// seenProcessList maps process names to system numbers running that process.
+var seenProcessList = make(map[string][]string)
 
 type (
 	// Client implements sapcontrol calls supported for all sap instance types.
@@ -142,7 +146,36 @@ func (c Client) GetProcessList() ([]OSProcess, error) {
 		return nil, err
 	}
 	log.Logger.Debugw("Sapcontrol GetProcessList", "apiResponse", res.Processes)
-	return res.Processes, nil
+
+	// Processes will be missing from this list during stops/restarts. Keep track
+	// and manually insert missing processes with gray status and pid -1.
+	processes := res.Processes
+	systemNumber := c.sn
+	if seenProcessList == nil {
+		seenProcessList = make(map[string][]string)
+	}
+	for _, p := range processes {
+		if p.Name == "" || p.Name == "sapcpe" || p.Pid == 0 || p.Pid == -1 || p.Dispstatus == "" {
+			continue
+		}
+		if !slices.Contains(seenProcessList[p.Name], systemNumber) {
+			seenProcessList[p.Name] = append(seenProcessList[p.Name], systemNumber)
+		}
+	}
+	for seenProcessName := range seenProcessList {
+		if _, ok := seenProcessList[seenProcessName]; !ok {
+			continue
+		}
+		if !slices.Contains(seenProcessList[seenProcessName], systemNumber) {
+			continue
+		}
+		if !slices.ContainsFunc(processes, func(p OSProcess) bool { return (p.Name == seenProcessName) }) {
+			missingProcess := OSProcess{Name: seenProcessName, Dispstatus: "SAPControl-GRAY", Pid: -1}
+			log.Logger.Debugw("Adding missing process to Sapcontrol GetProcessList response", "process", missingProcess)
+			processes = append(processes, missingProcess)
+		}
+	}
+	return processes, nil
 }
 
 // ABAPGetWPTable performs ABAPGetWPTable soap request.

@@ -45,6 +45,7 @@ message Configuration {
   DiscoveryConfiguration discovery_configuration = 10;
   SupportConfiguration support_configuration = 11;
   UAPConfiguration uap_configuration = 12;
+  GCBDRConfiguration gcbdr_configuration = 13;
 }
 
 message CollectionConfiguration {
@@ -76,6 +77,7 @@ message CollectionConfiguration {
   google.protobuf.BoolValue collect_reliability_metrics = 21
       [deprecated = true];
   int64 reliability_metrics_frequency = 22 [deprecated = true];
+  int64 metric_events_log_delay_seconds = 23;
 }
 
 
@@ -229,5 +231,10 @@ message SupportConfiguration {
 
 message UAPConfiguration {
   google.protobuf.BoolValue enabled = 1;
+  google.protobuf.BoolValue test_channel_enabled = 2;
+}
+
+message GCBDRConfiguration {
+  google.protobuf.BoolValue communication_enabled = 1;
   google.protobuf.BoolValue test_channel_enabled = 2;
 }

@@ -86,6 +86,7 @@ func TestCollectNodeState(t *testing.T) {
 		wantMetrics     []*mrpb.TimeSeries
 		wantValues      []int
 		wantMetricCount int
+		wantNodes       []string
 		wantErr         error
 	}{
 		{
@@ -145,6 +146,7 @@ func TestCollectNodeState(t *testing.T) {
 			},
 			wantValues:      []int{nodeUnclean, nodeShutdown},
 			wantMetricCount: 2,
+			wantNodes:       []string{"test-instance-1", "test-instance-2"},
 		},
 		{
 			name:       "StateStandbyAndOnlineUnknown",
@@ -226,6 +228,7 @@ func TestCollectNodeState(t *testing.T) {
 			},
 			wantValues:      []int{nodeStandby, stateUnknown, nodeOnline},
 			wantMetricCount: 3,
+			wantNodes:       []string{"test-instance-1", "test-instance-2", "test-instance-3"},
 		},
 		{
 			name:       "PacemekerReadFailure",
@@ -258,7 +261,7 @@ func TestCollectNodeState(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues, gotErr := collectNodeState(context.Background(), test.properties, test.fakeNodeState, nil)
+			gotMetrics, gotValues, gotNodes, gotErr := collectNodeState(context.Background(), test.properties, test.fakeNodeState, nil)
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),
 				// These fields get generated on the backend, and it'd make a messy test to check them all.
@@ -271,6 +274,9 @@ func TestCollectNodeState(t *testing.T) {
 			}
 			diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(x, y int) bool { return x < y }))
 			if diff != "" {
+				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
+			}
+			if diff := cmp.Diff(test.wantNodes, gotNodes, cmpopts.SortSlices(func(x, y string) bool { return x < y })); diff != "" {
 				t.Errorf("collectNodeState() returned unexpected diff (-want,+got): %s\n", diff)
 			}
 
@@ -291,6 +297,7 @@ func TestCollectResourceState(t *testing.T) {
 		name              string
 		properties        *InstanceProperties
 		fakeResourceState readPacemakerResourceState
+		nodeNames         []string
 		wantMetrics       []*mrpb.TimeSeries
 		wantValues        []int
 		wantMetricCount   int
@@ -519,6 +526,76 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 3,
 		},
 		{
+			name:       "SuccessEmptyNodeName",
+			properties: defaultInstanceProperties,
+			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+				rs := []pacemaker.Resource{
+					{
+						Name: "resource1",
+						Role: "Stopped",
+						Node: "",
+					},
+					{
+						Name: "resource2",
+						Role: "Seek",
+						Node: "test-instance-2",
+					},
+				}
+				return rs, nil
+			},
+			nodeNames: []string{"test-instance-1", "test-instance-2"},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":           "",
+							"resource":      "resource1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "",
+							"instance_name": "test-instance",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStopped,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":           "",
+							"resource":      "resource2",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: stateUnknown,
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValues:      []int{resourceStopped, stateUnknown},
+			wantMetricCount: 2,
+		},
+		{
 			name:       "SuccessDuplicateResources",
 			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
@@ -605,18 +682,23 @@ func TestCollectResourceState(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			gotMetrics, gotValues, gotErr := collectResourceState(context.Background(), test.properties, test.fakeResourceState, nil)
+			gotMetrics, gotValues, gotErr := collectResourceState(context.Background(), test.properties, test.fakeResourceState, nil, test.nodeNames)
 			cmpOpts := []cmp.Option{
 				protocmp.Transform(),
 				// These fields get generated on the backend, and it'd make a messy test to check them all.
 				protocmp.IgnoreFields(&cpb.TimeInterval{}, "end_time", "start_time"),
 				protocmp.IgnoreFields(&mrpb.Point{}, "interval"),
-				cmpopts.SortSlices(sortTimeSeries),
+				cmpopts.SortSlices(func(a, b *mrpb.TimeSeries) bool {
+					if a.GetMetric().GetLabels()["resource"] == b.GetMetric().GetLabels()["resource"] {
+						return a.GetMetric().GetLabels()["node"] > b.GetMetric().GetLabels()["node"]
+					}
+					return a.GetMetric().GetLabels()["resource"] > b.GetMetric().GetLabels()["resource"]
+				}),
 			}
 			if diff := cmp.Diff(test.wantMetrics, gotMetrics, cmpOpts...); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
 			}
-			if diff := cmp.Diff(test.wantValues, gotValues); diff != "" {
+			if diff := cmp.Diff(test.wantValues, gotValues, cmpopts.SortSlices(func(a, b int) bool { return a > b })); diff != "" {
 				t.Errorf("resourceState() returned unexpected diff (-want,+got): %s\n", diff)
 			}
 

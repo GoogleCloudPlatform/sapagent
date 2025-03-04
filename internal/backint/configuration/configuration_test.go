@@ -351,7 +351,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				BufferSizeMb:            100,
 				FileReadTimeoutMs:       60000,
 				Retries:                 5,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 defaultThreads(),
 				InputFile:               "/dev/stdin",
 				OutputFile:              "/dev/stdout",
@@ -363,6 +362,51 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				return []byte(`{"bucket": "testBucket", "xml_multipart_upload": true}`), nil
 			},
 			wantErr: nil,
+		},
+		{
+			name:   "IncorrectRetentionMode",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:              "testUser",
+				Function:            bpb.Function_BACKUP,
+				ParamFile:           "testParamsFile.json",
+				Bucket:              "testBucket",
+				ObjectRetentionMode: "LOCKED",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "object_retention_mode": "LOCKED"}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "RetentionModeWithoutTime",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:              "testUser",
+				Function:            bpb.Function_BACKUP,
+				ParamFile:           "testParamsFile.json",
+				Bucket:              "testBucket",
+				ObjectRetentionMode: "Locked",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "object_retention_mode": "Locked"}`), nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "RetentionTimeWithoutMode",
+			params: defaultParameters,
+			want: &bpb.BackintConfiguration{
+				UserId:              "testUser",
+				Function:            bpb.Function_BACKUP,
+				ParamFile:           "testParamsFile.json",
+				Bucket:              "testBucket",
+				ObjectRetentionTime: "UTCNow+7d",
+			},
+			read: func(p string) ([]byte, error) {
+				return []byte(`{"bucket": "testBucket", "object_retention_time": "UTCNow+7d"}`), nil
+			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:   "SuccessfullyParseWithDefaultsApplied",
@@ -377,7 +421,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				BufferSizeMb:            100,
 				FileReadTimeoutMs:       60000,
 				Retries:                 5,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 defaultThreads(),
 				RateLimitMb:             0,
 				InputFile:               "/dev/stdin",
@@ -421,9 +464,11 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				FolderPrefix:            "test/1/2/3/",
 				RecoveryFolderPrefix:    "test/1/2/3/",
 				SendMetricsToMonitoring: wpb.Bool(false),
+				ObjectRetentionMode:     "Unlocked",
+				ObjectRetentionTime:     "UTCNow+7d",
 			},
 			read: func(p string) ([]byte, error) {
-				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200, "folder_prefix": "test/1/2/3/", "recovery_folder_prefix": "test/1/2/3/", "storage_class": "COLDLINE", "send_metrics_to_monitoring": false}`), nil
+				return []byte(`{"bucket": "testBucket", "recovery_bucket": "recoveryBucket", "kms_key": "testKey", "compress": true, "parallel_streams": 33, "buffer_size_mb": 300, "file_read_timeout_ms": 2000, "retries": 25, "threads": 200, "rate_limit_mb": 200, "folder_prefix": "test/1/2/3/", "recovery_folder_prefix": "test/1/2/3/", "storage_class": "COLDLINE", "send_metrics_to_monitoring": false, "object_retention_mode": "Unlocked", "object_retention_time": "UTCNow+7d"}`), nil
 			},
 			wantErr: nil,
 		},
@@ -446,7 +491,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				BufferSizeMb:            100,
 				FileReadTimeoutMs:       60000,
 				Retries:                 5,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 defaultThreads(),
 				RateLimitMb:             0,
 				InputFile:               "/input.txt",
@@ -478,7 +522,6 @@ func TestParseArgsAndValidateConfig(t *testing.T) {
 				BufferSizeMb:            100,
 				FileReadTimeoutMs:       60000,
 				Retries:                 5,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 defaultThreads(),
 				RateLimitMb:             0,
 				InputFile:               "/input.txt",
@@ -700,7 +743,6 @@ func TestLegacyParameters(t *testing.T) {
 				BufferSizeMb:            250,
 				FileReadTimeoutMs:       2000,
 				Retries:                 25,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 64,
 				RateLimitMb:             200,
 				Compress:                false,
@@ -759,7 +801,6 @@ func TestApplyDefaultMaxThreads(t *testing.T) {
 		BufferSizeMb:            100,
 		FileReadTimeoutMs:       60000,
 		Retries:                 5,
-		StorageClass:            bpb.StorageClass_STANDARD,
 		Threads:                 64,
 		InputFile:               "/dev/stdin",
 		OutputFile:              "/dev/stdout",

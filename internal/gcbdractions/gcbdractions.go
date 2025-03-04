@@ -1,5 +1,5 @@
 /*
-Copyright 2024 Google LLC
+Copyright 2025 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package guestactions connects to UAP Highway and handles guest actions in the agent.
-package guestactions
+// Package gcbdractions connects to UAP Highway and handles guest actions in the agent.
+package gcbdractions
 
 import (
 	"context"
@@ -26,14 +26,8 @@ import (
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/backinthandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configurehandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/configureinstancehandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/hanadiskbackuphandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/instancemetadatahandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/performancediagnosticshandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/supportbundlehandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers/versionhandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions/handlers/gcbdrbackuphandler"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions/handlers/gcbdrdiscoveryhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -43,42 +37,31 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/uap"
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 const (
-	defaultChannel  = "workloadmanager.googleapis.com/wlm-sap-channel"
-	testChannel     = "wlm-sap-test-channel"
+	defaultChannel  = "workloadmanager.googleapis.com/gcbdr-sap-channel"
+	testChannel     = "gcbdr-test-channel"
 	defaultEndpoint = ""
 	agentCommand    = "agent_command"
 	shellCommand    = "shell_command"
 )
 
-// GuestActions is a struct that holds the state for guest actions.
-type GuestActions struct {
-	CancelFunc context.CancelFunc
+type gcbdrActionsHandler func(context.Context, *gpb.Command, *metadataserver.CloudProperties) *gpb.CommandResult
+
+var gcbdrActionsHandlers = map[string]gcbdrActionsHandler{
+	"gcbdr-backup":    gcbdrbackuphandler.GCBDRBackupHandler,
+	"gcbdr-discovery": gcbdrdiscoveryhandler.GCBDRDiscoveryHandler,
 }
 
-type guestActionHandler func(context.Context, *gpb.Command, *metadataserver.CloudProperties) *gpb.CommandResult
-
-var guestActionsHandlers = map[string]guestActionHandler{
-	"backint":                backinthandler.BackintHandler,
-	"configure":              configurehandler.ConfigureHandler,
-	"configureinstance":      configureinstancehandler.ConfigureInstanceHandler,
-	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
-	"instancemetadata":       instancemetadatahandler.InstanceMetadataHandler,
-	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
-	"supportbundle":          supportbundlehandler.SupportBundleHandler,
-	"version":                versionhandler.VersionHandler,
-}
-
-type guestActionsOptions struct {
+type gcbdrActionsOptions struct {
 	channel         string
 	endpoint        string
 	cloudProperties *ipb.CloudProperties
 }
 
-func anyResponse(ctx context.Context, gar *gpb.GuestActionResponse) *anypb.Any {
+func anyResponse(ctx context.Context, gar *gpb.GCBDRActionResponse) *anypb.Any {
 	any, err := anypb.New(gar)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Failed to marshal response to any.", "err", err)
@@ -87,8 +70,8 @@ func anyResponse(ctx context.Context, gar *gpb.GuestActionResponse) *anypb.Any {
 	return any
 }
 
-func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GuestActionRequest, error) {
-	gaReq := &gpb.GuestActionRequest{}
+func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GCBDRActionRequest, error) {
+	gaReq := &gpb.GCBDRActionRequest{}
 	if err := msg.UnmarshalTo(gaReq); err != nil {
 		errMsg := fmt.Sprintf("failed to unmarshal message: %v", err)
 		return nil, errors.New(errMsg)
@@ -97,10 +80,10 @@ func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GuestActionRequest,
 	return gaReq, nil
 }
 
-func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GuestActionResponse {
-	return &gpb.GuestActionResponse{
+func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GCBDRActionResponse {
+	return &gpb.GCBDRActionResponse{
 		CommandResults: results,
-		Error: &gpb.GuestActionError{
+		Error: &gpb.GCBDRActionError{
 			ErrorMessage: errorMessage,
 		},
 	}
@@ -132,9 +115,9 @@ func handleShellCommand(ctx context.Context, command *gpb.Command, execute comma
 	}
 }
 
-func (g *GuestActions) handleAgentCommand(ctx context.Context, command *gpb.Command, cloudProperties *metadataserver.CloudProperties) *gpb.CommandResult {
+func handleAgentCommand(ctx context.Context, command *gpb.Command, cloudProperties *metadataserver.CloudProperties) *gpb.CommandResult {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
-	handler, ok := guestActionsHandlers[agentCommand]
+	handler, ok := gcbdrActionsHandlers[agentCommand]
 	if !ok {
 		errMsg := fmt.Sprintf("received unknown agent command: %s", prototext.Format(command))
 		result := &gpb.CommandResult{
@@ -159,7 +142,7 @@ func errorResult(errMsg string) *gpb.CommandResult {
 	}
 }
 
-func (g *GuestActions) messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metadataserver.CloudProperties) (*anypb.Any, error) {
+func messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metadataserver.CloudProperties) (*anypb.Any, error) {
 	var results []*gpb.CommandResult
 	gar, err := parseRequest(ctx, req)
 	if err != nil {
@@ -181,7 +164,7 @@ func (g *GuestActions) messageHandler(ctx context.Context, req *anypb.Any, cloud
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
 		case fd.Name() == agentCommand:
-			result = g.handleAgentCommand(ctx, command, cloudProperties)
+			result = handleAgentCommand(ctx, command, cloudProperties)
 			results = append(results, result)
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
@@ -197,24 +180,24 @@ func (g *GuestActions) messageHandler(ctx context.Context, req *anypb.Any, cloud
 	return anyResponse(ctx, guestActionResponse(ctx, results, "")), nil
 }
 
-func (g *GuestActions) start(ctx context.Context, a any) {
-	args, ok := a.(guestActionsOptions)
+func start(ctx context.Context, a any) {
+	args, ok := a.(gcbdrActionsOptions)
 	if !ok {
-		log.CtxLogger(ctx).Warn("args is not of type guestActionsArgs")
+		log.CtxLogger(ctx).Warn("args is not of type gcbdrActionsOptions")
 		return
 	}
-	uap.Communicate(ctx, args.endpoint, args.channel, g.messageHandler, protostruct.ConvertCloudPropertiesToStruct(args.cloudProperties))
+	uap.Communicate(ctx, args.endpoint, args.channel, messageHandler, protostruct.ConvertCloudPropertiesToStruct(args.cloudProperties))
 }
 
 // StartUAPCommunication establishes communication with UAP Highway.
 // Returns true if the goroutine is started, and false otherwise.
-func (g *GuestActions) StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool {
-	if !config.GetUapConfiguration().GetEnabled().GetValue() {
-		log.CtxLogger(ctx).Info("Not configured to communicate with UAP")
+func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool {
+	if !config.GetGcbdrConfiguration().GetCommunicationEnabled().GetValue() {
+		log.CtxLogger(ctx).Info("Not configured to communicate with GCBDR via UAP")
 		return false
 	}
 	dailyMetricsRoutine := &recovery.RecoverableRoutine{
-		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.GuestActionsStarted) },
+		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.GCBDRActionsStarted) },
 		RoutineArg:          nil,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
 		UsageLogger:         *usagemetrics.Logger,
@@ -223,8 +206,8 @@ func (g *GuestActions) StartUAPCommunication(ctx context.Context, config *cpb.Co
 	dailyMetricsRoutine.StartRoutine(ctx)
 
 	communicateRoutine := &recovery.RecoverableRoutine{
-		Routine: g.start,
-		RoutineArg: guestActionsOptions{
+		Routine: start,
+		RoutineArg: gcbdrActionsOptions{
 			channel:         defaultChannel,
 			endpoint:        defaultEndpoint,
 			cloudProperties: config.CloudProperties,
@@ -233,22 +216,22 @@ func (g *GuestActions) StartUAPCommunication(ctx context.Context, config *cpb.Co
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
-	log.CtxLogger(ctx).Info("Starting UAP communication routine")
+	log.CtxLogger(ctx).Info("Starting UAP GCBDR communication routine")
 	communicateRoutine.StartRoutine(ctx)
 
-	if config.GetUapConfiguration().GetTestChannelEnabled().GetValue() {
+	if config.GetGcbdrConfiguration().GetTestChannelEnabled().GetValue() {
 		testRoutine := &recovery.RecoverableRoutine{
-			Routine: g.start,
-			RoutineArg: guestActionsOptions{
+			Routine: start,
+			RoutineArg: gcbdrActionsOptions{
 				channel:         testChannel,
 				endpoint:        defaultEndpoint,
 				cloudProperties: config.CloudProperties,
 			},
-			ErrorCode:           usagemetrics.GuestActionsFailure,
+			ErrorCode:           usagemetrics.GCBDRActionsFailure,
 			UsageLogger:         *usagemetrics.Logger,
 			ExpectedMinDuration: 10 * time.Second,
 		}
-		log.CtxLogger(ctx).Info("Starting UAP communication routine for test channel")
+		log.CtxLogger(ctx).Info("Starting UAP GCBDR communication routine for test channel")
 		testRoutine.StartRoutine(ctx)
 	}
 	return true

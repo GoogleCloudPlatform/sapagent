@@ -124,7 +124,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		}
 	}
 	for _, volume := range hana.GetHanaDiskVolumeMetrics() {
-		diskInfo := diskInfo(ctx, volume.GetBasepathVolume(), globalINIFilePath, params.Execute, params.InstanceInfoReader)
+		diskInfo := diskInfo(ctx, volume, globalINIFilePath, params)
 		for _, m := range volume.GetMetrics() {
 			k := m.GetMetricInfo().GetLabel()
 			switch m.GetValue() {
@@ -136,6 +136,8 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 				l[k] = diskInfo["size"]
 			case wpb.DiskVariable_PD_SIZE:
 				l[k] = diskInfo["pdsize"]
+			case wpb.DiskVariable_BLOCK_DEVICE:
+				l[k] = diskInfo["blockdevice"]
 			}
 		}
 	}
@@ -174,68 +176,61 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 //
 // File path: /usr/sap/[SID]/SYS/global/hdb/custom/config
 func hanaSystemConfigFromSAPSID(ctx context.Context, params Parameters) string {
+	instance := sapHANAInstance(ctx, params)
+	if instance == nil {
+		return ""
+	}
+	return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config", instance.GetSapsid())
+}
+
+func sidAdminUser(ctx context.Context, params Parameters) string {
+	return sapHANAInstance(ctx, params).GetUser()
+}
+
+func sapHANAInstance(ctx context.Context, params Parameters) *sapb.SAPInstance {
 	if params.Discovery == nil {
 		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
-		return ""
+		return nil
 	}
 	sapInstances := params.Discovery.GetSAPInstances().GetInstances()
 	if len(sapInstances) == 0 {
 		log.CtxLogger(ctx).Debug("No SAP instances found")
-		return ""
+		return nil
 	}
 	for _, instance := range sapInstances {
 		if instance.GetType() == sapb.InstanceType_HANA && instance.GetSapsid() != "" {
 			log.CtxLogger(ctx).Debugw("Found HANA instance", "sapsid", instance.GetSapsid())
-			return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config", instance.GetSapsid())
+			return instance
 		}
 	}
-	return ""
+	return nil
 }
 
-func diskInfo(ctx context.Context, basepathVolume string, globalINILocation string, exec commandlineexecutor.Execute, iir instanceinfo.Reader) map[string]string {
+func diskInfo(ctx context.Context, volume *wpb.HANADiskVolumeMetric, globalINILocation string, params Parameters) map[string]string {
 	diskInfo := map[string]string{}
+	volumeMountpoint := ""
+	sidAdminUser := sidAdminUser(ctx, params)
 
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "grep",
-		ArgsToSplit: basepathVolume + " " + globalINILocation,
-	})
-	// volumeGrep will be of the format /hana/data/HAS (or something similar).
-	// In this case the mount point will be /hana/data.
-	// A deeper path like /hana/data/ABC/mnt00001 may also be used.
-	if result.Error != nil {
+	switch volume.GetMetricSource() {
+	case wpb.HANADiskVolumeMetricSource_GLOBAL_INI:
+		volumeMountpoint = fetchVolumeMountPointFromGlobalINI(ctx, volume, globalINILocation, params.Execute, params.InstanceInfoReader)
+	case wpb.HANADiskVolumeMetricSource_HDB_INDEXSERVER_PATH:
+		volumeMountpoint = fetchVolumeMountPointFromHDBIndexserverPath(ctx, params.Execute, sidAdminUser)
+	case wpb.HANADiskVolumeMetricSource_DIR_INSTANCE_ENV:
+		volumeMountpoint = fetchVolumeMountPointFromDirInstanceEnv(ctx, params.Execute, sidAdminUser)
+	default:
+		log.CtxLogger(ctx).Debugw("Unknown disk volume metric source")
 		return diskInfo
 	}
-	vList := strings.Fields(result.StdOut)
-	if len(vList) < 3 {
-		log.CtxLogger(ctx).Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
-		return diskInfo
-	}
-	basepathVolumePath := vList[2]
-	log.CtxLogger(ctx).Debugw("Found basepathVolumePath in global.ini", "basepathvolumepath", basepathVolumePath)
 
-	// Get the exact mount location for the volume basepath
-	// Expected output:
-	// Mounted on
-	// /hana/data
-	result = exec(ctx, commandlineexecutor.Params{
-		Executable:  "df",
-		ArgsToSplit: fmt.Sprintf("--output=target %s", basepathVolumePath),
-	})
-	if result.Error != nil {
-		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "error", result.Error)
+	if volumeMountpoint == "" {
+		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint")
 		return diskInfo
 	}
-	lines := strings.Split(strings.TrimSpace(result.StdOut), "\n")
-	if len(lines) != 2 {
-		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "output", result.StdOut)
-		return diskInfo
-	}
-	volumeMountpoint := strings.TrimSpace(lines[1])
-	log.CtxLogger(ctx).Debugw("Found volume mountpoint", "mountpoint", volumeMountpoint, "basepathvolumepath", basepathVolumePath)
 
 	// JSON output from lsblk to match the lsblk.proto is produced by the following command:
 	// lsblk -p -J -o name,type,mountpoint
-	lsblkresult := exec(ctx, commandlineexecutor.Params{
+	lsblkresult := params.Execute(ctx, commandlineexecutor.Params{
 		Executable:  "lsblk",
 		ArgsToSplit: "-b -p -J -o name,type,mountpoint,size",
 	})
@@ -277,10 +272,95 @@ BlockDeviceLoop:
 
 	if len(matchedMountPoint) > 0 {
 		log.CtxLogger(ctx).Debugw("Found matched block device", "matchedblockdevice", matchedBlockDevice.Name, "matchedmountpoint", matchedMountPoint, "matchedsize", matchedSize)
-		setDiskInfoForDevice(ctx, diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, iir)
+		setDiskInfoForDevice(ctx, diskInfo, &matchedBlockDevice, matchedMountPoint, matchedSize, params.InstanceInfoReader)
 	}
 
 	return diskInfo
+}
+
+func fetchVolumeMountPointFromGlobalINI(ctx context.Context, volume *wpb.HANADiskVolumeMetric, globalINILocation string, exec commandlineexecutor.Execute, iir instanceinfo.Reader) string {
+	basepathVolume := volume.GetBasepathVolume()
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: basepathVolume + " " + globalINILocation,
+	})
+	// volumeGrep will be of the format /hana/data/HAS (or something similar).
+	// In this case the mount point will be /hana/data.
+	// A deeper path like /hana/data/ABC/mnt00001 may also be used.
+	if result.Error != nil {
+		return ""
+	}
+	vList := strings.Fields(result.StdOut)
+	if len(vList) < 3 {
+		log.CtxLogger(ctx).Debugw("Could not find basepath volume in global.ini", "basepathvolume", basepathVolume, "globalinilocation", globalINILocation)
+		return ""
+	}
+	basepathVolumePath := vList[2]
+	log.CtxLogger(ctx).Debugw("Found basepathVolumePath in global.ini", "basepathvolumepath", basepathVolumePath)
+
+	volumeMountpoint := volumeMountPoint(ctx, basepathVolumePath, exec)
+	log.CtxLogger(ctx).Debugw("Found volume mountpoint", "mountpoint", volumeMountpoint, "basepathvolumepath", basepathVolumePath)
+	return volumeMountpoint
+}
+
+func fetchVolumeMountPointFromHDBIndexserverPath(ctx context.Context, exec commandlineexecutor.Execute, sidAdminUser string) string {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: fmt.Sprintf("-i -u %s whereis hdbindexserver", sidAdminUser),
+	})
+	if result.Error != nil {
+		return ""
+	}
+	vList := strings.Fields(result.StdOut)
+	if len(vList) < 2 {
+		log.CtxLogger(ctx).Debugw("Could not find location of hdbindexserver", "Stdout", vList)
+		return ""
+	}
+	basepathVolumePath := vList[1]
+	log.CtxLogger(ctx).Debugw("Found basepathVolumePath for hdbindexserver", "basepathvolumepath", basepathVolumePath)
+
+	return volumeMountPoint(ctx, basepathVolumePath, exec)
+}
+
+func fetchVolumeMountPointFromDirInstanceEnv(ctx context.Context, exec commandlineexecutor.Execute, sidAdminUser string) string {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: fmt.Sprintf("-i -u %s /bin/sh -c 'echo $DIR_INSTANCE'", sidAdminUser),
+	})
+	if result.Error != nil {
+		return ""
+	}
+	vList := strings.Fields(result.StdOut)
+	if len(vList) < 1 {
+		log.CtxLogger(ctx).Debugw("Could not find value of env variable DIR_INSTANCE", "Stdout", vList)
+		return ""
+	}
+	basepathVolumePath := vList[0]
+	log.CtxLogger(ctx).Debugw("Found basepathVolumePath from env variable DIR_INSTANCE", "basepathvolumepath", basepathVolumePath)
+
+	return volumeMountPoint(ctx, basepathVolumePath, exec)
+}
+
+// Get the exact mount location for the volume basepath
+// Expected output:
+// Mounted on
+// /hana/data
+func volumeMountPoint(ctx context.Context, basepathVolumePath string, exec commandlineexecutor.Execute) string {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "df",
+		ArgsToSplit: fmt.Sprintf("--output=target %s", basepathVolumePath),
+	})
+	if result.Error != nil {
+		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "error", result.Error)
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(result.StdOut), "\n")
+	if len(lines) != 2 {
+		log.CtxLogger(ctx).Debugw("Could not find volume mountpoint", "basepathvolumepath", basepathVolumePath, "output", result.StdOut)
+		return ""
+	}
+	volumeMountpoint := strings.TrimSpace(lines[1])
+	return volumeMountpoint
 }
 
 // setDiskInfoForDevice sets the diskInfo map with the disk information
@@ -303,6 +383,7 @@ func setDiskInfoForDevice(
 			diskInfo["instancedisktype"] = strings.ToLower(disk.GetDeviceType())
 			diskInfo["size"] = matchedSize
 			diskInfo["pdsize"] = strconv.FormatInt(matchedBlockDeviceSize, 10)
+			diskInfo["blockdevice"] = matchedBlockDevice.Name
 			break
 		}
 	}

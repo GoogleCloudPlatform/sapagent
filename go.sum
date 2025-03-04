@@ -31,8 +31,8 @@ cloud.google.com/go/trace v1.11.3 h1:c+I4YFjxRQjvAhRmSsmjpASUKq88chOX854ied0K/pE
 cloud.google.com/go/trace v1.11.3/go.mod h1:pt7zCYiDSQjC9Y2oqCsh9jF4GStB/hmjrYLsxRR27q8=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250205191725-b138e4259bb9 h1:G9TVP/QZH+l1UnhFIifp70to3ba6Wf3LqO7vpgsyJCI=
-github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250205191725-b138e4259bb9/go.mod h1:Zw96j4gRzfoC3G09m4CrBZuyAF0Fy1nMwdd4pojUNVE=
+github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250227185639-b70667e4a927 h1:nn31d5gg+ysSNqWTqSOxsKBj17GJZBqsBx7biZAgYtI=
+github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250227185639-b70667e4a927/go.mod h1:A1V05o309ZvTwy/FTBooYvvIhzM6mtsJcHJsAkeuAAM=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 h1:3c8yed4lgqTt+oTQ+JNMDo+F4xprBf+O/il4ZC0nRLw=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0/go.mod h1:obipzmGjfSjam60XLwGfqUkJsfiheAl+TUjG+4yzyPM=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.49.0 h1:o90wcURuxekmXrtxmYWTyNla0+ZEHhud6DI1ZTxd1vI=
@@ -41,10 +41,10 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.49.0/go.mod h1:l2fIqmwB+FKSfvn3bAD/0i+AXAxhIZjTK2svT/mgUXs=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 h1:GYUJLfvd++4DMuMhCFLgLXvFwofIxh/qOwoGuS/LTew=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0/go.mod h1:wRbFgBQUVm1YXrvWKofAEmq9HNJTDphbAaJSSX01KUI=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250213202427-b32c70057c1e h1:63s1u2vSoqOrReY7XlOgspM9BXaxJl4M+WiDvm0b5uY=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250213202427-b32c70057c1e/go.mod h1:Ey+Ah6Z12hHLT+gXXS1exogXp454BkCPvZMq/w31nOE=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250213202427-b32c70057c1e h1:FXlzfyKYIzt+kEYxVY9bVhWqly1cFA9elfHdZNsRUnI=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250213202427-b32c70057c1e/go.mod h1:SI7fYmbniDIoVITS6rG9iqA2omufwj8GrkFu/EarxkE=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250227155432-4c6bbed2829c h1:op7QhR+yAYNLsiVPi1Jt8k3F/tPNuaPJjgGa9qj9Ej0=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250227155432-4c6bbed2829c/go.mod h1:Ey+Ah6Z12hHLT+gXXS1exogXp454BkCPvZMq/w31nOE=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227155432-4c6bbed2829c h1:NrDUnyJSWNkNPNFWUnAwFj4f+2qFg/ZoSmhz3IplmKs=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227155432-4c6bbed2829c/go.mod h1:SI7fYmbniDIoVITS6rG9iqA2omufwj8GrkFu/EarxkE=
 github.com/SAP/go-hdb v1.12.12 h1:pZtsnUU7VNNobksc13F5pGr7W3abiJq/W4v7g7GZpKk=
 github.com/SAP/go-hdb v1.12.12/go.mod h1:R6RDbzvPk9gTraxYbzfNcy3XRp3vXFGd5vEopvzr0zQ=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=

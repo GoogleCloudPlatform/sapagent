@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/subcommands"
 
-	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 func TestGCBDRBackupHandler(t *testing.T) {

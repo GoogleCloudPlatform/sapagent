@@ -63,6 +63,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/metricevents"
 
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
@@ -157,6 +158,9 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	d.lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, d.config.GetCloudProperties().GetProjectId(), configuration.UserAgent())
 	if d.lp.CloudLoggingClient != nil {
 		defer d.lp.CloudLoggingClient.Close()
+	}
+	if d.config.GetCollectionConfiguration().GetMetricEventsLogDelaySeconds() > 0 {
+		metricevents.SetLogDelay(time.Duration(d.config.GetCollectionConfiguration().GetMetricEventsLogDelaySeconds()) * time.Second)
 	}
 	return d.startdaemonHandler(ctx, cancel, false)
 }

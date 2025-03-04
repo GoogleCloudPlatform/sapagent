@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 23,
+    "version": 24,
     "validation_system": {
       "system_metrics": [
         {
@@ -632,6 +632,7 @@
       "hana_disk_volume_metrics": [
         {
           "basepath_volume": "basepath_datavolumes",
+          "metric_source": "GLOBAL_INI",
           "metrics": [
             {
               "metric_info": {
@@ -660,11 +661,20 @@
                 "label": "disk_data_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_data_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         },
         {
           "basepath_volume": "basepath_logvolumes",
+          "metric_source": "GLOBAL_INI",
           "metrics": [
             {
               "metric_info": {
@@ -693,6 +703,54 @@
                 "label": "disk_log_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_log_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "basepath_volume": "basepath_databackup",
+          "metric_source": "GLOBAL_INI",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_backup_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "metric_source": "HDB_INDEXSERVER_PATH",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_shared_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "metric_source": "DIR_INSTANCE_ENV",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "usr_sap_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         }

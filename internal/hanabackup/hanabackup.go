@@ -92,28 +92,33 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 }
 
 // Unmount unmounts the given directory.
-func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute) error {
+func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute, isScaleout bool) error {
 	log.CtxLogger(ctx).Infow("Unmount path", "directory", path)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "bash",
 		ArgsToSplit: fmt.Sprintf(" -c 'sync;umount -f %s'", path),
 	})
-	if result.Error != nil {
-		r := exec(ctx, commandlineexecutor.Params{
-			Executable:  "bash",
-			ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
-		})
-		msg := `failure unmounting directory: %s, stderr: %s, err: %s.
-		Here are the possible open references to the path, stdout: %s stderr: %s.
-		Please ensure these references are cleaned up for unmount to proceed and retry the command`
-		return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
-	}
-	log.CtxLogger(ctx).Debugf("Unmount", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	if result.ExitCode == 0 {
-		log.CtxLogger(ctx).Infow("Directory unmounted successfully", "directory", path)
+	// If the directory is not mounted, we get an output like this:
+	// umount: /hana/data: not mounted.
+	// In this case, we can safely ignore the error.
+	if result.Error == nil || (result.Error != nil && isScaleout && strings.Contains(result.StdErr, "not mounted.")) {
+		log.CtxLogger(ctx).Debugf("Unmount", "stdout", result.StdOut, "stderr", result.StdErr)
+
+		if result.ExitCode == 0 {
+			log.CtxLogger(ctx).Infow("Directory unmounted successfully", "directory", path)
+		}
+		return nil
 	}
-	return nil
+
+	r := exec(ctx, commandlineexecutor.Params{
+		Executable:  "bash",
+		ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
+	})
+	msg := `failure unmounting directory: %s, stderr: %s, err: %s.
+	Here are the possible open references to the path, stdout: %s stderr: %s.
+	Please ensure these references are cleaned up for unmount to proceed and retry the command`
+	return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
 }
 
 // FreezeXFS freezes the XFS filesystem.

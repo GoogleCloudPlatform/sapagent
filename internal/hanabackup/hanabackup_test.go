@@ -552,3 +552,95 @@ func TestGetInstanceNumber(t *testing.T) {
 		})
 	}
 }
+
+func TestUnmount(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		exec       commandlineexecutor.Execute
+		isScaleout bool
+		wantErr    error
+	}{
+		{
+			name: "Failure",
+			path: "/hana/data",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "any error",
+					Error:    cmpopts.AnyError,
+					ExitCode: 1,
+				}
+			},
+			isScaleout: false,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "ScaleupAlreadyUnmounted",
+			path: "/hana/data",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "umount: /hana/data: not mounted.",
+					Error:    cmpopts.AnyError,
+					ExitCode: 32,
+				}
+			},
+			isScaleout: false,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "ScaleoutAlreadyUnmounted",
+			path: "/hana/data",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "umount: /hana/data: not mounted.",
+					Error:    cmpopts.AnyError,
+					ExitCode: 32,
+				}
+			},
+			isScaleout: true,
+			wantErr:    nil,
+		},
+		{
+			name: "ScaleoutUnmountError",
+			path: "/hana/data",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "umount: /hana/data: device target busy.",
+					Error:    cmpopts.AnyError,
+					ExitCode: 32,
+				}
+			},
+			isScaleout: true,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			path: "/hana/data",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			isScaleout: false,
+			wantErr:    nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := Unmount(ctx, tc.path, tc.exec, tc.isScaleout)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("unmount(%q, %v, %v) = %v, want: %v", tc.path, tc.exec, tc.isScaleout, gotErr, tc.wantErr)
+			}
+		})
+	}
+}

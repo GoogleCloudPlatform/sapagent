@@ -501,7 +501,7 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 		configValue("send_metrics_to_monitoring", printConfig.SendMetricsToMonitoring.GetValue(), true),
 		configValue("service_account_key", printConfig.ServiceAccountKey, ""),
 		configValue("shorten_folder_path", printConfig.ShortenFolderPath, false),
-		configValue("storage_class", printConfig.StorageClass, "STANDARD"),
+		configValue("storage_class", printConfig.StorageClass, "STORAGE_CLASS_UNSPECIFIED"),
 		configValue("threads", printConfig.Threads, 64),
 		configValue("xml_multipart_upload", printConfig.XmlMultipartUpload, false),
 		configValue("object_retention_mode", printConfig.ObjectRetentionMode, ""),

@@ -149,15 +149,24 @@ func NodeState(crm *CRMMon) (map[string]string, error) {
 	}
 	ns := make(map[string]string)
 	for _, n := range crm.Nodes {
+		log.Logger.Debugw("NodeState", "node", n)
 		switch {
-		case n.Online:
-			ns[n.Name] = "online"
 		case n.Standby:
 			ns[n.Name] = "standby"
 		case n.Shutdown:
 			ns[n.Name] = "shutdown"
 		case n.Unclean:
 			ns[n.Name] = "unclean"
+		case n.Maintenance:
+			ns[n.Name] = "maintenance"
+		case n.Pending:
+			ns[n.Name] = "pending"
+		case n.StandbyOnfail:
+			ns[n.Name] = "standbyOnFail"
+		// Nodes can be 'online' and in other states at the same time.
+		// Ensure 'online' is the last state checked as others take precedence.
+		case n.Online:
+			ns[n.Name] = "online"
 		default:
 			ns[n.Name] = "unknown"
 		}
@@ -177,6 +186,7 @@ func ResourceState(crm *CRMMon) ([]Resource, error) {
 	resources = append(resources, crm.Resources.Clone...)
 
 	for _, r := range resources {
+		log.Logger.Debugw("ResourceState", "r", r)
 		rInfo := Resource{
 			Name: r.Agent,
 			Role: r.Role,

@@ -19,7 +19,6 @@ StartLimitBurst=3
 # Resource controls
 MemoryAccounting=yes
 TasksAccounting=yes
-MemoryLimit=1G
 MemoryMax=1G
 ProtectSystem=yes
 ReadWritePaths=/var/log /tmp -/usr/sap -/etc

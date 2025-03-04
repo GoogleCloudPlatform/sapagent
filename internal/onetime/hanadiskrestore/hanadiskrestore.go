@@ -307,7 +307,12 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	}
 	workflowDur := time.Since(workflowStartTime)
 	defer r.sendDurationToCloudMonitoring(ctx, metricPrefix+r.Name()+"/totaltime", workflowDur, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
-	r.oteLogger.LogMessageToFileAndConsole(ctx, "SUCCESS: HANA restore from disk snapshot successful. Please refer https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/perform-disk-snapshot-backup-recovery#recovery_db_for_scaleup for next steps.")
+	successMessage := "SUCCESS: HANA restore from disk snapshot successful. Please refer to https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/perform-disk-snapshot-backup-recovery#recovery_db_for_scaleup for next steps."
+	if r.isScaleout {
+		successMessage = "SUCCESS: HANA restore from disk group snapshot successful. Please refer to https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/perform-disk-snapshot-backup-recovery#recover-db-for-scale-out for next steps."
+	}
+
+	r.oteLogger.LogMessageToFileAndConsole(ctx, successMessage)
 	if r.labelsOnDetachedDisk != "" {
 		if !r.isGroupSnapshot {
 			if err := r.appendLabelsToDetachedDisk(ctx, r.DataDiskName); err != nil {
@@ -363,7 +368,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	if err := waitForIndexServerStop(ctx, r.HanaSidAdm, exec); err != nil {
 		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
 	}
-	if err := hanabackup.Unmount(ctx, mountPath, exec); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, exec, r.isScaleout); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 
@@ -424,7 +429,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	if err != nil {
 		return fmt.Errorf("failed to read data directory mount path: %v", err)
 	}
-	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand); err != nil {
+	if err := hanabackup.Unmount(ctx, mountPath, commandlineexecutor.ExecuteCommand, r.isScaleout); err != nil {
 		return fmt.Errorf("failed to unmount data directory: %v", err)
 	}
 	if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {

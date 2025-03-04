@@ -187,6 +187,9 @@ func (p *Parameters) validateParameters() error {
 	if p.Config.GetObjectRetentionMode() != "" && p.Config.GetObjectRetentionMode() != "Unlocked" && p.Config.GetObjectRetentionMode() != "Locked" {
 		return errors.New("object_retention_mode must be either 'Unlocked' or 'Locked'")
 	}
+	if (p.Config.GetObjectRetentionTime() != "" && p.Config.GetObjectRetentionMode() == "") || (p.Config.GetObjectRetentionTime() == "" && p.Config.GetObjectRetentionMode() != "") {
+		return errors.New("object_retention_time and object_retention_mode must be set together")
+	}
 
 	return nil
 }
@@ -260,10 +263,6 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 			p.Config.FolderPrefix += "/"
 		}
 		log.Logger.Infof("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
-	}
-	if p.Config.GetStorageClass() == bpb.StorageClass_STORAGE_CLASS_UNSPECIFIED {
-		log.Logger.Info("storage_class defaulted to STANDARD")
-		p.Config.StorageClass = bpb.StorageClass_STANDARD
 	}
 }
 

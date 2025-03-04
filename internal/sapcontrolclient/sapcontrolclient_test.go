@@ -53,6 +53,9 @@ var (
 	//go:embed testdata/getprocesslist/all_processes.xml
 	processListResponse string
 
+	//go:embed testdata/getprocesslist/subset_processes.xml
+	processListResponseSubset string
+
 	//go:embed testdata/getprocesslist/no_pid.xml
 	noPidProcessListResponse string
 
@@ -157,6 +160,11 @@ func TestGetProcessList(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			defer func(oldProcessList map[string][]string) {
+				seenProcessList = oldProcessList
+			}(seenProcessList)
+			seenProcessList = make(map[string][]string)
+
 			setupSAPMocks(t, test.fakeResponse)
 			c := setupClient(t)
 			gotProcesses, gotErr := c.GetProcessList()
@@ -170,6 +178,44 @@ func TestGetProcessList(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetProcessListMissingProcess(t *testing.T) {
+	// Once a process is seen, it should not be missing in the next call.
+	defer func(oldProcessList map[string][]string) {
+		seenProcessList = oldProcessList
+	}(seenProcessList)
+	seenProcessList = nil
+
+	// First return all process GREEN.
+	mock := setupSAPMocks(t, processListResponse)
+	c := setupClient(t)
+	c.GetProcessList()
+	mock.Stop()
+
+	// Then return a subset of processes GREEN.
+	// The result should contain the missing processes in GRAY.
+	setupSAPMocks(t, processListResponseSubset)
+	gotProcesses, gotErr := c.GetProcessList()
+
+	var wantErr error
+	wantProcesses := []OSProcess{
+		{"hdbdaemon", "SAPControl-GREEN", 9609},
+		{"hdbcompileserver", "SAPControl-GRAY", -1},
+		{"hdbindexserver", "SAPControl-GRAY", -1},
+		{"hdbnameserver", "SAPControl-GRAY", -1},
+		{"hdbpreprocessor", "SAPControl-GRAY", -1},
+		{"hdbwebdispatcher", "SAPControl-GRAY", -1},
+		{"hdbxsengine", "SAPControl-GRAY", -1},
+	}
+
+	if !cmp.Equal(gotErr, wantErr, cmpopts.EquateErrors()) {
+		t.Errorf("GetProcessList(), gotErr: %v wantErr: %v.", gotErr, wantErr)
+	}
+	if diff := cmp.Diff(wantProcesses, gotProcesses, cmpopts.SortSlices(func(a, b OSProcess) bool { return a.Name < b.Name })); diff != "" {
+		t.Errorf("GetProcessList() returned unexpected diff (-want +got):\n%v", diff)
+	}
+
 }
 
 func TestABAPGetWPTable(t *testing.T) {

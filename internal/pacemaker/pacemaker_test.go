@@ -396,6 +396,42 @@ func TestNState(t *testing.T) {
 				"test-instance-2": "unknown",
 			},
 		},
+		{
+			name: "MaintenanceAndPending",
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `<?xml version="1.0"?>
+					<crm_mon version="2.0.1">
+						<nodes>
+							<node name="test-instance-1" id="1" maintenance="true" />
+								<node name="test-instance-2" id="2" pending="true" />
+						</nodes>
+					</crm_mon>`,
+				}
+			},
+			want: map[string]string{
+				"test-instance-1": "maintenance",
+				"test-instance-2": "pending",
+			},
+		},
+		{
+			name: "StandbyOnFailWithOnline",
+			fakeExec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `<?xml version="1.0"?>
+					<crm_mon version="2.0.1">
+						<nodes>
+							<node name="test-instance-1" id="1" standby_onfail="true" online="true" />
+								<node name="test-instance-2" id="2" pending="true" />
+						</nodes>
+					</crm_mon>`,
+				}
+			},
+			want: map[string]string{
+				"test-instance-1": "standbyOnFail",
+				"test-instance-2": "pending",
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

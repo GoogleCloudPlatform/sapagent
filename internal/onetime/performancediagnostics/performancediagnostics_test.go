@@ -948,7 +948,6 @@ func TestSetBackintConfig(t *testing.T) {
 				Retries:                 5,
 				SendMetricsToMonitoring: &wpb.BoolValue{Value: true},
 				DiagnoseFileMaxSizeGb:   1,
-				StorageClass:            bpb.StorageClass_STANDARD,
 				Threads:                 int64(runtime.NumCPU()),
 			},
 		},

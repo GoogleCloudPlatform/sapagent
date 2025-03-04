@@ -15,8 +15,8 @@ require (
   cloud.google.com/go/monitoring v1.23.0
   cloud.google.com/go/secretmanager v1.14.4
   cloud.google.com/go/storage v1.50.0
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250213202427-b32c70057c1e
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250213202427-b32c70057c1e
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250227155432-4c6bbed2829c
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227155432-4c6bbed2829c
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.52.1
@@ -49,7 +49,7 @@ require (
   cloud.google.com/go/compute/metadata v0.6.0 // indirect
   cloud.google.com/go/longrunning v0.6.4 // indirect
   cloud.google.com/go/pubsub v1.45.3 // indirect
-  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250205191725-b138e4259bb9 // indirect
+  github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250227185639-b70667e4a927 // indirect
   github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 // indirect
   github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.49.0 // indirect
   github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 // indirect

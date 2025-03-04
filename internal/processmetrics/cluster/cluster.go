@@ -24,6 +24,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -44,10 +45,13 @@ import (
 
 // Node states.
 const (
-	nodeUnclean  = -1
-	nodeShutdown = 0
-	nodeStandby  = 1
-	nodeOnline   = 2
+	nodeUnclean       = -1
+	nodeShutdown      = 0
+	nodeStandby       = 1
+	nodeOnline        = 2
+	nodeMaintenance   = 3
+	nodePending       = 4
+	nodeStandbyOnFail = 5
 )
 
 // Resource states.
@@ -83,10 +87,13 @@ type (
 
 var (
 	nodeStates = map[string]int{
-		"unclean":  nodeUnclean,
-		"shutdown": nodeShutdown,
-		"standby":  nodeStandby,
-		"online":   nodeOnline,
+		"unclean":       nodeUnclean,
+		"shutdown":      nodeShutdown,
+		"standby":       nodeStandby,
+		"online":        nodeOnline,
+		"maintenance":   nodeMaintenance,
+		"pending":       nodePending,
+		"standbyOnFail": nodeStandbyOnFail,
 	}
 	resourceStates = map[string]int{
 		"Started":  resourceStarted,
@@ -113,14 +120,14 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		return metrics, err
 	}
 	// TODO: Test actual timeseries in unit test instead of returning an extra int.
-	nodeMetrics, _, err := collectNodeState(ctx, p, pacemaker.NodeState, data)
+	nodeMetrics, _, nodeNames, err := collectNodeState(ctx, p, pacemaker.NodeState, data)
 	if err != nil {
 		metricsCollectionErr = err
 	}
 	if nodeMetrics != nil {
 		metrics = append(metrics, nodeMetrics...)
 	}
-	resourceMetrics, _, err := collectResourceState(ctx, p, pacemaker.ResourceState, data)
+	resourceMetrics, _, err := collectResourceState(ctx, p, pacemaker.ResourceState, data, nodeNames)
 	if err != nil {
 		metricsCollectionErr = err
 	}
@@ -166,10 +173,10 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 
 // collectNodeState returns the Linux cluster node state metrics as time series.
 // The integer values are returned as an array for testability.
-func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
+func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacemakerNodeState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, []string, error) {
 	if _, ok := p.SkippedMetrics[nodesPath]; ok {
 		log.CtxLogger(ctx).Debugw("Skipping collection for", "metric", nodesPath)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	var metricValues []int
 	var metrics []*mrpb.TimeSeries
@@ -178,9 +185,10 @@ func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacem
 	nodeState, err := read(crm)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Failure in reading pacemaker node state", log.Error(err))
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
+	nodeNames := []string{}
 	for name, value := range nodeState {
 		nodeValue := stateFromString(nodeStates, value)
 		metricValues = append(metricValues, nodeValue)
@@ -196,14 +204,15 @@ func collectNodeState(ctx context.Context, p *InstanceProperties, read readPacem
 			Identifier: name,
 		})
 		metrics = append(metrics, nodeMetric)
+		nodeNames = append(nodeNames, name)
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in nodeState()", "time", time.Since(now.AsTime()))
-	return metrics, metricValues, nil
+	return metrics, metricValues, nodeNames, nil
 }
 
 // collectResourceState returns the Linux cluster resource state metrics as time series.
 // The integer values of metric are returned as an array for testability.
-func collectResourceState(ctx context.Context, p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon) ([]*mrpb.TimeSeries, []int, error) {
+func collectResourceState(ctx context.Context, p *InstanceProperties, read readPacemakerResourceState, crm *pacemaker.CRMMon, nodeNames []string) ([]*mrpb.TimeSeries, []int, error) {
 	if slices.Contains(p.Config.GetCollectionConfiguration().GetProcessMetricsToSkip(), resourcesPath) {
 		log.CtxLogger(ctx).Debugw("Skipping collection for", "metric", resourcesPath)
 		return nil, nil, nil
@@ -217,6 +226,13 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 		log.CtxLogger(ctx).Debugw("Failure in reading pacemaker resource state", log.Error(err))
 		return nil, nil, err
 	}
+	// Reverse sort resourceState so empty node names are last.
+	sort.Slice(resourceState, func(i, j int) bool {
+		if resourceState[i].Name == resourceState[j].Name {
+			return resourceState[i].Node > resourceState[j].Node
+		}
+		return resourceState[i].Name > resourceState[j].Name
+	})
 
 	// This is a map to prevent duplicates keyed on resource name and node it is monitoring.
 	resource := make(map[string]bool)
@@ -234,6 +250,22 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 			"resource": r.Name,
 		}
 		resourceMetric := createMetrics(p, resourcesPath, extraLabels, now, int64(rValue))
+		metrics = append(metrics, resourceMetric)
+
+		// Stopped/Failed events have an empty node name.
+		// Populate it manually by using a node name we haven't seen yet.
+		if r.Node == "" {
+			for _, node := range nodeNames {
+				key = r.Name + ":" + node
+				if _, ok := resource[key]; ok {
+					continue
+				}
+				log.CtxLogger(ctx).Debugw("Populating empty node name for resource", "resource", r, "nodeName", node)
+				extraLabels["node"] = node
+				resource[key] = true
+				break
+			}
+		}
 		metricevents.AddEvent(ctx, metricevents.Parameters{
 			Path:       metricURL + resourcesPath,
 			Message:    fmt.Sprintf("Pacemaker Resource State for %s", key),
@@ -241,7 +273,6 @@ func collectResourceState(ctx context.Context, p *InstanceProperties, read readP
 			Labels:     metricLabels(p, extraLabels),
 			Identifier: key,
 		})
-		metrics = append(metrics, resourceMetric)
 	}
 	log.CtxLogger(ctx).Debugw("Time taken to collect metrics in resourceState()", "time", time.Since(now.AsTime()))
 	return metrics, metricValues, nil
