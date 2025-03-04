@@ -293,41 +293,17 @@ SAPDBHOST = otherHostname
       },{
          "name": "sdc",
          "mountpoints": [
-             null
-         ],
-         "children": [
-            {
-               "name": "vg_hana_data-lv_hana_data",
-               "mountpoints": [
-                   "/hana/data"
-               ]
-            }
+             "/hana/data"
          ]
       },{
          "name": "sdd",
          "mountpoints": [
-             null
-         ],
-         "children": [
-            {
-               "name": "vg_hana_log-lv_hana_log",
-               "mountpoints": [
-                   "/hana/log"
-               ]
-            }
+             "/hana/log"
          ]
       },{
          "name": "sdf",
          "mountpoints": [
-             null
-         ],
-         "children": [
-            {
-               "name": "vg_hanabackup-lv_hanabackup",
-               "mountpoints": [
-                   "/hanabackup"
-               ]
-            }
+             "/hanabackup"
          ]
       },{
          "name": "sdg",
@@ -408,6 +384,54 @@ lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-log-0 -> 
          "name": "sdg",
          "mountpoints": [
              null
+         ]
+      }
+   ]
+}
+`
+	childMatchLsblkOutput = `
+{
+   "blockdevices": [
+      {
+         "name": "sdc",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_data-lv_hana_data",
+               "mountpoints": [
+                   "/hana/data"
+               ]
+            }
+         ]
+      }
+   ]
+}
+`
+	nestedChildMatchLsblkOutput = `
+{
+   "blockdevices": [
+      {
+         "name": "sdc",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vg_hana_data-lv_hana_data",
+               "mountpoints": [
+                   null
+               ],
+               "children": [
+                  {
+                     "name": "vg_hana_data-lv_hana_data-child",
+                     "mountpoints": [
+                         "/hana/data"
+												 ]
+                  }
+               ]
+            }
          ]
       }
    ]
@@ -6161,6 +6185,48 @@ lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../.
 				}},
 		},
 		wantErr: cmpopts.AnyError,
+	}, {
+		name:     "mountInChildBlock",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: childMatchLsblkOutput,
+				},
+				defaultDiskLsResult},
+		},
+		want: "google-sap-hana-data-0",
+	}, {
+		name:     "mountInNestedChildBlock",
+		pathName: "/hana/data",
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{"/hana/data", "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultDataPathResult, {
+					StdOut: nestedChildMatchLsblkOutput,
+				},
+				defaultDiskLsResult},
+		},
+		want: "google-sap-hana-data-0",
 	}}
 	ctx := context.Background()
 	for _, tc := range tests {
@@ -6366,6 +6432,58 @@ func TestDiscoverHANADisks(t *testing.T) {
 		want: map[string]string{
 			logPathName:  "google-sap-hana-log-0",
 			dataPathName: "google-sap-hana-data-0",
+		},
+	}, {
+		name: "mountInChildBlock",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}},
+			results: []commandlineexecutor.Result{
+				defaultLogPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultDataPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+				defaultLogBackupPathResult,
+				defaultLsblkResult,
+				defaultDiskLsResult,
+			},
+		},
+		want: map[string]string{
+			logPathName:       "google-sap-hana-log-0",
+			dataPathName:      "google-sap-hana-data-0",
+			logBackupPathName: "google-sap-hanabackup",
 		},
 	}}
 	ctx := context.Background()

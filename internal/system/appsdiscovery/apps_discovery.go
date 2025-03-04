@@ -76,19 +76,12 @@ const (
 	hanaConfigDir        = "/usr/sap/%s/SYS/global/hdb/custom/config"
 )
 
-type lsblkdevicechild struct {
-	Name        string
-	Type        string
-	Mountpoints []string `json:"mountpoints"`
-	Size        json.RawMessage
-}
-
 type lsblkdevice struct {
 	Name        string
 	Type        string
 	Mountpoints []string `json:"mountpoints"`
 	Size        json.RawMessage
-	Children    []lsblkdevicechild
+	Children    []lsblkdevice
 }
 
 type lsblk struct {
@@ -1574,49 +1567,18 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	}
 
 	var deviceName string
-	splitFn := func(c rune) bool {
-		return c == '/'
-	}
 	bestMatchLength := 0
-	mountParts := strings.FieldsFunc(mount, splitFn)
 	// Find the block device with the best match to mount
 	for _, blockDevice := range result.BlockDevices {
 		log.CtxLogger(ctx).Debugw("Block device", "blockDevice", blockDevice)
-		for _, mountpoint := range blockDevice.Mountpoints {
-			mountPointParts := strings.FieldsFunc(mountpoint, splitFn)
-			minLen := min(len(mountParts), len(mountPointParts))
-			matchLen := 0
-			for i := 0; i < minLen; i++ {
-				if mountParts[i] != mountPointParts[i] {
-					break
-				}
-				matchLen++
-			}
-			if matchLen > bestMatchLength {
-				bestMatchLength = matchLen
-				deviceName = blockDevice.Name
-			}
+		blockDeviceName, blockMatchLen, err := findMountPointInBlockDevice(ctx, mount, blockDevice)
+		if err != nil {
+			return "", err
 		}
-		if slices.Contains(blockDevice.Mountpoints, mount) {
-			deviceName = blockDevice.Name
-		}
-		for _, child := range blockDevice.Children {
-			log.CtxLogger(ctx).Debugw("Child device", "child", child)
-			for _, mountpoint := range child.Mountpoints {
-				mountPointParts := strings.FieldsFunc(mountpoint, splitFn)
-				minLen := min(len(mountParts), len(mountPointParts))
-				matchLen := 0
-				for i := 0; i < minLen; i++ {
-					if mountParts[i] != mountPointParts[i] {
-						break
-					}
-					matchLen++
-				}
-				if matchLen > bestMatchLength {
-					bestMatchLength = matchLen
-					deviceName = blockDevice.Name
-				}
-			}
+
+		if blockMatchLen > bestMatchLength {
+			bestMatchLength = blockMatchLen
+			deviceName = blockDeviceName
 		}
 	}
 	if deviceName == "" {
@@ -1627,7 +1589,8 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	// Find disk name for that device.
 	p = commandlineexecutor.Params{
 		Executable: "ls",
-		Args:       []string{"-lart", "/dev/disk/by-id/"},
+
+		Args: []string{"-lart", "/dev/disk/by-id/"},
 	}
 	res = exec(ctx, p)
 	if res.Error != nil {
@@ -1670,4 +1633,43 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 		}
 	}
 	return "", errors.New("unable to find disk for mount")
+}
+
+func findMountPointInBlockDevice(ctx context.Context, mount string, blockDevice lsblkdevice) (deviceName string, bestMatchLen int, err error) {
+	log.CtxLogger(ctx).Debugw("findMountPointInBlockDevice", "mount", mount, "blockDevice", blockDevice)
+	splitFn := func(c rune) bool {
+		return c == '/'
+	}
+	mountParts := strings.FieldsFunc(mount, splitFn)
+	bestMatchLen = 0
+	for _, mountpoint := range blockDevice.Mountpoints {
+		log.CtxLogger(ctx).Debugw("mountpoint", "mountpoint", mountpoint)
+		mountPointParts := strings.FieldsFunc(mountpoint, splitFn)
+		minLen := min(len(mountParts), len(mountPointParts))
+		matchLen := 0
+		for i := 0; i < minLen; i++ {
+			if mountParts[i] != mountPointParts[i] {
+				log.CtxLogger(ctx).Debugw("Mount parts mismatch", "mountParts", mountParts[i], "mountPointParts", mountPointParts[i])
+				break
+			}
+			matchLen++
+		}
+		if matchLen > bestMatchLen {
+			log.CtxLogger(ctx).Debugw("Found better match", "matchLen", matchLen, "bestMatchLen", bestMatchLen)
+			bestMatchLen = matchLen
+			deviceName = blockDevice.Name
+		}
+	}
+
+	for _, child := range blockDevice.Children {
+		_, childBestMatchLen, err := findMountPointInBlockDevice(ctx, mount, child)
+		if err != nil {
+			return "", 0, err
+		}
+		if childBestMatchLen > bestMatchLen {
+			// Prefer using the block device's name, since the child may be a volume group.
+			return blockDevice.Name, childBestMatchLen, nil
+		}
+	}
+	return deviceName, bestMatchLen, err
 }
