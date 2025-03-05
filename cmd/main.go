@@ -111,6 +111,7 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 		d,
 		subcommands.HelpCommand(), // Implement "help"
 	}
+	// change to trigger github presubmit
 	// Add any additional windows or linux specific subcommands.
 	scs = append(scs, additionalSubcommands(ctx, d, lp, cloudProps)...)
 	for _, command := range scs {
