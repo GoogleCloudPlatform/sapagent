@@ -68,6 +68,7 @@ jobs:
       working-directory: cmd
 
     - name: Test
+      if: github.event_name == 'push'
       run: go test -v ./...
 
     - name: Notify on failure
