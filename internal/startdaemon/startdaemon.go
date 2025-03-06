@@ -64,6 +64,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/metricevents"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
@@ -425,7 +426,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 
 	// Start the Workload Manager metrics collection
 	wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
-	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader, goos}
+	wmp := WorkloadManagerParams{wlmparams, instanceInfoReader}
 	wmp.startCollection(wmCtx)
 
 	// Declaring pacemaker Params
@@ -437,7 +438,6 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		JSONCredentialsGetter: pacemaker.JSONCredentialsGetter(jsonCredentialsGetter),
 		Execute:               execute,
 		Exists:                exists,
-		OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
 	}
 
 	// Start Process Metrics Collection
@@ -572,16 +572,15 @@ func (hmp HostMetricsParams) startCollection(ctx context.Context, restarting boo
 type WorkloadManagerParams struct {
 	wlmparams          workloadmanager.Parameters
 	instanceInfoReader *instanceinfo.Reader
-	goos               string
 }
 
 // startCollection for WorkLoadManagerParams initiates collection of WorkloadManagerMetrics.
 func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
-	wmp.wlmparams.OSType = wmp.goos
+	wmp.wlmparams.OSType = osinfo.OSName
 	wmp.wlmparams.ConfigFileReader = configFileReader
 	wmp.wlmparams.InstanceInfoReader = *wmp.instanceInfoReader
 	wmp.wlmparams.OSStatReader = osStatReader
-	wmp.wlmparams.OSReleaseFilePath = workloadmanager.OSReleaseFilePath
+	wmp.wlmparams.OSReleaseFilePath = osinfo.OSReleaseFilePath
 	wmp.wlmparams.InterfaceAddrsGetter = net.InterfaceAddrs
 	wmp.wlmparams.DefaultTokenGetter = defaultTokenGetter
 	wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
