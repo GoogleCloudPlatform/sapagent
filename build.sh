@@ -53,9 +53,8 @@ if [ "${COMPILE_PROTOS}" == "TRUE" ] && [ ! -d "workloadagentplatform" ]; then
   echo "**************  Adding the workloadagent submodule"
     git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
     cd workloadagentplatform
-    # this is the hash of the workloadagentplatform submodule that has the
-    # sharedprotos directory, should match the hash for the version in go.mod
-    # to get the hash run: go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform@main
+# this is the hash of the workloadagentplatform submodule
+# get the hash by running: go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform@main
     git checkout ad26afc273a3368b475fb0c969e1137e4a2fbd0a
     cd ..
     # replace the proto imports in the platform that reference the platform
