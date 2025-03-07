@@ -26,10 +26,10 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanainsights/preprocessor"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -94,7 +94,7 @@ type Parameters struct {
 
 // Init runs additional setup that is a prerequisite for WLM metric collection.
 func (p *Parameters) Init(ctx context.Context) {
-	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(p.ConfigFileReader), p.OSReleaseFilePath)
+	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(p.ConfigFileReader), p.OSType, p.OSReleaseFilePath)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Could not read OS release info from %s", p.OSReleaseFilePath), "error", err)
 	}

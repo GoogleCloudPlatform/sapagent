@@ -48,6 +48,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -207,8 +208,8 @@ func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, opts han
 		OSStatReader:          osStatReader,
 		DefaultTokenGetter:    defaultTokenGetter,
 		JSONCredentialsGetter: jsonCredentialsGetter,
-		OSType:                runtime.GOOS,
-		OSReleaseFilePath:     workloadmanager.OSReleaseFilePath,
+		OSType:                osinfo.OSName,
+		OSReleaseFilePath:     osinfo.OSReleaseFilePath,
 		InterfaceAddrsGetter:  net.InterfaceAddrs,
 		Discovery:             opts.discovery,
 	}

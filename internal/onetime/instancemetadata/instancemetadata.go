@@ -29,7 +29,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
 	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
 )
@@ -53,7 +53,6 @@ type (
 )
 
 const (
-	osReleasePath   = "/etc/os-release"
 	defaultLogLevel = "info"
 )
 
@@ -74,7 +73,7 @@ func (m *InstanceMetadata) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&m.Help, "help", false, "Display help")
 	fs.StringVar(&m.LogLevel, "loglevel", defaultLogLevel, "Sets the logging level for a log file")
 	fs.StringVar(&m.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/instancemetadata.log")
-	fs.StringVar(&m.OSReleasePath, "os-release-path", osReleasePath, "The path to file which contains OS release information, default value is /etc/os-release")
+	fs.StringVar(&m.OSReleasePath, "os-release-path", osinfo.OSReleaseFilePath, "The path to file which contains OS release information, default value is /etc/os-release")
 }
 
 // Execute implements the subcommand interface for instancemetadata.
@@ -106,7 +105,7 @@ func (m *InstanceMetadata) Run(ctx context.Context, opts *onetime.RunOptions) (*
 
 func (m *InstanceMetadata) setDefaults() {
 	if m.OSReleasePath == "" {
-		m.OSReleasePath = osReleasePath
+		m.OSReleasePath = osinfo.OSReleaseFilePath
 	}
 	if m.RC == nil {
 		m.RC = func(path string) (io.ReadCloser, error) {
@@ -118,7 +117,7 @@ func (m *InstanceMetadata) setDefaults() {
 }
 
 func (m *InstanceMetadata) metadataHandler(ctx context.Context) (*impb.Metadata, string, subcommands.ExitStatus) {
-	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(m.RC), m.OSReleasePath)
+	osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(m.RC), osinfo.OSName, m.OSReleasePath)
 	if err != nil {
 		m.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Could not read OS release info from %s", m.OSReleasePath))
 		return nil, fmt.Sprintf("could not read OS release info, error: %s", err.Error()), subcommands.ExitFailure

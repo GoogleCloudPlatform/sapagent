@@ -51,6 +51,7 @@ func TestInit(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			p := Parameters{
 				ConfigFileReader:  test.reader,
+				OSType:            "linux",
 				OSReleaseFilePath: test.filePath,
 			}
 			p.Init(context.Background())

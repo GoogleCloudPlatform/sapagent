@@ -33,9 +33,6 @@ import (
 )
 
 const (
-	// OSReleaseFilePath lists the location of the os-release file in the Linux system.
-	OSReleaseFilePath = "/etc/os-release"
-
 	sapValidationSystem = "workload.googleapis.com/sap/validation/system"
 )
 
