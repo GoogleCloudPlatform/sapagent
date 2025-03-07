@@ -238,6 +238,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 		usagemetrics.Started()
 		go usagemetrics.LogRunningDaily()
 		d.startGuestActions(cancel)
+		d.startGCBDRActions()
 		d.startConfigPollerRoutine(cancel)
 	}
 	d.startServices(ctx, cancel, runtime.GOOS, restarting)
@@ -475,6 +476,13 @@ func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
 		CancelFunc: cancel,
 	}
 	ga.StartUAPCommunication(guestActionsCtx, d.config)
+}
+
+func (d *Daemon) startGCBDRActions() {
+	// Start GCBDR Actions Communication with a separate new context (not impacted by cancels).
+	gcbdrActionsCtx := log.SetCtx(context.Background(), "context", "GCBDRActions")
+	log.CtxLogger(gcbdrActionsCtx).Info("Starting GCBDR Actions")
+	// gcbdractions.StartUAPCommunication(gcbdrActionsCtx, d.config)
 }
 
 // startAgentMetricsService returns health monitor for services.
