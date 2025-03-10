@@ -38,7 +38,6 @@ func CollectPacemakerMetricsFromConfig(ctx context.Context, params Parameters) W
 		Exists:                params.Exists,
 		DefaultTokenGetter:    pacemaker.DefaultTokenGetter(params.DefaultTokenGetter),
 		JSONCredentialsGetter: pacemaker.JSONCredentialsGetter(params.JSONCredentialsGetter),
-		OSReleaseFilePath:     params.OSReleaseFilePath,
 		OSVendorID:            params.osVendorID,
 	}
 	pacemakerVal, l := pacemaker.CollectPacemakerMetrics(ctx, pacemakerParams)

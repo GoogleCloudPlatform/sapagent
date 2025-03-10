@@ -15,11 +15,11 @@ require (
   cloud.google.com/go/monitoring v1.23.0
   cloud.google.com/go/secretmanager v1.14.4
   cloud.google.com/go/storage v1.50.0
-# Get the version by running:
-# go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
+  // Get the version by running:
+  // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
   github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250306152918-ad26afc273a3
-# Get the version by running:
-# go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
+  // Get the version by running:
+  // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
   github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227200353-2ae5bde77bd0
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0

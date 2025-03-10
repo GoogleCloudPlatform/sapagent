@@ -28,10 +28,10 @@ import (
 
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/osinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
@@ -69,7 +69,6 @@ type (
 		DefaultTokenGetter    DefaultTokenGetter
 		JSONCredentialsGetter JSONCredentialsGetter
 		OSVendorID            string
-		OSReleaseFilePath     string
 	}
 )
 
@@ -77,9 +76,9 @@ type (
 func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, map[string]string) {
 	if params.OSVendorID == "" {
 		var err error
-		osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(params.ConfigFileReader), params.OSReleaseFilePath)
+		osData, err := osinfo.ReadData(ctx, osinfo.FileReadCloser(params.ConfigFileReader), osinfo.OSName, osinfo.OSReleaseFilePath)
 		if err != nil {
-			log.CtxLogger(ctx).Debugw(fmt.Sprintf("Could not read OS release info from %s", params.OSReleaseFilePath), "error", err)
+			log.CtxLogger(ctx).Debugw(fmt.Sprintf("Could not read OS release info from %s", osinfo.OSReleaseFilePath), "error", err)
 		}
 		params.OSVendorID = osData.OSVendor
 	}
@@ -146,7 +145,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ers_healthcheck_monitor_timeout":    true,
 		"ers_ilb_monitor_interval":           true,
 		"ers_ilb_monitor_timeout":            true,
-		"has_alias_ip":                      true,
+		"has_alias_ip":                       true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
