@@ -33,6 +33,7 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 
+	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -298,13 +299,13 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	customMetricsRoutine.StartRoutine(ctx)
 	wg.Wait()
 
-	// Append the system metrics to all other metrics.
-	systemLabels := system.Metrics[0].Metric.Labels
-	appendLabels(corosync.Metrics[0].Metric.Labels, systemLabels)
-	appendLabels(hana.Metrics[0].Metric.Labels, systemLabels)
-	appendLabels(netweaver.Metrics[0].Metric.Labels, systemLabels)
-	appendLabels(pacemaker.Metrics[0].Metric.Labels, systemLabels)
-	appendLabels(custom.Metrics[0].Metric.Labels, systemLabels)
+	// Append the shared system metrics to all other metrics.
+	sharedLabels := sharedLabels(system.Metrics[0].Metric.Labels)
+	appendLabels(corosync.Metrics[0].Metric.Labels, sharedLabels)
+	appendLabels(hana.Metrics[0].Metric.Labels, sharedLabels)
+	appendLabels(netweaver.Metrics[0].Metric.Labels, sharedLabels)
+	appendLabels(pacemaker.Metrics[0].Metric.Labels, sharedLabels)
+	appendLabels(custom.Metrics[0].Metric.Labels, sharedLabels)
 
 	// Concatenate all of the metrics together.
 	allMetrics := []*mrpb.TimeSeries{}
@@ -316,6 +317,16 @@ func collectMetricsFromConfig(ctx context.Context, params Parameters, metricOver
 	allMetrics = append(allMetrics, custom.Metrics...)
 
 	return WorkloadMetrics{Metrics: allMetrics}
+}
+
+func sharedLabels(labels map[string]string) map[string]string {
+	shared := make(map[string]string)
+	for k, v := range labels {
+		if slices.Contains(sharedSystemMetrics, k) {
+			shared[k] = v
+		}
+	}
+	return shared
 }
 
 func appendLabels(dst, src map[string]string) {

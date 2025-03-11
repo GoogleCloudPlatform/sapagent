@@ -165,6 +165,32 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 								Value: wlmpb.SystemVariable_AGENT_NAME,
 							},
 						},
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/system",
+									Label: "not_shared",
+								},
+								Command: "test",
+								Args:    []string{},
+								EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
+									AndEvalRules: &cmpb.EvalMetricRule{
+										EvalRules: []*cmpb.EvalRule{
+											{
+												OutputSource:  cmpb.OutputSource_STDOUT,
+												EvalRuleTypes: &cmpb.EvalRule_OutputEquals{OutputEquals: ""},
+											},
+										},
+										IfTrue: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "true"},
+										},
+										IfFalse: &cmpb.EvalResult{
+											EvalResultTypes: &cmpb.EvalResult_ValueFromLiteral{ValueFromLiteral: "false"},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 				Exists: func(string) bool { return false },
@@ -180,7 +206,7 @@ func TestCollectMetricsFromConfig(t *testing.T) {
 			want: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{
 				createTimeSeries(
 					"workload.googleapis.com/sap/validation/system",
-					map[string]string{"agent": "sapagent"},
+					map[string]string{"agent": "sapagent", "not_shared": "true"},
 					1.0,
 					defaultConfiguration,
 				)[0],

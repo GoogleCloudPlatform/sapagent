@@ -36,6 +36,19 @@ const (
 	sapValidationSystem = "workload.googleapis.com/sap/validation/system"
 )
 
+var (
+	// sharedSystemMetrics are the system metric labels that should be populated
+	// across all SAP metric tables.
+	sharedSystemMetrics = []string{
+		"agent",
+		"agent_state",
+		"agent_version",
+		"collection_config_version",
+		"instance_name",
+		"os",
+	}
+)
+
 // InterfaceAddrsGetter satisfies the function signature for net.InterfaceAddrs().
 type InterfaceAddrsGetter func() ([]net.Addr, error)
 

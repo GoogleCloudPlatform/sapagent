@@ -66,7 +66,8 @@ func collectDBMetricsOnce(ctx context.Context, params Parameters) error {
 	metrics := processInsights(ctx, params, insights)
 
 	system := CollectSystemMetricsFromConfig(ctx, params)
-	appendLabels(metrics.Metrics[0].Metric.Labels, system.Metrics[0].Metric.Labels)
+	sharedLabels := sharedLabels(system.Metrics[0].Metric.Labels)
+	appendLabels(metrics.Metrics[0].Metric.Labels, sharedLabels)
 
 	sendMetrics(ctx, sendMetricsParams{
 		wm:                    metrics,
