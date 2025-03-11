@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -563,8 +564,15 @@ func logMetricData(ctx context.Context, metrics []*mrpb.TimeSeries) {
 			continue
 		}
 		log.CtxLogger(ctx).Debugw("Metric", "metric", m.GetMetric().GetType(), "value", m.GetPoints()[0].GetValue().GetDoubleValue())
-		for k, v := range m.GetMetric().GetLabels() {
-			log.CtxLogger(ctx).Debugw("  Label", "key", k, "value", v)
+		// Maps in Go are inherently unordered. Sort the keys to ensure consistent logging output.
+		labels := m.GetMetric().GetLabels()
+		keys := make([]string, 0, len(labels))
+		for k := range labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			log.CtxLogger(ctx).Debugw("  Label", "key", k, "value", labels[k])
 		}
 	}
 }
