@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 24,
+    "version": 25,
     "validation_system": {
       "system_metrics": [
         {
@@ -160,6 +160,52 @@
             },
             "if_false": {
               "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "total_ram"
+          },
+          "os_vendor": "ALL",
+          "command": "free",
+          "args": ["-b"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "Mem:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "Mem:\\s+(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "total_swap"
+          },
+          "os_vendor": "ALL",
+          "command": "free",
+          "args": ["-b"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "Swap:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "Swap:\\s+(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
             }
           }
         }

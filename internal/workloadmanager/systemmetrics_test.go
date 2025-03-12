@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "24"
+	collectionConfigVersion = "25"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -128,31 +128,29 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					if params.Executable == "gcloud" {
 						return commandlineexecutor.Result{
 							StdOut: "Google Cloud SDK 393.0.0",
-							StdErr: "",
 						}
 					}
 					if params.Executable == "gsutil" {
 						return commandlineexecutor.Result{
 							StdOut: "gsutil version 5.10",
-							StdErr: "",
 						}
 					}
 					if params.Executable == "systemctl" {
 						return commandlineexecutor.Result{
 							StdOut: "active",
-							StdErr: "",
 						}
 					}
 					if params.Executable == "sh" {
 						return commandlineexecutor.Result{
 							StdOut: "true",
-							StdErr: "",
 						}
 					}
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
+					if params.Executable == "free" {
+						return commandlineexecutor.Result{
+							StdOut: "Mem: 2000000000\nSwap: 1000000000",
+						}
 					}
+					return commandlineexecutor.Result{}
 				},
 			},
 			wantLabels: map[string]string{
@@ -166,6 +164,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"agent_state":               "running",
 				"os_settings":               "",
 				"uefi_enabled":              "true",
+				"total_ram":                 "2000000000",
+				"total_swap":                "1000000000",
 				"collection_config_version": collectionConfigVersion,
 			},
 		},
