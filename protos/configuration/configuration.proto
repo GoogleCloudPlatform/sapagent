@@ -215,6 +215,7 @@ enum TargetEnvironment {
   STAGING = 2;
   DEVELOPMENT = 3;
   INTEGRATION = 4;
+  AUTOPUSH = 5;
 }
 
 message DiscoveryConfiguration {
@@ -237,4 +238,5 @@ message UAPConfiguration {
 message GCBDRConfiguration {
   google.protobuf.BoolValue communication_enabled = 1;
   google.protobuf.BoolValue test_channel_enabled = 2;
+  TargetEnvironment environment = 3;
 }

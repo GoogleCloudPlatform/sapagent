@@ -456,6 +456,39 @@ func TestStartUAPCommunication(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			name: "TestStagingChannelEnabled",
+			config: &cpb.Configuration{
+				GcbdrConfiguration: &cpb.GCBDRConfiguration{
+					CommunicationEnabled: &wpb.BoolValue{Value: true},
+					TestChannelEnabled:   &wpb.BoolValue{Value: true},
+					Environment:          cpb.TargetEnvironment_STAGING,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "TestAutopushChannelEnabled",
+			config: &cpb.Configuration{
+				GcbdrConfiguration: &cpb.GCBDRConfiguration{
+					CommunicationEnabled: &wpb.BoolValue{Value: true},
+					TestChannelEnabled:   &wpb.BoolValue{Value: true},
+					Environment:          cpb.TargetEnvironment_AUTOPUSH,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "TestProdChannelEnabled",
+			config: &cpb.Configuration{
+				GcbdrConfiguration: &cpb.GCBDRConfiguration{
+					CommunicationEnabled: &wpb.BoolValue{Value: true},
+					TestChannelEnabled:   &wpb.BoolValue{Value: true},
+					Environment:          cpb.TargetEnvironment_PRODUCTION,
+				},
+			},
+			want: true,
+		},
 	}
 
 	ctx := context.Background()

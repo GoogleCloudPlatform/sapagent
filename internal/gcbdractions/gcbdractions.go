@@ -41,7 +41,9 @@ import (
 )
 
 const (
-	defaultChannel  = "workloadmanager.googleapis.com/gcbdr-sap-channel"
+	defaultChannel  = "backupdr.googleapis.com/backupdr-sap-channel"
+	stagingChannel  = "backupdr.googleapis.com/backupdr-sap-channel-staging"
+	autopushChannel = "backupdr.googleapis.com/backupdr-sap-channel-autopush"
 	testChannel     = "gcbdr-test-channel"
 	defaultEndpoint = ""
 	agentCommand    = "agent_command"
@@ -205,10 +207,19 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
 
+	var gcbdrChannel string
+	switch config.GetGcbdrConfiguration().GetEnvironment() {
+	case cpb.TargetEnvironment_STAGING:
+		gcbdrChannel = stagingChannel
+	case cpb.TargetEnvironment_AUTOPUSH:
+		gcbdrChannel = autopushChannel
+	default:
+		gcbdrChannel = defaultChannel
+	}
 	communicateRoutine := &recovery.RecoverableRoutine{
 		Routine: start,
 		RoutineArg: gcbdrActionsOptions{
-			channel:         defaultChannel,
+			channel:         gcbdrChannel,
 			endpoint:        defaultEndpoint,
 			cloudProperties: config.CloudProperties,
 		},

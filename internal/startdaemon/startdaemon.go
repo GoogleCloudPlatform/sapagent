@@ -41,6 +41,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
@@ -239,6 +240,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 		usagemetrics.Started()
 		go usagemetrics.LogRunningDaily()
 		d.startGuestActions(cancel)
+		d.startGCBDRActions()
 		d.startConfigPollerRoutine(cancel)
 	}
 	d.startServices(ctx, cancel, runtime.GOOS, restarting)
@@ -475,6 +477,12 @@ func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
 		CancelFunc: cancel,
 	}
 	ga.StartUAPCommunication(guestActionsCtx, d.config)
+}
+
+func (d *Daemon) startGCBDRActions() {
+	// Start GCBDR Communication with a separate new context (not impacted by cancels).
+	gcbdrActionsCtx := log.SetCtx(context.Background(), "context", "GCBDRActions")
+	gcbdractions.StartUAPCommunication(gcbdrActionsCtx, d.config)
 }
 
 // startAgentMetricsService returns health monitor for services.
