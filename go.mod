@@ -17,7 +17,7 @@ require (
   cloud.google.com/go/storage v1.50.0
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250306152918-ad26afc273a3
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250310055005-8bfff4f19e2f
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
   github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227200353-2ae5bde77bd0

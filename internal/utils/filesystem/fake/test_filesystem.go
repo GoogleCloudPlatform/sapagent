@@ -77,6 +77,46 @@ type FileSystem struct {
 	walkAndZipCallCount int
 }
 
+// MockedFileInfo is a fake implementation of fs.FileInfo for unit testing.
+type MockedFileInfo struct {
+	FileName    string
+	FileSize    int64
+	FileMode    fs.FileMode
+	FileModTime time.Time
+	FileIsDir   bool
+	FileSys     any
+}
+
+// Name is a fake implementation for unit testing.
+func (mfi MockedFileInfo) Name() string {
+	return mfi.FileName
+}
+
+// Size is a fake implementation for unit testing.
+func (mfi MockedFileInfo) Size() int64 {
+	return mfi.FileSize
+}
+
+// Mode is a fake implementation for unit testing.
+func (mfi MockedFileInfo) Mode() fs.FileMode {
+	return mfi.FileMode
+}
+
+// ModTime is a fake implementation for unit testing.
+func (mfi MockedFileInfo) ModTime() time.Time {
+	return mfi.FileModTime
+}
+
+// IsDir is a fake implementation for unit testing.
+func (mfi MockedFileInfo) IsDir() bool {
+	return mfi.FileIsDir
+}
+
+// Sys is a fake implementation for unit testing.
+func (mfi MockedFileInfo) Sys() any {
+	return mfi.FileSys
+}
+
 // MkdirAll is a fake implementation for unit testing.
 func (f *FileSystem) MkdirAll(string, os.FileMode) error {
 	defer func() { f.mkDirCallCount++ }()
