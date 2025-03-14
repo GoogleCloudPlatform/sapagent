@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 25,
+    "version": 26,
     "validation_system": {
       "system_metrics": [
         {
@@ -206,6 +206,75 @@
             },
             "if_false": {
               "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "sapconf"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "sapconf"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "saptune"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "saptune"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "tuned"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "tuned"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
             }
           }
         }

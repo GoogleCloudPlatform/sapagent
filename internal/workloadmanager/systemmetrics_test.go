@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "25"
+	collectionConfigVersion = "26"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -166,6 +166,9 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"uefi_enabled":              "true",
 				"total_ram":                 "2000000000",
 				"total_swap":                "1000000000",
+				"sapconf":                   "active",
+				"saptune":                   "active",
+				"tuned":                     "active",
 				"collection_config_version": collectionConfigVersion,
 			},
 		},
