@@ -472,17 +472,21 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 
 			if s.DBDiskMap != nil {
 				log.CtxLogger(ctx).Debugw("DB Disk Map", "map", s.DBDiskMap)
-				for mountPath, deviceName := range s.DBDiskMap {
-					// instanceResource instance properties disk mounts is a list of the attached disks with
-					// where name is the disk's source and mountPoint is the device name.
-					for _, disk := range instanceResource.InstanceProperties.DiskDeviceNames {
-						if strings.Contains(deviceName, disk.GetDeviceName()) {
-							log.CtxLogger(ctx).Debugw("Disk for device name", "disk", disk, "mountPath", mountPath, "deviceName", deviceName)
-							instanceResource.InstanceProperties.DiskMounts = append(instanceResource.InstanceProperties.DiskMounts,
-								&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-									Name:       disk.GetSource(),
-									MountPoint: mountPath,
-								})
+				for mountPath, deviceNames := range s.DBDiskMap {
+					for _, deviceName := range deviceNames {
+						// instanceResource instance properties disk mounts is a list of the attached disks with
+						// where name is the disk's source and mountPoint is the device name.
+						mount := &spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+							MountPoint: mountPath,
+						}
+						for _, disk := range instanceResource.InstanceProperties.DiskDeviceNames {
+							if strings.Contains(deviceName, disk.GetDeviceName()) {
+								log.CtxLogger(ctx).Debugw("Disk for device name", "disk", disk, "mountPath", mountPath, "deviceName", deviceName)
+								mount.DiskNames = append(mount.DiskNames, disk.GetSource())
+							}
+						}
+						if len(mount.DiskNames) > 0 {
+							instanceResource.InstanceProperties.DiskMounts = append(instanceResource.InstanceProperties.DiskMounts, mount)
 						}
 					}
 				}

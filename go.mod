@@ -17,10 +17,10 @@ require (
   cloud.google.com/go/storage v1.50.0
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250310055005-8bfff4f19e2f
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250314150448-60679105cef6
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250227200353-2ae5bde77bd0
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250314150448-60679105cef6
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.52.1
@@ -34,7 +34,7 @@ require (
   github.com/kardianos/service v1.2.2
   github.com/pkg/errors v0.9.1
   github.com/shirou/gopsutil/v3 v3.24.5
-  github.com/zieckey/goini v0.0.0-20240615065340-08ee21c836fb
+  github.com/zieckey/goini v0.0.0-20240615065340-08ee21c836fb // indirect
   go.uber.org/zap v1.27.0
   golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c
   golang.org/x/oauth2 v0.26.0

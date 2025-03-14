@@ -319,7 +319,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 					VirtualHostname: "some-db-host",
 				}},
 				DBOnHost:  true,
-				DBDiskMap: map[string]string{"/hana/data": "hana-data", "/hana/log": "hana-log"},
+				DBDiskMap: map[string][]string{"/hana/data": {"hana-data"}, "/hana/log": {"hana-log"}},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
@@ -406,11 +406,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						},
 						DiskMounts: []*spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
 							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-								Name:       "hana-log-source",
+								DiskNames:      []string{"hana-log-source"},
 								MountPoint: "/hana/log",
 							},
 							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-								Name:       "hana-data-source",
+								DiskNames:      []string{"hana-data-source"},
 								MountPoint: "/hana/data",
 							},
 						},

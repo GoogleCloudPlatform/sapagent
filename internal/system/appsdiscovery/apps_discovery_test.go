@@ -437,6 +437,207 @@ lrwxrwxrwx 1 root root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-log-0 -> 
    ]
 }
 `
+	multiMountLsblkOutput = `{
+   "blockdevices": [
+      {
+         "name": "sda",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sda1",
+               "mountpoints": [
+                   null
+               ]
+            },{
+               "name": "sda2",
+               "mountpoints": [
+                   null
+               ]
+            },{
+               "name": "sda3",
+               "mountpoints": [
+                   null
+               ]
+            }
+         ]
+      },{
+         "name": "sdb",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sdb1",
+               "mountpoints": [
+                   "/boot/efi"
+               ]
+            },{
+               "name": "sdb2",
+               "mountpoints": [
+                   "/"
+               ]
+            }
+         ]
+      },{
+         "name": "sdc",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sdc1",
+               "mountpoints": [
+                   null
+               ]
+            },{
+               "name": "hanadata-hanadata",   
+               "mountpoints": [
+                   null
+               ]
+            }
+         ]
+      },{
+         "name": "sdd",
+         "mountpoints": [
+             null
+         ]
+      },{
+         "name": "sde",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sde1",
+               "mountpoints": [
+                   null
+               ],
+               "children": [
+                  {
+                     "name": "vghana--data-data",
+                     "mountpoints": [
+                         "/hana/data"
+                     ]
+                  }
+               ]
+            }
+         ]
+      },{
+         "name": "sdf",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sdf1",
+               "mountpoints": [
+                   null
+               ],
+               "children": [
+                  {
+                     "name": "vghana--data-data",
+                     "mountpoints": [
+                         "/hana/data"
+                     ]
+                  }
+               ]
+            },{
+               "name": "sdf2",
+               "mountpoints": [
+                   null
+               ]
+            }
+         ]
+      },{
+         "name": "sdg",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "sdg1",
+               "mountpoints": [
+                   null
+               ],
+               "children": [
+                  {
+                     "name": "vghana--log-log",
+                     "mountpoints": [
+                         "/hana/log"
+                     ]
+                  }
+               ]
+            }
+         ]
+      },{
+         "name": "sdh",
+         "mountpoints": [
+             null
+         ],
+         "children": [
+            {
+               "name": "vghana--logbackup-logbackup",
+               "mountpoints": [
+                   "/hanalogbackup"
+               ]
+            }
+         ]
+      }
+   ]
+}`
+	multiMountDiskLsOutput = `total 0
+drwxr-xr-x 9 root root  180 Dec 20 22:37 ..
+lrwxrwxrwx 1 root root    9 Dec 20 22:37 scsi-0Google_PersistentDisk_parttesttarget-rs-disk -> ../../sda
+lrwxrwxrwx 1 root root    9 Dec 20 22:37 google-parttesttarget-rs-disk -> ../../sda
+lrwxrwxrwx 1 root root    9 Dec 20 22:37 scsi-0Google_PersistentDisk_rhel92hana -> ../../sdb
+lrwxrwxrwx 1 root root    9 Dec 20 22:37 google-rhel92hana -> ../../sdb
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 scsi-0Google_PersistentDisk_parttesttarget-rs-disk-part3 -> ../../sda3
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 google-parttesttarget-rs-disk-part3 -> ../../sda3
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 scsi-0Google_PersistentDisk_parttesttarget-rs-disk-part1 -> ../../sda1
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 google-parttesttarget-rs-disk-part1 -> ../../sda1
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 scsi-0Google_PersistentDisk_rhel92hana-part2 -> ../../sdb2
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 google-rhel92hana-part2 -> ../../sdb2
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 google-rhel92hana-part1 -> ../../sdb1
+lrwxrwxrwx 1 root root   10 Dec 20 22:37 scsi-0Google_PersistentDisk_rhel92hana-part1 -> ../../sdb1
+lrwxrwxrwx 1 root root    9 Dec 20 22:45 scsi-0Google_PersistentDisk_testlog -> ../../sdc
+lrwxrwxrwx 1 root root    9 Dec 20 22:45 google-testlog -> ../../sdc
+lrwxrwxrwx 1 root root   10 Dec 20 22:45 google-testlog-part1 -> ../../sdc1
+lrwxrwxrwx 1 root root   10 Dec 20 22:45 scsi-0Google_PersistentDisk_testlog-part1 -> ../../sdc1
+lrwxrwxrwx 1 root root    9 Dec 20 22:48 scsi-0Google_PersistentDisk_hanalog -> ../../sdf
+lrwxrwxrwx 1 root root    9 Dec 20 22:48 google-hanalog -> ../../sdf
+lrwxrwxrwx 1 root root   10 Dec 20 22:48 scsi-0Google_PersistentDisk_hanalog-part2 -> ../../sdf2
+lrwxrwxrwx 1 root root   10 Dec 20 22:48 google-hanalog-part2 -> ../../sdf2
+lrwxrwxrwx 1 root root    9 Dec 20 22:48 scsi-0Google_PersistentDisk_hanadata -> ../../sdg
+lrwxrwxrwx 1 root root    9 Dec 20 22:48 google-hanadata -> ../../sdg
+lrwxrwxrwx 1 root root   10 Dec 20 22:50 dm-uuid-LVM-h7i9xV1rHlfoUVIlN9IkxAdbbaJSNhYkY4FMgaqUhSwOka8jf3ramwzC8e7E8hm8 -> ../../dm-3
+lrwxrwxrwx 1 root root   10 Dec 20 22:50 dm-name-vghana--log-log -> ../../dm-3
+lrwxrwxrwx 1 root root   10 Dec 20 23:08 dm-uuid-LVM-rtSKkjz1n5vw8ajFD7JBTHUqKV2I2bRN5UY4GuMFfjcawdeqrlZ3y41UuJWKrAjb -> ../../dm-0
+lrwxrwxrwx 1 root root   10 Dec 20 23:08 dm-name-hanadata-hanadata -> ../../dm-0
+lrwxrwxrwx 1 root root    9 Dec 20 23:10 scsi-0Google_PersistentDisk_testdata -> ../../sde
+lrwxrwxrwx 1 root root    9 Dec 20 23:10 google-testdata -> ../../sde
+lrwxrwxrwx 1 root root   10 Dec 20 23:11 dm-uuid-LVM-b79yfIMN7fIF8rseYfK1yS4YkK1Gfa8od3jgNTptYThaEAb0jhTVorzHSsJdxuHw -> ../../dm-2
+lrwxrwxrwx 1 root root   10 Dec 20 23:11 dm-name-vghana--data-data -> ../../dm-2
+lrwxrwxrwx 1 root root   10 Dec 20 23:20 dm-uuid-LVM-1xZCkb4I12Zl5dNzHlAd6mn1jVNoD08B7PdSAdQrZmdEqS0wYHVmdXTYqKvl0ZcW -> ../../dm-1
+lrwxrwxrwx 1 root root   10 Dec 20 23:20 dm-name-vghana--logbackup-logbackup -> ../../dm-1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 scsi-0Google_PersistentDisk_hanalog-part1 -> ../../sdf1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 scsi-0Google_PersistentDisk_hanadata-part1 -> ../../sdg1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 lvm-pv-uuid-3EruWa-bNwb-yWUR-NJa8-UN9N-allf-YTChN7 -> ../../sdg1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 lvm-pv-uuid-3BXHIC-F2MZ-xY86-Y5pk-Xjnm-bzhK-Pz3xoi -> ../../sdf1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 google-hanalog-part1 -> ../../sdf1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 google-hanadata-part1 -> ../../sdg1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 scsi-0Google_PersistentDisk_testdata-part1 -> ../../sde1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 scsi-0Google_PersistentDisk_parttesttarget-rs-disk-part2 -> ../../sda2
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 lvm-pv-uuid-ZpW8aZ-8T5K-rhwi-OrMe-WJEN-y5ix-zavUP0 -> ../../sde1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 google-testdata-part1 -> ../../sde1
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 google-parttesttarget-rs-disk-part2 -> ../../sda2
+lrwxrwxrwx 1 root root   10 Jan 17 17:00 lvm-pv-uuid-KJ7zmX-qM8d-delr-t2vD-vyOc-3x2B-44KZDD -> ../../sda2
+lrwxrwxrwx 1 root root    9 Jan 17 17:00 scsi-0Google_PersistentDisk_testdisk -> ../../sdd
+lrwxrwxrwx 1 root root    9 Jan 17 17:00 scsi-0Google_PersistentDisk_logbackup -> ../../sdh
+lrwxrwxrwx 1 root root    9 Jan 17 17:00 lvm-pv-uuid-H5GAh8-mKVi-8fIP-MKXS-LtLQ-MG5B-yAeP0N -> ../../sdd
+lrwxrwxrwx 1 root root    9 Jan 17 17:00 google-testdisk -> ../../sdd
+lrwxrwxrwx 1 root root    9 Jan 17 17:00 google-logbackup -> ../../sdh`
 )
 
 var (
@@ -591,6 +792,12 @@ var (
 	}
 	defaultDiskLsResult = commandlineexecutor.Result{
 		StdOut: defaultDiskLsOutput,
+	}
+	multiMountLsBlkResult = commandlineexecutor.Result{
+		StdOut: multiMountLsblkOutput,
+	}
+	multiMountDiskLsResult = commandlineexecutor.Result{
+		StdOut: multiMountDiskLsOutput,
 	}
 )
 
@@ -2618,10 +2825,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}},
 	}, {
@@ -2723,10 +2930,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}},
 	}, {
@@ -2834,10 +3041,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -2865,10 +3072,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}},
 	}, {
@@ -2976,10 +3183,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}, {
 			DBComponent: &spb.SapDiscovery_Component{
@@ -3007,10 +3214,10 @@ func TestDiscoverHANA(t *testing.T) {
 				Type:           sappb.InstanceType_HANA,
 				InstanceNumber: "00",
 			},
-			DBDiskMap: map[string]string{
-				logPathName:       "google-sap-hana-log-0",
-				dataPathName:      "google-sap-hana-data-0",
-				logBackupPathName: "google-sap-hanabackup",
+			DBDiskMap: map[string][]string{
+				logPathName:       []string{"sap-hana-log-0"},
+				dataPathName:      []string{"sap-hana-data-0"},
+				logBackupPathName: []string{"sap-hanabackup"},
 			},
 		}},
 	}, {
@@ -5993,7 +6200,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 		name     string
 		pathName string
 		exec     *fakeCommandExecutor
-		want     string
+		want     []string
 		wantErr  error
 	}{{
 		name:     "success",
@@ -6014,7 +6221,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				defaultLsblkResult,
 				defaultDiskLsResult},
 		},
-		want: "google-sap-hana-data-0",
+		want: []string{"sap-hana-data-0"},
 	}, {
 		name:     "findsBestMountMatch",
 		pathName: "/hana/data",
@@ -6035,7 +6242,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 				},
 				defaultDiskLsResult},
 		},
-		want: "google-sap-hana-data-0",
+		want: []string{"sap-hana-data-0"},
 	}, {
 		name:     "notInGlobalINI",
 		pathName: "/hana/data",
@@ -6162,7 +6369,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 					StdOut: "empty output",
 				}},
 		},
-		wantErr: cmpopts.AnyError,
+		want: []string{},
 	}, {
 		name:     "mismatchedLineInLsOutput",
 		pathName: "/hana/data",
@@ -6184,7 +6391,7 @@ func TestFindDiskForHANABasePath(t *testing.T) {
 lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../../sdc`,
 				}},
 		},
-		wantErr: cmpopts.AnyError,
+		want: []string{},
 	}, {
 		name:     "mountInChildBlock",
 		pathName: "/hana/data",
@@ -6205,7 +6412,7 @@ lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../.
 				},
 				defaultDiskLsResult},
 		},
-		want: "google-sap-hana-data-0",
+		want: []string{"sap-hana-data-0"},
 	}, {
 		name:     "mountInNestedChildBlock",
 		pathName: "/hana/data",
@@ -6226,7 +6433,30 @@ lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../.
 				},
 				defaultDiskLsResult},
 		},
-		want: "google-sap-hana-data-0",
+		want: []string{"sap-hana-data-0"},
+	}, {
+		name:     "multipleDisksForMount",
+		pathName: dataPathName,
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{dataPathName, "global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}},
+			results: []commandlineexecutor.Result{
+				{
+					StdOut: `basepath_datavolumes = /hana/data/RE9`,
+				},
+				multiMountLsBlkResult,
+				multiMountDiskLsResult,
+			},
+		},
+		want: []string{"testdata", "hanalog"},
 	}}
 	ctx := context.Background()
 	for _, tc := range tests {
@@ -6234,9 +6464,9 @@ lrwxrwxrwx 1 root  9 Feb 10 08:52 /dev/disk/by-id/google-sap-hana-data-0 -> ../.
 			execFunc := func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 				return tc.exec.Execute(ctx, p)
 			}
-			got, err := findDiskForHANABasePath(ctx, tc.pathName, "global.ini", execFunc)
-			if got != tc.want {
-				t.Errorf("findDiskForHANABasePath(%v) = %q, want: %q", tc.pathName, got, tc.want)
+			got, err := findDisksForHANABasePath(ctx, tc.pathName, "global.ini", execFunc)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("findDiskForHANABasePath(%v) = %q, want: %q, diff: %v", tc.pathName, got, tc.want, diff)
 			}
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("findDiskForHANABasePath(%v) returned an unexpected error: %v", tc.pathName, err)
@@ -6250,7 +6480,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 		name    string
 		app     *sappb.SAPInstance
 		exec    *fakeCommandExecutor
-		want    map[string]string
+		want    map[string][]string
 		wantErr error
 	}{{
 		name: "success",
@@ -6299,10 +6529,10 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultDiskLsResult,
 			},
 		},
-		want: map[string]string{
-			logPathName:       "google-sap-hana-log-0",
-			dataPathName:      "google-sap-hana-data-0",
-			logBackupPathName: "google-sap-hanabackup",
+		want: map[string][]string{
+			logPathName:       []string{"sap-hana-log-0"},
+			dataPathName:      []string{"sap-hana-data-0"},
+			logBackupPathName: []string{"sap-hanabackup"},
 		},
 	}, {
 		name: "noLogPath",
@@ -6343,9 +6573,9 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultLsblkResult,
 				defaultDiskLsResult},
 		},
-		want: map[string]string{
-			dataPathName:      "google-sap-hana-data-0",
-			logBackupPathName: "google-sap-hanabackup",
+		want: map[string][]string{
+			dataPathName:      []string{"sap-hana-data-0"},
+			logBackupPathName: []string{"sap-hanabackup"},
 		},
 	}, {
 		name: "noDataPath",
@@ -6386,9 +6616,9 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultLsblkResult,
 				defaultDiskLsResult},
 		},
-		want: map[string]string{
-			logPathName:       "google-sap-hana-log-0",
-			logBackupPathName: "google-sap-hanabackup",
+		want: map[string][]string{
+			logPathName:       []string{"sap-hana-log-0"},
+			logBackupPathName: []string{"sap-hanabackup"},
 		},
 	}, {
 		name: "noLogBackupPath",
@@ -6429,9 +6659,9 @@ func TestDiscoverHANADisks(t *testing.T) {
 					StdOut: "",
 				}},
 		},
-		want: map[string]string{
-			logPathName:  "google-sap-hana-log-0",
-			dataPathName: "google-sap-hana-data-0",
+		want: map[string][]string{
+			logPathName:  []string{"sap-hana-log-0"},
+			dataPathName: []string{"sap-hana-data-0"},
 		},
 	}, {
 		name: "mountInChildBlock",
@@ -6480,10 +6710,68 @@ func TestDiscoverHANADisks(t *testing.T) {
 				defaultDiskLsResult,
 			},
 		},
-		want: map[string]string{
-			logPathName:       "google-sap-hana-log-0",
-			dataPathName:      "google-sap-hana-data-0",
-			logBackupPathName: "google-sap-hanabackup",
+		want: map[string][]string{
+			logPathName:       []string{"sap-hana-log-0"},
+			dataPathName:      []string{"sap-hana-data-0"},
+			logBackupPathName: []string{"sap-hanabackup"},
+		},
+	}, {
+		name: "stripedDisk",
+		app: &sappb.SAPInstance{
+			Sapsid:         "sid",
+			InstanceNumber: "00",
+		},
+		exec: &fakeCommandExecutor{
+			params: []commandlineexecutor.Params{{
+				Executable: "grep",
+				Args:       []string{logPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}, {
+				Executable: "grep",
+				Args:       []string{dataPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}, {
+				Executable: "grep",
+				Args:       []string{logBackupPathName, "/usr/sap/SID/SYS/global/hdb/custom/config/global.ini"},
+			}, {
+				Executable: "lsblk",
+				Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+			}, {
+				Executable: "ls",
+				Args:       []string{"-lart", "/dev/disk/by-id/"},
+			}},
+			results: []commandlineexecutor.Result{
+				{
+					StdOut: `basepath_logvolumes = /hana/log/RE9`,
+				},
+				multiMountLsBlkResult,
+				multiMountDiskLsResult,
+				{
+					StdOut: `basepath_datavolumes = /hana/data/RE9`,
+				},
+				multiMountLsBlkResult,
+				multiMountDiskLsResult,
+				{
+					StdOut: `basepath_logbackup = /hanalogbackup`,
+				},
+				multiMountLsBlkResult,
+				multiMountDiskLsResult,
+			},
+		},
+		want: map[string][]string{
+			logPathName:       []string{"hanadata"},
+			dataPathName:      []string{"testdata", "hanalog"},
+			logBackupPathName: []string{"logbackup"},
 		},
 	}}
 	ctx := context.Background()
@@ -6497,7 +6785,7 @@ func TestDiscoverHANADisks(t *testing.T) {
 				},
 			}
 			got, err := d.discoverHANADisks(ctx, tc.app)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
 				t.Errorf("discoverHANADisks(%v) returned an unexpected diff (-want +got): %v", tc.app, diff)
 			}
 			if !errors.Is(err, tc.wantErr) {

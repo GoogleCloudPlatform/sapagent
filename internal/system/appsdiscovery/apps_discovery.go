@@ -102,7 +102,7 @@ type SapSystemDetails struct {
 	DBComponent         *spb.SapDiscovery_Component
 	AppHosts, DBHosts   []string
 	AppOnHost, DBOnHost bool
-	DBDiskMap           map[string]string
+	DBDiskMap           map[string][]string
 	WorkloadProperties  *spb.SapDiscovery_WorkloadProperties
 	InstanceProperties  []*spb.SapDiscovery_Resource_InstanceProperties
 	AppInstance         *sappb.SAPInstance
@@ -562,7 +562,7 @@ func (d *SapDiscovery) discoverNetweaverHosts(ctx context.Context, app *sappb.SA
 	return ascsHosts, ersHosts, appHosts
 }
 
-func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid, dbProductVersion string, diskMap map[string]string) SapSystemDetails {
+func hanaSystemDetails(app *sappb.SAPInstance, dbProps *spb.SapDiscovery_Component_DatabaseProperties, dbHosts []string, sid, dbProductVersion string, diskMap map[string][]string) SapSystemDetails {
 	t := spb.SapDiscovery_Component_TOPOLOGY_SCALE_UP
 	if len(dbHosts) > 1 {
 		t = spb.SapDiscovery_Component_TOPOLOGY_SCALE_OUT
@@ -1490,39 +1490,39 @@ func (d *SapDiscovery) discoverHANALandscapeId(ctx context.Context, app *sappb.S
 	return lid[1], nil
 }
 
-func (d *SapDiscovery) discoverHANADisks(ctx context.Context, app *sappb.SAPInstance) (map[string]string, error) {
-	mountMap := map[string]string{}
+func (d *SapDiscovery) discoverHANADisks(ctx context.Context, app *sappb.SAPInstance) (map[string][]string, error) {
+	mountMap := make(map[string][]string)
 	log.CtxLogger(ctx).Debugw("Entered discoverHANADisks")
 	sidUpper := strings.ToUpper(app.Sapsid)
 	configPath := fmt.Sprintf(hanaConfigDir, sidUpper)
 	globalINIPath := filepath.Join(configPath, "global.ini")
-	deviceName, err := findDiskForHANABasePath(ctx, logPathName, globalINIPath, d.Execute)
+	deviceNames, err := findDisksForHANABasePath(ctx, logPathName, globalINIPath, d.Execute)
 
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error finding disk for log path", "error", err)
 	} else {
-		mountMap[logPathName] = deviceName
+		mountMap[logPathName] = append(mountMap[logPathName], deviceNames...)
 	}
 
-	deviceName, err = findDiskForHANABasePath(ctx, dataPathName, globalINIPath, d.Execute)
+	deviceNames, err = findDisksForHANABasePath(ctx, dataPathName, globalINIPath, d.Execute)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error finding disk for data path", "error", err)
 	} else {
-		mountMap[dataPathName] = deviceName
+		mountMap[dataPathName] = append(mountMap[dataPathName], deviceNames...)
 	}
 
-	deviceName, err = findDiskForHANABasePath(ctx, logBackupPathName, globalINIPath, d.Execute)
+	deviceNames, err = findDisksForHANABasePath(ctx, logBackupPathName, globalINIPath, d.Execute)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error finding disk for log backup path", "error", err)
 	} else {
-		mountMap[logBackupPathName] = deviceName
+		mountMap[logBackupPathName] = append(mountMap[logBackupPathName], deviceNames...)
 	}
 
 	log.CtxLogger(ctx).Debugw("End of discoverHANADisks", "mountMap", mountMap)
 	return mountMap, nil
 }
 
-func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath string, exec commandlineexecutor.Execute) (string, error) {
+func findDisksForHANABasePath(ctx context.Context, pathName string, globalINIPath string, exec commandlineexecutor.Execute) ([]string, error) {
 	// Get paths for desired mounts from global.ini
 	p := commandlineexecutor.Params{
 		Executable: "grep",
@@ -1531,17 +1531,17 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	res := exec(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Infow("Error executing grep", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
-		return "", res.Error
+		return nil, res.Error
 	}
 	if res.StdOut == "" {
-		return "", errors.New("path not found in global.ini " + pathName)
+		return nil, errors.New("path not found in global.ini " + pathName)
 	}
 
 	// Expected output should be like:
 	// basepath_datavolumes = /path/to/mount
 	parts := strings.Split(res.StdOut, "=")
 	if len(parts) < 2 {
-		return "", errors.New("unable to find path for mount")
+		return nil, errors.New("unable to find path for mount")
 	}
 	mount := strings.TrimSpace(parts[1])
 	// Remove trailing slash if present
@@ -1556,35 +1556,43 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	res = exec(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Infow("Error executing lsblk", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
-		return "", res.Error
+		return nil, res.Error
 	}
 	// Output is json
 	var result lsblk
 	err := json.Unmarshal([]byte(res.StdOut), &result)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error unmarshalling lsblk output", "error", err, "stdOut", res.StdOut)
-		return "", err
+		return nil, err
 	}
 
-	var deviceName string
+	var deviceNames []string
 	bestMatchLength := 0
 	// Find the block device with the best match to mount
 	for _, blockDevice := range result.BlockDevices {
 		log.CtxLogger(ctx).Debugw("Block device", "blockDevice", blockDevice)
 		blockDeviceName, blockMatchLen, err := findMountPointInBlockDevice(ctx, mount, blockDevice)
 		if err != nil {
-			return "", err
+			return nil, err
+		}
+
+		if blockDeviceName == "" {
+			continue
 		}
 
 		if blockMatchLen > bestMatchLength {
+			log.CtxLogger(ctx).Debugw("Found better match", "blockDeviceName", blockDeviceName, "blockMatchLen", blockMatchLen, "bestMatchLength", bestMatchLength)
 			bestMatchLength = blockMatchLen
-			deviceName = blockDeviceName
+			deviceNames = []string{blockDeviceName}
+		} else if blockMatchLen == bestMatchLength {
+			log.CtxLogger(ctx).Debugw("Found match with same length", "blockDeviceName", blockDeviceName, "blockMatchLen", blockMatchLen, "bestMatchLength", bestMatchLength)
+			deviceNames = append(deviceNames, blockDeviceName)
 		}
 	}
-	if deviceName == "" {
-		return "", errors.New("unable to find disk for mount")
+	if len(deviceNames) == 0 {
+		return nil, errors.New("unable to find disk for mount")
 	}
-	log.CtxLogger(ctx).Debugw("Found device name", "deviceName", deviceName)
+	log.CtxLogger(ctx).Debugw("Found device name", "deviceName", deviceNames)
 
 	// Find disk name for that device.
 	p = commandlineexecutor.Params{
@@ -1595,7 +1603,7 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	res = exec(ctx, p)
 	if res.Error != nil {
 		log.CtxLogger(ctx).Infow("Error executing ls", "error", res.Error, "stdOut", res.StdOut, "stdErr", res.StdErr, "exitcode", res.ExitCode)
-		return "", res.Error
+		return nil, res.Error
 	}
 
 	// Output will look like:
@@ -1604,10 +1612,10 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-sap-posdb00-hana-data-0 -> ../../sdc
 	// lrwxrwxrwx 1 root root  9 Feb  5 07:32 /dev/disk/by-id/google-sap-posdb00-usr-sap -> ../../sdb
 
-	for _, line := range strings.Split(res.StdOut, "\n") {
-		log.CtxLogger(ctx).Debugw("ls output", "line", line)
-		if strings.Contains(line, deviceName) {
-			log.CtxLogger(ctx).Debugw("Found device name in ls output")
+	devicePaths := []string{}
+	for _, deviceName := range deviceNames {
+		log.CtxLogger(ctx).Debugw("deviceName", "deviceName", deviceName)
+		for _, line := range strings.Split(res.StdOut, "\n") {
 			parts := strings.Fields(line)
 			// Expected parts:
 			// 0: permissions
@@ -1625,14 +1633,24 @@ func findDiskForHANABasePath(ctx context.Context, pathName string, globalINIPath
 			if len(parts) < 11 {
 				continue
 			}
-			devicePath := parts[8]
-			// Strip up up to the end of /google-
-			devicePath = strings.TrimPrefix(devicePath, "/dev/disk/by-id/")
-			// Maybe need to handle disk partitions
-			return devicePath, nil
+			device := parts[10]
+			if strings.HasSuffix(device, deviceName) {
+				log.CtxLogger(ctx).Debugw("ls output", "line", line)
+				log.CtxLogger(ctx).Debugw("Found device name in ls output")
+				devicePath := parts[8]
+
+				// Strip up up to the end of /google-
+				devicePath = strings.TrimPrefix(devicePath, "/dev/disk/by-id/")
+				devicePath = strings.TrimPrefix(devicePath, "google-")
+				devicePath = strings.TrimPrefix(devicePath, "scsi-0Google_PersistentDisk_")
+				// Maybe need to handle disk partitions
+				if !slices.Contains(devicePaths, devicePath) {
+					devicePaths = append(devicePaths, devicePath)
+				}
+			}
 		}
 	}
-	return "", errors.New("unable to find disk for mount")
+	return devicePaths, nil
 }
 
 func findMountPointInBlockDevice(ctx context.Context, mount string, blockDevice lsblkdevice) (deviceName string, bestMatchLen int, err error) {
@@ -1650,6 +1668,8 @@ func findMountPointInBlockDevice(ctx context.Context, mount string, blockDevice 
 		for i := 0; i < minLen; i++ {
 			if mountParts[i] != mountPointParts[i] {
 				log.CtxLogger(ctx).Debugw("Mount parts mismatch", "mountParts", mountParts[i], "mountPointParts", mountPointParts[i])
+				// Mount is for a different path.
+				matchLen = 0
 				break
 			}
 			matchLen++
@@ -1668,8 +1688,11 @@ func findMountPointInBlockDevice(ctx context.Context, mount string, blockDevice 
 		}
 		if childBestMatchLen > bestMatchLen {
 			// Prefer using the block device's name, since the child may be a volume group.
-			return blockDevice.Name, childBestMatchLen, nil
+			log.CtxLogger(ctx).Debugw("Found better match in child", "childBestMatchLen", childBestMatchLen, "bestMatchLen", bestMatchLen)
+			bestMatchLen = childBestMatchLen
+			deviceName = blockDevice.Name
 		}
 	}
+	log.CtxLogger(ctx).Debugw("Returning device name", "deviceName", deviceName, "bestMatchLen", bestMatchLen)
 	return deviceName, bestMatchLen, err
 }
