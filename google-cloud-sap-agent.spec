@@ -17,7 +17,7 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %define _docdir /usr/share/doc/%{name}
 %define _servicedir /usr/share/%{name}/service
 # Uncomment below line to package sap-core-app package needed by GCBDR.
-# %define _gcbdr_sap_core_app_dir /act/custom_apps
+# %define _gcbdr_sap_core_app_dir /etc/google-cloud-sap-agent/gcbdr
 
 %install
 # clean away any previous RPM build root

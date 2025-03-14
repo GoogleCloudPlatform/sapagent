@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	discoveryScriptPath     = "/act/custom_apps/discoverySAP.sh"
-	discoverySAPHANAXMLPath = "/act/custom_apps/SAPHANA.xml"
+	discoveryScriptPath     = "/etc/google-cloud-sap-agent/gcbdr/discoverySAP.sh"
+	discoverySAPHANAXMLPath = "/etc/google-cloud-sap-agent/gcbdr/SAPHANA.xml"
 )
 
 // Applications struct for GCBDR CoreApp discovery script. It contains the list of applications
@@ -191,7 +191,7 @@ func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecut
 	d.oteLogger.LogUsageAction(usagemetrics.GCBDRDiscoveryStarted)
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
-		ArgsToSplit: "/act/custom_apps/discoverySAP.sh",
+		ArgsToSplit: discoveryScriptPath,
 	}
 	res := exec(ctx, args)
 	if res.ExitCode != 0 {

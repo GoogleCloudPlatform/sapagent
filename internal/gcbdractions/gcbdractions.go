@@ -82,7 +82,7 @@ func parseRequest(ctx context.Context, msg *anypb.Any) (*gpb.GCBDRActionRequest,
 	return gaReq, nil
 }
 
-func guestActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GCBDRActionResponse {
+func gcbdrActionResponse(ctx context.Context, results []*gpb.CommandResult, errorMessage string) *gpb.GCBDRActionResponse {
 	return &gpb.GCBDRActionResponse{
 		CommandResults: results,
 		Error: &gpb.GCBDRActionError{
@@ -151,7 +151,7 @@ func messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metada
 		log.CtxLogger(ctx).Debugw("failed to parse request.", "err", err)
 		return nil, err
 	}
-	log.CtxLogger(ctx).Debugw("received GuestActionRequest to handle", "gar", prototext.Format(gar))
+	log.CtxLogger(ctx).Debugw("received GCBDRActionRequest to handle", "gar", prototext.Format(gar))
 	for _, command := range gar.GetCommands() {
 		log.CtxLogger(ctx).Debugw("processing command.", "command", prototext.Format(command))
 		pr := command.ProtoReflect()
@@ -161,7 +161,7 @@ func messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metada
 		case fd == nil:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
+			return anyResponse(ctx, gcbdrActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		case fd.Name() == shellCommand:
 			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
 			results = append(results, result)
@@ -171,15 +171,15 @@ func messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metada
 		default:
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
-			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
+			return anyResponse(ctx, gcbdrActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		}
 		// Exit early if we get an error
 		if result.GetExitCode() != int32(0) {
 			errMsg := fmt.Sprintf("received nonzero exit code with output: %s", result.GetStdout())
-			return anyResponse(ctx, guestActionResponse(ctx, results, errMsg)), errors.New(errMsg)
+			return anyResponse(ctx, gcbdrActionResponse(ctx, results, errMsg)), errors.New(errMsg)
 		}
 	}
-	return anyResponse(ctx, guestActionResponse(ctx, results, "")), nil
+	return anyResponse(ctx, gcbdrActionResponse(ctx, results, "")), nil
 }
 
 func start(ctx context.Context, a any) {
@@ -223,7 +223,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 			endpoint:        defaultEndpoint,
 			cloudProperties: config.CloudProperties,
 		},
-		ErrorCode:           usagemetrics.GuestActionsFailure,
+		ErrorCode:           usagemetrics.GCBDRActionsFailure,
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
