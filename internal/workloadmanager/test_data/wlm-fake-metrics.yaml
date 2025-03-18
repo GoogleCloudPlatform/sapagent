@@ -16,26 +16,24 @@
 
 metric: system
     metric_value: 1
+    collection_config_version: 20
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     gcloud: true
     gsutil: true
     network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
+    uefi_enabled: true
 metric: corosync
     metric_value: 1
+    collection_config_version: 24
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
-    gcloud: true
-    gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
     consensus:
     token_retransmits_before_loss_const: 10
     two_node: 1
@@ -54,43 +52,80 @@ metric: corosync
     two_node_runtime: 1
 metric: pacemaker
     metric_value: 1
+    collection_config_version: 24
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
-    gcloud: true
-    gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
-    pcmk_reboot_timeout: 300
-    pcmk_monitor_retries: 4
-    pcmk_delay_base: 30
     pcmk_delay_max: 30
-    fence_agent: gcpstonith
+    pcmk_monitor_retries: 4
+    pcmk_reboot_timeout: 300
+    saphana_notify: true
+    saphana_clone_max: 2
+    saphana_clone_node_max: 1
+    saphana_interleave: true
+    saphana_automated_register: true
+    saphana_duplicate_primary_timeout: 7200
+    saphana_prefer_site_takeover: true
+    saphanatopology_clone_node_max: 1
+    saphanatopology_interleave: true
+    healthcheck_monitor_interval: 10
+    healthcheck_monitor_timeout: 20
+    ilb_monitor_interval: 3600
+    ilb_monitor_timeout: 60
+    has_alias_ip: false
     location_preference_set: true
-    resource_stickiness: 1000
     migration_threshold: 5000
+    resource_stickiness: 1000
     saphana_start_timeout: 3600
     saphana_stop_timeout: 3600
     saphana_promote_timeout: 3600
     saphana_demote_timeout: 3600
-    saphanatopology_monitor_interval: 30
-    saphanatopology_monitor_timeout: 60
+    saphana_primary_monitor_interval: 59
+    saphana_primary_monitor_timeout: 700
+    saphana_secondary_monitor_interval: 61
+    saphana_secondary_monitor_timeout: 700
+    saphanatopology_monitor_interval: 10
+    saphanatopology_monitor_timeout: 600
+    saphanatopology_start_timeout: 600
+    saphanatopology_stop_timeout: 300
+    fence_agent: gcpstonith
     fence_agent_compute_api_access: true
     fence_agent_logging_api_access: true
+    ascs_instance: fake-wlmmetrics-1
+    ers_instance: fake-wlmmetrics-1
+    enqueue_server: ENSA2
+    ascs_failure_timeout: 60
+    ascs_migration_threshold: 3
+    ascs_resource_stickiness: 5000
+    is_ers: true
+    ascs_automatic_recover: false
+    ascs_monitor_interval: 20
+    ascs_monitor_timeout: 60
+    ers_automatic_recover: false
+    ers_monitor_interval: 20
+    ers_monitor_timeout: 60
+    ascs_healthcheck_monitor_interval: 10
+    ascs_healthcheck_monitor_timeout: 20
+    ascs_ilb_monitor_interval: 3600
+    ascs_ilb_monitor_timeout: 60
+    ers_healthcheck_monitor_interval: 10
+    ers_healthcheck_monitor_timeout: 20
+    ers_ilb_monitor_interval: 3600
+    ers_ilb_monitor_timeout: 60
+    op_timeout: 600
     maintenance_mode_active: false
+    stonith_enabled: true
+    stonith_timeout: 300
 metric: hana
     metric_value: 1
+    collection_config_version: 24
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
-    gcloud: true
-    gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
     fast_restart: disabled
     ha_sr_hook_configured: yes
     numa_balancing: disabled
@@ -99,70 +134,64 @@ metric: hana
     disk_data_mount: /hana/data
     disk_data_size: 457409822720
     disk_data_pd_size: 895500681216
+    hana_data_volume: /dev/sda
     disk_log_type: pd-ssd
     disk_log_mount: /hana/log
     disk_log_size: 134217728000
     disk_log_pd_size: 895500681216
-    ha_in_same_zone: false
-
+    hana_log_volume: /dev/sdb
+    hana_backup_volume: /dev/sdc
+    hana_shared_volume: /dev/sdd
+    usr_sap_volume: /dev/sdd
 metric: netweaver
     metric_value: 1
+    collection_config_version: 24
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
-    gcloud: true
-    gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
-
 metric: hanasecurity
     metric_value: 1
+    collection_config_version: 24
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
-    gcloud: true
-    gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
     agent: sapagent
-    agent_version: 3.2
+    agent_version: 3.7
     agent_state: running
-    os_settings: pass
-    r_logshipping_async_buffer_size_rec_1: false
-    r_datashipping_parallel_channels_rec_1: false
-    r_compressed_log_shipping_rec_1: false
-    r_sap_hana_internal_support_role_rec_1: false
+    r_password_policy_password_lock_time_rec_1: false
     r_dev_privs_in_prod_rec_1: false
-    r_system_replication_allowed_sender_rec_1: false
+    r_password_policy_maximum_password_lifetime_rec_1: false
+    r_prod_users_with_debug_roles_rec_1: false
     r_vulnerability_cve_2019_0357_rec_1: false
-    r_backup_encryption_rec_1: false
-    r_log_encryption_rec_1: false
     r_password_policy_force_first_password_change_rec_1: false
+    r_password_policy_password_layout_rec_1: false
     r_password_policy_minimal_password_length_rec_1: false
     r_password_policy_password_expire_warning_time_rec_1: false
-    r_password_policy_password_layout_rec_1: false
-    r_persistence_encryption_rec_1: false
-    r_prod_users_with_debug_roles_rec_1: false
-    r_password_policy_last_used_passwords_rec_1: false
-    r_password_policy_maximum_invalid_connect_attempts_rec_1: false
-    r_password_policy_password_lock_time_rec_1: false
-    r_password_policy_maximum_password_lifetime_rec_1: false
-    r_password_policy_maximum_unused_initial_password_lifetime_rec_1: false
     r_password_policy_maximum_unused_productive_password_lifetime_rec_1: false
     r_password_policy_minimum_password_lifetime_rec_1: false
-    r_rowstore_fragmentation_rec_1: false
+    r_backup_encryption_rec_1: false
+    r_password_policy_maximum_invalid_connect_attempts_rec_1: true
+    r_log_encryption_rec_1: false
+    r_system_replication_allowed_sender_rec_1: true
+    r_password_policy_maximum_unused_initial_password_lifetime_rec_1: false
+    r_persistence_encryption_rec_1: false
+    r_sap_hana_internal_support_role_rec_1: false
+    r_password_policy_last_used_passwords_rec_1: false
+    r_compressed_log_shipping_rec_1: false
+    r_datashipping_parallel_channels_rec_1: false
+    r_logshipping_async_buffer_size_rec_1: false
+    r_logshipping_max_retention_size_rec_1: false
     r_automatic_log_reclaim_rec_1: false
     r_backup_catalog_housekeeping_rec_1: false
-    r_table_consistency_check_rec_1: false
-    r_timezone_check_rec_1: false
-    r_os_kernel_check_rec_1: false
-    r_stacksize_parameter_rec_1: false
-    r_logshipping_max_retention_size_rec_1: false
-    r_parallel_merge_threads_check_rec_1: false
-    r_gc_unusedmemory_threshold_check_rec_1: false
-    r_max_cpuload_for_parallel_merge_check_rec_1: false
     r_license_check_rec_1: false
     r_logmode_check_rec_1: false
-    r_hana_numa_awareness_check_rec_1: false
-    r_tables_preloaded_check_rec_1: false
+    r_rowstore_fragmentation_rec_1: false
+    r_table_consistency_check_rec_1: false
+    r_gc_unusedmemory_threshold_check_rec_1: false
+    r_max_cpuload_for_parallel_merge_check_rec_1: false
+    r_parallel_merge_threads_check_rec_1: false
     r_session_mgt_parameter_rec_1: false
+    r_stacksize_parameter_rec_1: false
+    r_os_kernel_check_rec_1: false
+    r_timezone_check_rec_1: false
