@@ -52,7 +52,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "26"
+	collectionConfigVersion = "27"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -154,22 +154,24 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"instance_name":             "test-instance-name",
-				"os":                        "debian-11",
-				"agent":                     "sapagent",
-				"agent_version":             "1.0",
-				"network_ips":               "192.168.0.1,192.168.0.2",
-				"gcloud":                    "true",
-				"gsutil":                    "true",
-				"agent_state":               "running",
-				"os_settings":               "",
-				"uefi_enabled":              "true",
-				"total_ram":                 "2000000000",
-				"total_swap":                "1000000000",
-				"sapconf":                   "active",
-				"saptune":                   "active",
-				"tuned":                     "active",
-				"collection_config_version": collectionConfigVersion,
+				"instance_name":               "test-instance-name",
+				"os":                          "debian-11",
+				"agent":                       "sapagent",
+				"agent_version":               "1.0",
+				"network_ips":                 "192.168.0.1,192.168.0.2",
+				"gcloud":                      "true",
+				"gsutil":                      "true",
+				"agent_state":                 "running",
+				"os_settings":                 "",
+				"uefi_enabled":                "true",
+				"total_ram":                   "2000000000",
+				"total_swap":                  "1000000000",
+				"sapconf":                     "active",
+				"saptune":                     "active",
+				"has_app_server":              "false",
+				"app_server_zonal_separation": "false",
+				"tuned":                       "active",
+				"collection_config_version":   collectionConfigVersion,
 			},
 		},
 		{

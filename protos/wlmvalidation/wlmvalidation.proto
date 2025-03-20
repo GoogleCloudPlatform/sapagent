@@ -40,6 +40,8 @@ enum SystemVariable {
   NETWORK_IPS = 5;
   COLLECTION_CONFIG_VERSION = 6;
   OS_SETTINGS = 7;
+  APP_SERVER_ZONAL_SEPARATION = 8;
+  HAS_APP_SERVER = 9;
 }
 
 enum DiskVariable {
