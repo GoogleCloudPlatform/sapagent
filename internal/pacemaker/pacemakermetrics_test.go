@@ -2092,6 +2092,7 @@ systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/pr
 func TestSetASCSConfigMetrics(t *testing.T) {
 	validInstanceAttributes := ClusterPropertySet{
 		NVPairs: []NVPair{
+			{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS12_alidascs11"},
 			{Name: "AUTOMATIC_RECOVER", Value: "false"},
 		},
 	}
@@ -2115,24 +2116,47 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 	}
 
 	tests := []struct {
-		name  string
-		group Group
-		want  map[string]string
+		name   string
+		groups []Group
+		want   map[string]string
 	}{
 		{
-			name:  "ZeroValueGroup",
-			group: Group{},
-			want:  wantEmpty,
+			name:   "NoGroups",
+			groups: []Group{},
+			want:   wantEmpty,
+		},
+		{
+			name: "NoASCSGroup",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_aliders11"},
+									{Name: "AUTOMATIC_RECOVER", Value: "false"},
+								},
+							},
+							MetaAttributes: validMetaAttributes,
+							Operations:     validOperations,
+						},
+					},
+				},
+			},
+			want: wantEmpty,
 		},
 		{
 			name: "NoSAPInstanceType",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType:          "NotSAPInstance",
-						InstanceAttributes: validInstanceAttributes,
-						MetaAttributes:     validMetaAttributes,
-						Operations:         validOperations,
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "NotSAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							MetaAttributes:     validMetaAttributes,
+							Operations:         validOperations,
+						},
 					},
 				},
 			},
@@ -2140,24 +2164,27 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 		},
 		{
 			name: "KeyMismatch",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType: "SAPInstance",
-						InstanceAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS12_alidascs11"},
+									{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
+								},
 							},
-						},
-						MetaAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "not-failure-timeout", Value: "60"},
-								{Name: "not-migration-threshold", Value: "3"},
-								{Name: "not-resource-stickiness", Value: "5000"},
+							MetaAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "not-failure-timeout", Value: "60"},
+									{Name: "not-migration-threshold", Value: "3"},
+									{Name: "not-resource-stickiness", Value: "5000"},
+								},
 							},
-						},
-						Operations: []Op{
-							{Name: "not-monitor", Interval: "20", Timeout: "60"},
+							Operations: []Op{
+								{Name: "not-monitor", Interval: "20", Timeout: "60"},
+							},
 						},
 					},
 				},
@@ -2166,13 +2193,15 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 		},
 		{
 			name: "Success",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType:          "SAPInstance",
-						InstanceAttributes: validInstanceAttributes,
-						MetaAttributes:     validMetaAttributes,
-						Operations:         validOperations,
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "SAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							MetaAttributes:     validMetaAttributes,
+							Operations:         validOperations,
+						},
 					},
 				},
 			},
@@ -2190,7 +2219,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setASCSConfigMetrics(got, test.group)
+			setASCSConfigMetrics(context.Background(), got, test.groups)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setASCSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
@@ -2201,6 +2230,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 func TestSetERSConfigMetrics(t *testing.T) {
 	validInstanceAttributes := ClusterPropertySet{
 		NVPairs: []NVPair{
+			{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_aliders11"},
 			{Name: "AUTOMATIC_RECOVER", Value: "false"},
 			{Name: "IS_ERS", Value: "true"},
 		},
@@ -2216,23 +2246,45 @@ func TestSetERSConfigMetrics(t *testing.T) {
 	}
 
 	tests := []struct {
-		name  string
-		group Group
-		want  map[string]string
+		name   string
+		groups []Group
+		want   map[string]string
 	}{
 		{
-			name:  "ZeroValueGroup",
-			group: Group{},
-			want:  wantEmpty,
+			name:   "NoGroups",
+			groups: []Group{},
+			want:   wantEmpty,
+		},
+		{
+			name: "NoERSGroup",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS12_alidascs11"},
+									{Name: "AUTOMATIC_RECOVER", Value: "false"},
+								},
+							},
+							Operations: validOperations,
+						},
+					},
+				},
+			},
+			want: wantEmpty,
 		},
 		{
 			name: "NoSAPInstanceType",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType:          "NotSAPInstance",
-						InstanceAttributes: validInstanceAttributes,
-						Operations:         validOperations,
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "NotSAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							Operations:         validOperations,
+						},
 					},
 				},
 			},
@@ -2240,18 +2292,21 @@ func TestSetERSConfigMetrics(t *testing.T) {
 		},
 		{
 			name: "KeyMismatch",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType: "SAPInstance",
-						InstanceAttributes: ClusterPropertySet{
-							NVPairs: []NVPair{
-								{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
-								{Name: "not-IS_ERS", Value: "true"},
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_aliders11"},
+									{Name: "not-AUTOMATIC_RECOVER", Value: "false"},
+									{Name: "not-IS_ERS", Value: "true"},
+								},
 							},
-						},
-						Operations: []Op{
-							{Name: "not-monitor", Interval: "20", Timeout: "60"},
+							Operations: []Op{
+								{Name: "not-monitor", Interval: "20", Timeout: "60"},
+							},
 						},
 					},
 				},
@@ -2260,12 +2315,14 @@ func TestSetERSConfigMetrics(t *testing.T) {
 		},
 		{
 			name: "Success",
-			group: Group{
-				Primitives: []PrimitiveClass{
-					PrimitiveClass{
-						ClassType:          "SAPInstance",
-						InstanceAttributes: validInstanceAttributes,
-						Operations:         validOperations,
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "SAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							Operations:         validOperations,
+						},
 					},
 				},
 			},
@@ -2281,7 +2338,7 @@ func TestSetERSConfigMetrics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setERSConfigMetrics(got, test.group)
+			setERSConfigMetrics(context.Background(), got, test.groups)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setERSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}

@@ -274,8 +274,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, labels, params.Execute)
-	setASCSConfigMetrics(labels, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ascs"))
-	setERSConfigMetrics(labels, filterGroupsByID(pacemakerDocument.Configuration.Resources.Groups, "ers"))
+	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
+	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
 
 	// sets the OP options from the pacemaker configuration.
 	setOPOptions(labels, pacemakerDocument.Configuration.OPDefaults)
@@ -304,16 +304,6 @@ func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string)
 		}
 	}
 	return ops
-}
-
-// filterGroupsByID returns the first Group object with an ID that matches the given prefix.
-func filterGroupsByID(groups []Group, idPrefix string) Group {
-	for _, group := range groups {
-		if strings.HasPrefix(group.ID, idPrefix) {
-			return group
-		}
-	}
-	return Group{}
 }
 
 // setPacemakerHanaOperations sets the pacemaker hana operations labels for the metric validation
@@ -710,7 +700,7 @@ func collectEnqueueServer(ctx context.Context, labels map[string]string, exec co
 }
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
-func setASCSConfigMetrics(labels map[string]string, group Group) {
+func setASCSConfigMetrics(ctx context.Context, labels map[string]string, groups []Group) {
 	labels["ascs_automatic_recover"] = ""
 	labels["ascs_failure_timeout"] = ""
 	labels["ascs_migration_threshold"] = ""
@@ -723,7 +713,29 @@ func setASCSConfigMetrics(labels map[string]string, group Group) {
 		"resource-stickiness": "ascs_resource_stickiness",
 	}
 
-	for _, primitive := range group.Primitives {
+	// Identify the resource group containing the ASCS resource.
+	var ascsGroup *Group
+ASCSLoop:
+	for _, group := range groups {
+		for _, primitive := range group.Primitives {
+			if primitive.ClassType != "SAPInstance" {
+				continue
+			}
+			for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+				if nvPair.Name == "START_PROFILE" && strings.Contains(nvPair.Value, "SCS") {
+					ascsGroup = &group
+					break ASCSLoop
+				}
+			}
+		}
+	}
+
+	if ascsGroup == nil {
+		log.CtxLogger(ctx).Debug("Could not find ASCS resource group. Skipping ASCS metric collection.")
+		return
+	}
+
+	for _, primitive := range ascsGroup.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
@@ -747,7 +759,7 @@ func setASCSConfigMetrics(labels map[string]string, group Group) {
 }
 
 // setERSConfigMetrics sets the metrics collected from the ERS resource group.
-func setERSConfigMetrics(labels map[string]string, group Group) {
+func setERSConfigMetrics(ctx context.Context, labels map[string]string, groups []Group) {
 	labels["ers_automatic_recover"] = ""
 	labels["is_ers"] = ""
 	labels["ers_monitor_interval"] = ""
@@ -757,7 +769,29 @@ func setERSConfigMetrics(labels map[string]string, group Group) {
 		"IS_ERS":            "is_ers",
 	}
 
-	for _, primitive := range group.Primitives {
+	// Identify the resource group containing the ERS resource.
+	var ersGroup *Group
+ERSLoop:
+	for _, group := range groups {
+		for _, primitive := range group.Primitives {
+			if primitive.ClassType != "SAPInstance" {
+				continue
+			}
+			for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+				if nvPair.Name == "START_PROFILE" && strings.Contains(nvPair.Value, "ERS") {
+					ersGroup = &group
+					break ERSLoop
+				}
+			}
+		}
+	}
+
+	if ersGroup == nil {
+		log.CtxLogger(ctx).Debug("Could not find ERS resource group. Skipping ERS metric collection.")
+		return
+	}
+
+	for _, primitive := range ersGroup.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
