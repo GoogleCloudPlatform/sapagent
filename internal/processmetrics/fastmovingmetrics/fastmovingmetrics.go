@@ -99,6 +99,7 @@ const (
 	pmHAReplicationPath    = "/sap/hana/ha/replication"
 	pmHAAvailabilityPath   = "/sap/hana/ha/availability"
 	pmNWAvailabilityPath   = "/sap/nw/availability"
+	hearbeatPath           = "compute.googleapis.com/workload_process/heartbeat" // Heartbeat metric path.
 )
 
 // Collect is an implementation of Collector interface from processmetrics.go for fast moving
@@ -153,9 +154,6 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		if p.SAPInstance.GetType() == sapb.InstanceType_NETWEAVER {
 			return nil, err
 		}
-		if p.ReliabilityMetric {
-			return nil, err
-		}
 
 		// This is a special case in which fast moving metrics should return the HANA HA Availability
 		// and HA Replication metrics even after errors following retries because Smoke detector systems
@@ -178,6 +176,9 @@ func (p *InstanceProperties) CollectWithRetry(ctx context.Context) ([]*mrpb.Time
 		now := tspb.Now()
 		res = append(res, createMetrics(p, pmHAReplicationPath, extraLabels, now, 0))
 		res = append(res, createMetrics(p, pmHAAvailabilityPath, nil, now, 0))
+		if p.ReliabilityMetric {
+			res = append(res, createHeartbeatMetrics(p, now, false))
+		}
 	}
 	return res, nil
 }
@@ -203,6 +204,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 		availabilityValue = hanaAvailability(ip, processes)
 		mPath := pmHANAAvailabilityPath
 		if ip.ReliabilityMetric {
+			metrics = append(metrics, createHeartbeatMetrics(ip, now, availabilityValue != 0))
 			if availabilityValue == 0 {
 				usagemetrics.Action(usagemetrics.ReliabilityHANANotAvailable)
 			} else {
@@ -364,6 +366,9 @@ func collectNetWeaverMetrics(ctx context.Context, p *InstanceProperties, scc sap
 			Identifier: p.SAPInstance.GetInstanceNumber(),
 		})
 		metrics = append(metrics, createMetrics(p, pmNWAvailabilityPath, nil, now, availabilityValue))
+		if p.ReliabilityMetric {
+			metrics = append(metrics, createHeartbeatMetrics(p, now, availabilityValue != 0))
+		}
 	}
 	return metrics, nil
 }
@@ -395,6 +400,31 @@ func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]s
 	}
 	log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val, "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
 	return timeseries.BuildInt(params)
+}
+
+// createHeartbeatMetrics - create mrpb.TimeSeries object for the heartbeat metric.
+func createHeartbeatMetrics(p *InstanceProperties, now *tspb.Timestamp, val bool) *mrpb.TimeSeries {
+	resourceLabels := map[string]string{
+		"workload_id": p.SAPInstance.GetInstanceId(),
+		"location":    p.Config.CloudProperties.Zone,
+		"replica_id":  "0",
+		"process_id":  p.SAPInstance.GetInstanceNumber(),
+	}
+
+	params := timeseries.Params{
+		CloudProp:  protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
+		MetricType: hearbeatPath,
+		MetricLabels: map[string]string{
+			"instance_id": p.SAPInstance.GetInstanceId(),
+		},
+		Timestamp:      now,
+		BoolValue:      val,
+		BareMetal:      p.Config.BareMetal,
+		ResourceLabels: resourceLabels,
+		Heartbeat:      true,
+	}
+	log.Logger.Debugw("Create heartbeat metric for instance", "key", hearbeatPath, "value", val, "instanceid", p.SAPInstance.GetInstanceId())
+	return timeseries.BuildBool(params)
 }
 
 // appendLabels appends the default SAP Instance labels and extra labels
