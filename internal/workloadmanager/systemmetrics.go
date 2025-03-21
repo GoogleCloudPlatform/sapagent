@@ -26,10 +26,12 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
@@ -92,10 +94,70 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 		return osSettings(ctx, params)
 	case wlmpb.SystemVariable_COLLECTION_CONFIG_VERSION:
 		return fmt.Sprint(params.WorkloadConfig.GetVersion())
+	case wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION:
+		return appServerZonalSeparation(ctx, params)
+	case wlmpb.SystemVariable_HAS_APP_SERVER:
+		return hasAppServer(ctx, params)
 	default:
 		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
 	}
+}
+
+func appServerZonalSeparation(ctx context.Context, params Parameters) string {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
+		return "false"
+	}
+	appServerZones := make(map[string]bool)
+	centralServiceZones := make(map[string]bool)
+	for _, system := range params.Discovery.GetSAPSystems() {
+		if system.GetApplicationLayer() == nil {
+			continue
+		}
+		for _, r := range system.GetApplicationLayer().GetResources() {
+			if r.GetResourceType() == spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") {
+					log.CtxLogger(ctx).Debugw("Found app server in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones"))
+					appServerZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones")] = true
+				}
+				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ASCS") || strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ERS") {
+					log.CtxLogger(ctx).Debugw("Found central service in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones"))
+					centralServiceZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones")] = true
+				}
+			}
+		}
+	}
+	for appServerZone := range appServerZones {
+		if _, found := centralServiceZones[appServerZone]; !found {
+			log.CtxLogger(ctx).Debugw("Found app server without central service in zone", "zone", appServerZone)
+			return "true"
+		}
+	}
+	return "false"
+}
+
+func hasAppServer(ctx context.Context, params Parameters) string {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
+		return "false"
+	}
+	zone := params.Config.GetCloudProperties().GetZone()
+	for _, system := range params.Discovery.GetSAPSystems() {
+		if system.GetApplicationLayer() == nil {
+			continue
+		}
+		for _, r := range system.GetApplicationLayer().GetResources() {
+			if r.GetResourceType() == spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") && clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones") == zone {
+					log.CtxLogger(ctx).Debugw("Found app server in the same zone as the instance", "zone", zone)
+					return "true"
+				}
+			}
+		}
+	}
+	log.CtxLogger(ctx).Debugw("No app server found in the same zone as the instance", "zone", zone)
+	return "false"
 }
 
 // osSettings runs the configureinstance command to check if OS settings are configured correctly.
