@@ -417,7 +417,7 @@ func TestMessageHandler(t *testing.T) {
 	}
 }
 
-func TestStartUAPCommunication(t *testing.T) {
+func TestStartACSCommunication(t *testing.T) {
 	tests := []struct {
 		name   string
 		config *cpb.Configuration
@@ -429,7 +429,7 @@ func TestStartUAPCommunication(t *testing.T) {
 			want:   false,
 		},
 		{
-			name: "UAPDisabled",
+			name: "Disabled",
 			config: &cpb.Configuration{
 				GcbdrConfiguration: &cpb.GCBDRConfiguration{
 					CommunicationEnabled: &wpb.BoolValue{Value: false},
@@ -438,7 +438,7 @@ func TestStartUAPCommunication(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "UAPEnabled",
+			name: "Enabled",
 			config: &cpb.Configuration{
 				GcbdrConfiguration: &cpb.GCBDRConfiguration{
 					CommunicationEnabled: &wpb.BoolValue{Value: true},
@@ -494,8 +494,8 @@ func TestStartUAPCommunication(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range tests {
-		if got := StartUAPCommunication(ctx, tc.config); got != tc.want {
-			t.Errorf("StartUAPCommunication(%v) = %v, want: %v", tc.config, got, tc.want)
+		if got := StartACSCommunication(ctx, tc.config); got != tc.want {
+			t.Errorf("StartACSCommunication(%v) = %v, want: %v", tc.config, got, tc.want)
 		}
 	}
 }

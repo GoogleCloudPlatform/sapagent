@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package gcbdractions connects to UAP Highway and handles guest actions in the agent.
+// Package gcbdractions connects to Agent Communication Service (ACS) and handles gcbdr actions in
+// the agent. Messages received via ACS will typically have been sent via UAP Communication Highway.
 package gcbdractions
 
 import (
@@ -33,10 +34,10 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/communication"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/uap"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
@@ -188,14 +189,14 @@ func start(ctx context.Context, a any) {
 		log.CtxLogger(ctx).Warn("args is not of type gcbdrActionsOptions")
 		return
 	}
-	uap.Communicate(ctx, args.endpoint, args.channel, messageHandler, protostruct.ConvertCloudPropertiesToStruct(args.cloudProperties))
+	communication.Communicate(ctx, args.endpoint, args.channel, messageHandler, protostruct.ConvertCloudPropertiesToStruct(args.cloudProperties))
 }
 
-// StartUAPCommunication establishes communication with UAP Highway.
+// StartACSCommunication establishes communication with ACS.
 // Returns true if the goroutine is started, and false otherwise.
-func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool {
+func StartACSCommunication(ctx context.Context, config *cpb.Configuration) bool {
 	if !config.GetGcbdrConfiguration().GetCommunicationEnabled().GetValue() {
-		log.CtxLogger(ctx).Info("Not configured to communicate with GCBDR via UAP")
+		log.CtxLogger(ctx).Info("Not configured to communicate with GCBDR via ACS")
 		return false
 	}
 	dailyMetricsRoutine := &recovery.RecoverableRoutine{
@@ -227,7 +228,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 10 * time.Second,
 	}
-	log.CtxLogger(ctx).Info("Starting UAP GCBDR communication routine")
+	log.CtxLogger(ctx).Info("Starting ACS GCBDR communication routine")
 	communicateRoutine.StartRoutine(ctx)
 
 	if config.GetGcbdrConfiguration().GetTestChannelEnabled().GetValue() {
@@ -242,7 +243,7 @@ func StartUAPCommunication(ctx context.Context, config *cpb.Configuration) bool 
 			UsageLogger:         *usagemetrics.Logger,
 			ExpectedMinDuration: 10 * time.Second,
 		}
-		log.CtxLogger(ctx).Info("Starting UAP GCBDR communication routine for test channel")
+		log.CtxLogger(ctx).Info("Starting ACS GCBDR communication routine for test channel")
 		testRoutine.StartRoutine(ctx)
 	}
 	return true

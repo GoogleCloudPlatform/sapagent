@@ -471,18 +471,18 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 }
 
 func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
-	// Start UAP Communication with a separate new context (not impacted by cancels).
-	guestActionsCtx := log.SetCtx(context.Background(), "context", "UAPCommunication")
+	// Start Guest Actions ACS Communication with a separate new context (not impacted by cancels).
+	guestActionsCtx := log.SetCtx(context.Background(), "context", "GuestActions")
 	ga := guestactions.GuestActions{
 		CancelFunc: cancel,
 	}
-	ga.StartUAPCommunication(guestActionsCtx, d.config)
+	ga.StartACSCommunication(guestActionsCtx, d.config)
 }
 
 func (d *Daemon) startGCBDRActions() {
-	// Start GCBDR Communication with a separate new context (not impacted by cancels).
+	// Start GCBDR ACS Communication with a separate new context (not impacted by cancels).
 	gcbdrActionsCtx := log.SetCtx(context.Background(), "context", "GCBDRActions")
-	gcbdractions.StartUAPCommunication(gcbdrActionsCtx, d.config)
+	gcbdractions.StartACSCommunication(gcbdrActionsCtx, d.config)
 }
 
 // startAgentMetricsService returns health monitor for services.
