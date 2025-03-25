@@ -24,4 +24,6 @@ option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrlogback
 message LogBackupResponse {
   google.protobuf.BoolValue status = 1;
   string job_id = 2;
+  string log_gap = 3;
+  string recovery_range = 4;
 }
