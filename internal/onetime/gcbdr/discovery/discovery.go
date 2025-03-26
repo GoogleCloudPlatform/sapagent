@@ -30,6 +30,7 @@ import (
 	hdpb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrhanadiscovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 const (
@@ -166,6 +167,7 @@ func (d *Discovery) SetFlags(fs *flag.FlagSet) {
 }
 
 // Execute implements the subcommand interface for Discovery.
+// This is not in use, but is required for the subcommands.Command interface.
 func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	_, _, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
 		Name:     d.Name(),
@@ -179,14 +181,18 @@ func (d *Discovery) Execute(ctx context.Context, f *flag.FlagSet, args ...any) s
 	}
 
 	d.oteLogger = onetime.CreateOTELogger(false)
-	_, exitStatus = d.discoveryHandler(ctx, commandlineexecutor.ExecuteCommand, d.FSH)
+	_, result := d.discoveryHandler(ctx, commandlineexecutor.ExecuteCommand, d.FSH)
+	exitStatus = subcommands.ExitSuccess
+	if result.GetExitCode() != 0 {
+		exitStatus = subcommands.ExitFailure
+	}
 	if exitStatus == subcommands.ExitFailure {
 		d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
 	}
 	return exitStatus
 }
 
-func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*Applications, subcommands.ExitStatus) {
+func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*Applications, *gpb.CommandResult) {
 	log.CtxLogger(ctx).Info("Starting HANA DB discovery using GCBDR CoreAPP script")
 	d.oteLogger.LogUsageAction(usagemetrics.GCBDRDiscoveryStarted)
 	args := commandlineexecutor.Params{
@@ -194,40 +200,47 @@ func (d *Discovery) discoveryHandler(ctx context.Context, exec commandlineexecut
 		ArgsToSplit: discoveryScriptPath,
 	}
 	res := exec(ctx, args)
+	result := &gpb.CommandResult{
+		Stdout:   res.StdOut,
+		Stderr:   res.StdErr,
+		ExitCode: int32(res.ExitCode),
+	}
 	if res.ExitCode != 0 {
 		log.CtxLogger(ctx).Errorf("Failed to execute GCBDR CoreAPP script %v", res.StdErr)
-		return nil, subcommands.ExitFailure
+		return nil, result
 	}
 	xmlContent, err := fsh.ReadFile(discoverySAPHANAXMLPath)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not read the file for HANA discovery", "file", discoverySAPHANAXMLPath, "error", err)
-		return nil, subcommands.ExitFailure
+		errMsg := fmt.Sprintf("Could not read the file for HANA discovery. file: %v , error: %v", discoverySAPHANAXMLPath, err)
+		log.CtxLogger(ctx).Errorw(errMsg)
+		result.Stderr = errMsg
+		return nil, result
 	}
 	apps := &Applications{}
 	err = xml.Unmarshal(xmlContent, apps)
 	if err != nil {
-		log.CtxLogger(ctx).Errorf("Failed to unmarshal GCBDR CoreAPP script: %v", err)
-		return nil, subcommands.ExitFailure
+		errMsg := fmt.Sprintf("Failed to unmarshal GCBDR CoreAPP script: %v", err)
+		log.CtxLogger(ctx).Errorf(errMsg)
+		result.Stderr = errMsg
+		return nil, result
 	}
 	log.CtxLogger(ctx).Info("HANA Applications discovered %v", apps.Application)
 	d.oteLogger.LogUsageAction(usagemetrics.GCBDRDiscoveryFinished)
-	return apps, subcommands.ExitSuccess
+	return apps, result
 }
 
 // Run provides the Daemon mode invocation for gcbdr discovery, returning the
 // list of HANA discovery applications.
-func (d *Discovery) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, subcommands.ExitStatus) {
+func (d *Discovery) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute, fsh filesystem.FileSystem) (*hdpb.ApplicationsList, *gpb.CommandResult) {
 	d.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	apps, exitStatus := d.discoveryHandler(ctx, exec, fsh)
-	if exitStatus != subcommands.ExitSuccess {
-		log.CtxLogger(ctx).Errorf("Failed to get HANA discovery applications: %v", exitStatus)
-		if exitStatus == subcommands.ExitFailure {
-			d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
-		}
-		return nil, exitStatus
+	apps, cmdResult := d.discoveryHandler(ctx, exec, fsh)
+	if cmdResult.ExitCode != 0 {
+		log.CtxLogger(ctx).Errorf("Failed to get HANA discovery applications. Exit code: %v", cmdResult.ExitCode)
+		d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
+		return nil, cmdResult
 	}
 	result := constructApplicationsProto(apps)
-	return result, subcommands.ExitSuccess
+	return result, cmdResult
 }
 
 func constructApplicationsProto(apps *Applications) *hdpb.ApplicationsList {

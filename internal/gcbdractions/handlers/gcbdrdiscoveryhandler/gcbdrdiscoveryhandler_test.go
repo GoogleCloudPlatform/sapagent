@@ -20,16 +20,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/subcommands"
-
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
 func TestGCBDRDiscoveryHandler(t *testing.T) {
 	tests := []struct {
-		name           string
-		command        *gpb.Command
-		wantExitStatus subcommands.ExitStatus
+		name         string
+		command      *gpb.Command
+		wantExitCode int32
 	}{
 		{
 			name: "ExitFailure",
@@ -40,14 +38,14 @@ func TestGCBDRDiscoveryHandler(t *testing.T) {
 					},
 				},
 			},
-			wantExitStatus: subcommands.ExitFailure,
+			wantExitCode: 127,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			res := GCBDRDiscoveryHandler(context.Background(), tc.command, nil)
-			if res.ExitCode != int32(tc.wantExitStatus) {
-				t.Errorf("GCBDRDiscoveryHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
+			if res.ExitCode != tc.wantExitCode {
+				t.Errorf("GCBDRDiscoveryHandler(%v) = %v, want: %v", tc.command, res.ExitCode, tc.wantExitCode)
 			}
 		})
 	}
