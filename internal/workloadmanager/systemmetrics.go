@@ -26,14 +26,17 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
 	sapValidationSystem = "workload.googleapis.com/sap/validation/system"
+	zonesURIPart        = "zones"
 )
 
 var (
@@ -92,10 +95,67 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 		return osSettings(ctx, params)
 	case wlmpb.SystemVariable_COLLECTION_CONFIG_VERSION:
 		return fmt.Sprint(params.WorkloadConfig.GetVersion())
+	case wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION:
+		return fmt.Sprint(appServerZonalSeparation(ctx, params))
+	case wlmpb.SystemVariable_HAS_APP_SERVER:
+		return fmt.Sprint(hasAppServer(ctx, params))
 	default:
 		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
 	}
+}
+
+// appServerZonalSeparation checks if there is an application server residing in a different zone than the central services.
+func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
+		return false
+	}
+	appServerZones := make(map[string]bool)
+	centralServiceZones := make(map[string]bool)
+	for _, system := range params.Discovery.GetSAPSystems() {
+		for _, r := range system.GetApplicationLayer().GetResources() {
+			if r.GetResourceType() != spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE || r.GetResourceKind() != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				continue
+			}
+			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") {
+				log.CtxLogger(ctx).Debugw("Found app server in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart))
+				appServerZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart)] = true
+			}
+			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ASCS") || strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ERS") {
+				log.CtxLogger(ctx).Debugw("Found central service in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart))
+				centralServiceZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart)] = true
+			}
+		}
+	}
+	for appServerZone := range appServerZones {
+		if _, found := centralServiceZones[appServerZone]; !found {
+			log.CtxLogger(ctx).Debugw("Found app server without central service in zone", "zone", appServerZone)
+			return true
+		}
+	}
+	return false
+}
+
+// hasAppServer checks if the instance the agent is running on is functioning as an application server.
+func hasAppServer(ctx context.Context, params Parameters) bool {
+	if params.Discovery == nil {
+		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
+		return false
+	}
+	instanceName := params.Config.GetCloudProperties().GetInstanceName()
+	for _, system := range params.Discovery.GetSAPSystems() {
+		for _, r := range system.GetApplicationLayer().GetResources() {
+			if r.GetResourceType() == spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") && clouddiscovery.ExtractFromURI(r.GetResourceUri(), "instances") == instanceName {
+					log.CtxLogger(ctx).Debugw("Found app server running in the instance", "instanceName", instanceName)
+					return true
+				}
+			}
+		}
+	}
+	log.CtxLogger(ctx).Debugw("No app server found running in the instance", "instanceName", instanceName)
+	return false
 }
 
 // osSettings runs the configureinstance command to check if OS settings are configured correctly.

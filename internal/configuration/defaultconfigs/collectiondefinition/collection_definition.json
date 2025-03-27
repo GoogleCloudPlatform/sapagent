@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 26,
+    "version": 27,
     "validation_system": {
       "system_metrics": [
         {
@@ -53,6 +53,20 @@
             "min_version": "2.8"
           },
           "value": "COLLECTION_CONFIG_VERSION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "app_server_zonal_separation"
+          },
+          "value": "APP_SERVER_ZONAL_SEPARATION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "has_app_server"
+          },
+          "value": "HAS_APP_SERVER"
         }
       ],
       "os_command_metrics": [

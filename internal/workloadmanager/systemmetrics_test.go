@@ -39,6 +39,7 @@ import (
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/configurablemetrics"
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 var (
@@ -52,7 +53,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "26"
+	collectionConfigVersion = "27"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -83,6 +84,54 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) Work
 				},
 			}},
 		}},
+	}
+}
+
+func createParameters(config *cnfpb.Configuration, workloadConfig *wlmpb.WorkloadValidation, discovery *fakeDiscoveryInterface) Parameters {
+	return Parameters{
+		Config:         config,
+		WorkloadConfig: workloadConfig,
+		Discovery:      discovery,
+	}
+}
+
+func createWorkloadValidation(label string, value wlmpb.SystemVariable) *wlmpb.WorkloadValidation {
+	return &wlmpb.WorkloadValidation{
+		ValidationSystem: &wlmpb.ValidationSystem{
+			SystemMetrics: []*wlmpb.SystemMetric{
+				&wlmpb.SystemMetric{
+					MetricInfo: &cmpb.MetricInfo{
+						Type:  "workload.googleapis.com/sap/validation/system",
+						Label: label,
+					},
+					Value: value,
+				},
+			},
+		},
+	}
+}
+
+func createFakeDiscovery(resourceType spb.SapDiscovery_Resource_ResourceType, instanceRoles []spb.SapDiscovery_Resource_InstanceProperties_InstanceRole, zones []string, instanceNames []string) *fakeDiscoveryInterface {
+	var resources []*spb.SapDiscovery_Resource
+	for i := 0; i < len(instanceRoles); i++ {
+		resource := &spb.SapDiscovery_Resource{
+			ResourceType: resourceType,
+			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceUri:  "//compute.googleapis.com/projects/test-project/zones/" + zones[i] + "/instances/" + instanceNames[i],
+			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceRole: instanceRoles[i],
+			},
+		}
+		resources = append(resources, resource)
+	}
+	return &fakeDiscoveryInterface{
+		systems: []*spb.SapDiscovery{
+			{
+				ApplicationLayer: &spb.SapDiscovery_Component{
+					Resources: resources,
+				},
+			},
+		},
 	}
 }
 
@@ -154,22 +203,24 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"instance_name":             "test-instance-name",
-				"os":                        "debian-11",
-				"agent":                     "sapagent",
-				"agent_version":             "1.0",
-				"network_ips":               "192.168.0.1,192.168.0.2",
-				"gcloud":                    "true",
-				"gsutil":                    "true",
-				"agent_state":               "running",
-				"os_settings":               "",
-				"uefi_enabled":              "true",
-				"total_ram":                 "2000000000",
-				"total_swap":                "1000000000",
-				"sapconf":                   "active",
-				"saptune":                   "active",
-				"tuned":                     "active",
-				"collection_config_version": collectionConfigVersion,
+				"instance_name":               "test-instance-name",
+				"os":                          "debian-11",
+				"agent":                       "sapagent",
+				"agent_version":               "1.0",
+				"network_ips":                 "192.168.0.1,192.168.0.2",
+				"gcloud":                      "true",
+				"gsutil":                      "true",
+				"agent_state":                 "running",
+				"os_settings":                 "",
+				"uefi_enabled":                "true",
+				"total_ram":                   "2000000000",
+				"total_swap":                  "1000000000",
+				"sapconf":                     "active",
+				"saptune":                     "active",
+				"has_app_server":              "false",
+				"app_server_zonal_separation": "false",
+				"tuned":                       "active",
+				"collection_config_version":   collectionConfigVersion,
 			},
 		},
 		{
@@ -280,6 +331,154 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{},
+		},
+		{
+			name: "AppServerZonalSeparation_Different_Zones",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-2", "test-region-zone-3"},
+					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "true",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Different_Zones_Multiple_App_Servers",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(
+					spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-2", "test-region-zone-3"},
+					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "true",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Same_Zone",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(
+					spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-1", "test-region-zone-1"},
+					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "false",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Single_Instance",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+					},
+					[]string{"test-region-zone-1"},
+					[]string{"instance-name-1"},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "false",
+			},
+		},
+		{
+			name: "HasAppServer_True",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-1"},
+					[]string{"test-instance-name", "instance-name-1"},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_app_server": "true",
+			},
+		},
+		{
+			name: "HasAppServer_False_No_App_Server",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-2"},
+					[]string{"instance-name-1", "instance-name-2"},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_app_server": "false",
+			},
+		},
+		{
+			name: "HasAppServer_False_Non_Compute_Resource",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-1"},
+					[]string{"test-instance-name", "test-instance-name"},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_app_server": "false",
+			},
+		},
+		{
+			name: "HasAppServer_False_Different_Instance",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{"test-region-zone-1", "test-region-zone-1"},
+					[]string{"instance-name-1", "test-instance-name"},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_app_server": "false",
+			},
 		},
 	}
 
