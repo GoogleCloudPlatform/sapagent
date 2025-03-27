@@ -44,12 +44,6 @@ import (
 )
 
 var (
-	//go:embed test_data/test_collectiondefinition1.json
-	testCollectionDefinition1 []byte
-
-	//go:embed test_data/test_collectiondefinition2.json
-	testCollectionDefinition2 []byte
-
 	//go:embed test_data/invalid_collectiondefinition.json
 	invalidCollectionDefinition []byte
 
@@ -356,7 +350,7 @@ func TestLoadAndBroadcast_Failure(t *testing.T) {
 }
 
 func TestFromJSONFile(t *testing.T) {
-	wantCollectionDefinition1, err := unmarshal(testCollectionDefinition1)
+	wantCollectionDefinition1, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -389,7 +383,7 @@ func TestFromJSONFile(t *testing.T) {
 		},
 		{
 			name:   "Success",
-			reader: func(string) ([]byte, error) { return testCollectionDefinition1, nil },
+			reader: func(string) ([]byte, error) { return configuration.DefaultCollectionDefinition, nil },
 			path:   LinuxConfigPath,
 			want:   wantCollectionDefinition1,
 		},
@@ -415,7 +409,7 @@ func TestFromJSONFile(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	wantCollectionDefinition, err := unmarshal(testCollectionDefinition2)
+	wantCollectionDefinition, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -547,7 +541,7 @@ func TestLoad(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
-	defaultPrimaryDefinition, err := unmarshal(testCollectionDefinition1)
+	defaultPrimaryDefinition, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}

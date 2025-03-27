@@ -27,7 +27,7 @@ import (
 )
 
 func TestValidate(t *testing.T) {
-	validCollectionDefinition, err := unmarshal(testCollectionDefinition1)
+	validCollectionDefinition, err := unmarshal(configuration.DefaultCollectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
 	}
@@ -779,6 +779,44 @@ func TestValidate(t *testing.T) {
 					ValidationHana: &wlmpb.ValidationHANA{
 						HanaBackupMetrics: []*wlmpb.HANABackupMetric{
 							&wlmpb.HANABackupMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/hana",
+									Label: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
+			name: "WorkloadValidation_ValidationHana_HAMetrics_ValueMissing",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						HaMetrics: []*wlmpb.HANAHighAvailabilityMetric{
+							&wlmpb.HANAHighAvailabilityMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/hana",
+									Label: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
+			name: "WorkloadValidation_ValidationHana_DRMetrics_ValueMissing",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						DrMetrics: []*wlmpb.HANADisasterRecoveryMetric{
+							&wlmpb.HANADisasterRecoveryMetric{
 								MetricInfo: &cmpb.MetricInfo{
 									Type:  "workload.googleapis.com/sap/validation/hana",
 									Label: "foo",

@@ -1,6 +1,10 @@
 {
   "workload_validation": {
-    "version": 4,
+    "version": 29,
+    "unknown_field": "this does not exist",
+    "another_unknown_field": {
+      "key": "this still does not exist"
+    },
     "validation_system": {
       "system_metrics": [
         {
@@ -37,6 +41,36 @@
             "label": "network_ips"
           },
           "value": "NETWORK_IPS"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "os_settings",
+            "min_version": "3.2"
+          },
+          "value": "OS_SETTINGS"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "collection_config_version",
+            "min_version": "2.8"
+          },
+          "value": "COLLECTION_CONFIG_VERSION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "app_server_zonal_separation"
+          },
+          "value": "APP_SERVER_ZONAL_SEPARATION"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "has_app_server"
+          },
+          "value": "HAS_APP_SERVER"
         }
       ],
       "os_command_metrics": [
@@ -127,45 +161,143 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "os_settings",
-            "min_version": "3.2"
+            "label": "uefi_enabled"
           },
           "os_vendor": "ALL",
-          "command": "/usr/bin/google_cloud_sap_agent",
-          "args": ["configureinstance", "-check"],
-          "or_eval_rules": {
-            "or_eval_rules": [
+          "command": "sh",
+          "args": ["-c", "if [ -d \"/sys/firmware/efi\" ]; then echo \"true\"; fi"],
+          "and_eval_rules": {
+            "eval_rules": [
               {
-                "eval_rules": [
-                  {
-                    "output_source": "EXIT_CODE",
-                    "output_equals": "0"
-                  }
-                ],
-                "if_true": {
-                  "value_from_literal": "pass"
-                }
-              },
-              {
-                "eval_rules": [
-                  {
-                    "output_source": "EXIT_CODE",
-                    "output_equals": "1"
-                  }
-                ],
-                "if_true": {
-                  "value_from_literal": "fail"
-                },
-                "if_false": {
-                  "value_from_literal": ""
-                }
+                "output_source": "STDOUT",
+                "output_equals": "true"
               }
-            ]
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "total_ram"
+          },
+          "os_vendor": "ALL",
+          "command": "free",
+          "args": ["-b"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "Mem:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "Mem:\\s+(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "total_swap"
+          },
+          "os_vendor": "ALL",
+          "command": "free",
+          "args": ["-b"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_contains": "Swap:"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "Swap:\\s+(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "sapconf"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "sapconf"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "saptune"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "saptune"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "tuned"
+          },
+          "os_vendor": "ALL",
+          "command": "systemctl",
+          "args": ["is-active", "--quiet", "tuned"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "active"
+            },
+            "if_false": {
+              "value_from_literal": "inactive"
+            }
           }
         }
       ]
     },
-    "fake_field_that_does_not_exist_in_proto" : {},
     "validation_corosync": {
       "config_path": "/etc/corosync/corosync.conf",
       "config_metrics": [
@@ -181,7 +313,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "token: (\\w+)"
+              "value_from_regex": "token:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -200,7 +332,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "token_retransmits_before_loss_const: (\\w+)"
+              "value_from_regex": "token_retransmits_before_loss_const:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -219,7 +351,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "consensus: (\\w+)"
+              "value_from_regex": "consensus:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -238,7 +370,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "join: (\\w+)"
+              "value_from_regex": "join:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -257,7 +389,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "max_messages: (\\w+)"
+              "value_from_regex": "max_messages:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -276,7 +408,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "transport: (\\w+)"
+              "value_from_regex": "transport:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -295,7 +427,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "fail_recv_const: (\\w+)"
+              "value_from_regex": "fail_recv_const:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -314,7 +446,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "two_node: (\\w+)"
+              "value_from_regex": "two_node:\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -339,7 +471,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -362,7 +494,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -385,7 +517,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -408,7 +540,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -431,7 +563,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -454,7 +586,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -477,7 +609,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -500,7 +632,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "= (\\w+)"
+              "value_from_regex": "=\\s*(\\w+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -548,6 +680,44 @@
               "value_from_literal": "no"
             }
           }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "num_completion_queues"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "num_completion_queues"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "num_completion_queues\\s?=\\s?(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": "1"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "num_submit_queues"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "num_submit_queues"
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "num_submit_queues\\s?=\\s?(\\d+)"
+            },
+            "if_false": {
+              "value_from_literal": "1"
+            }
+          }
         }
       ],
       "indexserver_ini_metrics": [
@@ -564,7 +734,7 @@
               }
             ],
             "if_true": {
-              "value_from_regex": "tables_preloaded_in_parallel = (\\d+)"
+              "value_from_regex": "tables_preloaded_in_parallel\\s?=\\s?(\\d+)"
             },
             "if_false": {
               "value_from_literal": ""
@@ -595,6 +765,7 @@
       "hana_disk_volume_metrics": [
         {
           "basepath_volume": "basepath_datavolumes",
+          "metric_source": "GLOBAL_INI",
           "metrics": [
             {
               "metric_info": {
@@ -623,11 +794,20 @@
                 "label": "disk_data_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_data_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         },
         {
           "basepath_volume": "basepath_logvolumes",
+          "metric_source": "GLOBAL_INI",
           "metrics": [
             {
               "metric_info": {
@@ -656,6 +836,54 @@
                 "label": "disk_log_pd_size"
               },
               "value": "PD_SIZE"
+            },
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_log_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "basepath_volume": "basepath_databackup",
+          "metric_source": "GLOBAL_INI",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_backup_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "metric_source": "HDB_INDEXSERVER_PATH",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "hana_shared_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
+            }
+          ]
+        },
+        {
+          "metric_source": "DIR_INSTANCE_ENV",
+          "metrics": [
+            {
+              "metric_info": {
+                "type": "workload.googleapis.com/sap/validation/hana",
+                "label": "usr_sap_volume",
+                "min_version": "3.7"
+              },
+              "value": "BLOCK_DEVICE"
             }
           ]
         }
@@ -668,6 +896,16 @@
             "min_version": "3.0"
           },
           "value": "HA_IN_SAME_ZONE"
+        }
+      ],
+      "dr_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "dr_in_same_region",
+            "min_version": "3.8"
+          },
+          "value": "DR_IN_SAME_REGION"
         }
       ],
       "hana_backup_metrics": [
@@ -756,7 +994,7 @@
             "eval_rules": [
               {
                 "output_source": "STDOUT",
-                "output_contains": "[enabled]"
+                "output_contains": "[always]"
               }
             ],
             "if_true": {
@@ -770,31 +1008,7 @@
       ]
     },
     "validation_netweaver": {
-      "os_command_metrics": [
-        {
-          "metric_info": {
-            "type": "workload.googleapis.com/sap/validation/netweaver",
-            "label": "foo"
-          },
-          "os_vendor": "ALL",
-          "command": "foo",
-          "args": ["--bar"],
-          "and_eval_rules": {
-            "eval_rules": [
-              {
-                "output_source": "STDOUT",
-                "output_contains": "foobar"
-              }
-            ],
-            "if_true": {
-              "value_from_literal": "true"
-            },
-            "if_false": {
-              "value_from_literal": "false"
-            }
-          }
-        }
-      ]
+      "os_command_metrics": []
     },
     "validation_pacemaker": {
       "config_metrics": {
@@ -830,30 +1044,114 @@
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_notify"
+              "label": "saphana_notify",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_NOTIFY"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_clone_max"
+              "label": "saphana_clone_max",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_CLONE_MAX"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_clone_node_max"
+              "label": "saphana_clone_node_max",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_CLONE_NODE_MAX"
           },
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "saphana_interleave"
+              "label": "saphana_interleave",
+              "min_version": "3.7"
             },
             "value": "SAPHANA_INTERLEAVE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_automated_register",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_AUTOMATED_REGISTER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_duplicate_primary_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_DUPLICATE_PRIMARY_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_prefer_site_takeover",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_PREFER_SITE_TAKEOVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_clone_node_max",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_CLONE_NODE_MAX"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_interleave",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_INTERLEAVE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "has_alias_ip",
+              "min_version": "3.7"
+            },
+            "value": "HAS_ALIAS_IP"
           }
         ],
         "rsc_location_metrics": [
@@ -909,6 +1207,70 @@
               "label": "saphana_demote_timeout"
             },
             "value": "SAPHANA_DEMOTE_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_primary_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_PRIMARY_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_primary_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_PRIMARY_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_secondary_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_SECONDARY_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphana_secondary_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANA_SECONDARY_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_start_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_START_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanatopology_stop_timeout",
+              "min_version": "3.7"
+            },
+            "value": "SAPHANATOPOLOGY_STOP_TIMEOUT"
           }
         ],
         "fence_agent_metrics": [
@@ -990,13 +1352,134 @@
               "min_version": "3.7"
             },
             "value": "IS_ERS"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_automatic_recover",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_AUTOMATIC_RECOVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_automatic_recover",
+              "min_version": "3.7"
+            },
+            "value": "ERS_AUTOMATIC_RECOVER"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ASCS_ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_healthcheck_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_HEALTHCHECK_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_healthcheck_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_HEALTHCHECK_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_ilb_monitor_interval",
+              "min_version": "3.7"
+            },
+            "value": "ERS_ILB_MONITOR_INTERVAL"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_ilb_monitor_timeout",
+              "min_version": "3.7"
+            },
+            "value": "ERS_ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ensa2_capable",
+              "min_version": "3.8"
+            },
+            "value": "ENSA2_CAPABLE"
           }
         ],
         "op_option_metrics": [
           {
             "metric_info": {
               "type": "workload.googleapis.com/sap/validation/pacemaker",
-              "label": "op_timeout"
+              "label": "op_timeout",
+              "min_version": "3.7"
             },
             "value": "OP_TIMEOUT"
           }
@@ -1013,94 +1496,24 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/pacemaker",
-            "label": "stonith_enabled"
+            "label": "stonith_enabled",
+            "min_version": "3.7"
           },
           "value": "STONITH_ENABLED"
         },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/pacemaker",
-            "label": "stonith_timeout"
+            "label": "stonith_timeout",
+            "min_version": "3.7"
           },
           "value": "STONITH_TIMEOUT"
         }
       ],
-      "os_command_metrics": [
-        {
-          "metric_info": {
-            "type": "workload.googleapis.com/sap/validation/pacemaker",
-            "label": "foo"
-          },
-          "os_vendor": "ALL",
-          "command": "foo",
-          "args": ["--bar"],
-          "and_eval_rules": {
-            "eval_rules": [
-              {
-                "output_source": "STDOUT",
-                "output_contains": "foobar"
-              }
-            ],
-            "if_true": {
-              "value_from_literal": "true"
-            },
-            "if_false": {
-              "value_from_literal": "false"
-            }
-          }
-        }
-      ]
+      "os_command_metrics": []
     },
     "validation_custom": {
-      "os_command_metrics": [
-        {
-          "metric_info": {
-            "type": "workload.googleapis.com/sap/validation/custom",
-            "label": "foo"
-          },
-          "os_vendor": "RHEL",
-          "command": "foo-rhel",
-          "args": ["--bar"],
-          "and_eval_rules": {
-            "eval_rules": [
-              {
-                "output_source": "STDOUT",
-                "output_contains": "foobar"
-              }
-            ],
-            "if_true": {
-              "value_from_literal": "true"
-            },
-            "if_false": {
-              "value_from_literal": "false"
-            }
-          }
-        },
-        {
-          "metric_info": {
-            "type": "workload.googleapis.com/sap/validation/custom",
-            "label": "foo"
-          },
-          "os_vendor": "SLES",
-          "command": "foo-sles",
-          "args": ["--bar"],
-          "and_eval_rules": {
-            "eval_rules": [
-              {
-                "output_source": "STDOUT",
-                "output_contains": "foobar"
-              }
-            ],
-            "if_true": {
-              "value_from_literal": "true"
-            },
-            "if_false": {
-              "value_from_literal": "false"
-            }
-          }
-        }
-      ]
-    },
-    "another_fake_field_that_does_not_exist_in_proto" : {}
+      "os_command_metrics": []
+    }
   }
 }

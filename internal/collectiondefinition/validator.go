@@ -139,6 +139,18 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 			validationFailure(v, m, "HANABackupVariable metric has no value specified")
 		}
 	}
+	for _, m := range hana.GetHaMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.HANAHighAvailabilityVariable_HA_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "HANAHighAvailabilityVariable metric has no value specified")
+		}
+	}
+	for _, m := range hana.GetDrMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.HANADisasterRecoveryVariable_DR_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "HANADisasterRecoveryVariable metric has no value specified")
+		}
+	}
 	v.validateOSCommandMetrics(hana.GetOsCommandMetrics())
 
 	netweaver := wlm.GetValidationNetweaver()

@@ -68,6 +68,11 @@ enum HANAHighAvailabilityVariable {
   HA_IN_SAME_ZONE = 1;
 }
 
+enum HANADisasterRecoveryVariable {
+  DR_VARIABLE_UNSPECIFIED = 0;
+  DR_IN_SAME_REGION = 1;
+}
+
 enum PrimitiveVariable {
   PRIMITIVE_VARIABLE_UNSPECIFIED = 0;
   PCMK_DELAY_BASE = 1;
@@ -216,6 +221,7 @@ message ValidationHANA {
   repeated workloadagentplatform.sharedprotos.configurablemetrics.EvalMetric
       indexserver_ini_metrics = 5;
   repeated HANABackupMetric hana_backup_metrics = 6;
+  repeated HANADisasterRecoveryMetric dr_metrics = 7;
 }
 
 message HANADiskVolumeMetric {
@@ -234,6 +240,12 @@ message HANAHighAvailabilityMetric {
   workloadagentplatform.sharedprotos.configurablemetrics.MetricInfo
       metric_info = 1;
   HANAHighAvailabilityVariable value = 2;
+}
+
+message HANADisasterRecoveryMetric {
+  workloadagentplatform.sharedprotos.configurablemetrics.MetricInfo
+      metric_info = 1;
+  HANADisasterRecoveryVariable value = 2;
 }
 
 message HANABackupMetric {
