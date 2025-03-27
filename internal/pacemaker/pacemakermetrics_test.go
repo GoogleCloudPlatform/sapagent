@@ -272,6 +272,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ascs_resource_stickiness":          "",
 		"ascs_monitor_interval":             "",
 		"ascs_monitor_timeout":              "",
+		"ensa2_capable":                     "",
 		"ers_automatic_recover":             "",
 		"is_ers":                            "",
 		"ers_monitor_interval":              "",
@@ -342,6 +343,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ascs_resource_stickiness":           "",
 		"ascs_monitor_interval":              "",
 		"ascs_monitor_timeout":               "",
+		"ensa2_capable":                      "",
 		"ers_automatic_recover":              "",
 		"is_ers":                             "",
 		"ers_monitor_interval":               "",
@@ -398,6 +400,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ascs_resource_stickiness":           "5000",
 		"ascs_monitor_interval":              "20",
 		"ascs_monitor_timeout":               "60",
+		"ensa2_capable":                      "true",
 		"ers_automatic_recover":              "false",
 		"is_ers":                             "true",
 		"ers_monitor_interval":               "20",
@@ -464,6 +467,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ascs_resource_stickiness":          "",
 		"ascs_monitor_interval":             "",
 		"ascs_monitor_timeout":              "",
+		"ensa2_capable":                     "",
 		"ers_automatic_recover":             "",
 		"is_ers":                            "",
 		"ers_monitor_interval":              "",
@@ -2022,7 +2026,9 @@ func TestCollectEnqueueServer(t *testing.T) {
 					return commandlineexecutor.Result{
 						StdOut: `
 #systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs11
-systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/profile/POS_ERS12_aliders11
+systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/invalid/POS/profile/POS_ASCS11_alidascs11
+#systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/profile/POS_ERS12_aliders11
+systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/INVALID/SYS/profile/POS_ERS12_aliders11
 `,
 					}
 				}
@@ -2056,7 +2062,7 @@ systemctl --no-ask-password start SAPPOS_12 # sapstartsrv pf=/usr/sap/POS/SYS/pr
 					}
 				}
 				return commandlineexecutor.Result{
-					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/sapmnt/POS/profile/POS_ASCS11_alidascs1",
+					StdOut: "systemctl --no-ask-password start SAPPOS_11 # sapstartsrv pf=/usr/sap/POS/profile/POS_ASCS11_alidascs1",
 				}
 			},
 			want: "ENSA1",
@@ -2106,6 +2112,12 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 	validOperations := []Op{
 		{Name: "monitor", Interval: "20", Timeout: "60"},
 	}
+	validExec := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			StdOut:   "_ENQ = enq.sap$(SAPSYSTEMNAME)_$(INSTANCE_NAME)",
+			ExitCode: 0,
+		}
+	}
 	wantEmpty := map[string]string{
 		"ascs_automatic_recover":   "",
 		"ascs_failure_timeout":     "",
@@ -2113,16 +2125,19 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 		"ascs_resource_stickiness": "",
 		"ascs_monitor_interval":    "",
 		"ascs_monitor_timeout":     "",
+		"ensa2_capable":            "",
 	}
 
 	tests := []struct {
 		name   string
 		groups []Group
+		exec   commandlineexecutor.Execute
 		want   map[string]string
 	}{
 		{
 			name:   "NoGroups",
 			groups: []Group{},
+			exec:   validExec,
 			want:   wantEmpty,
 		},
 		{
@@ -2144,6 +2159,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
+			exec: validExec,
 			want: wantEmpty,
 		},
 		{
@@ -2160,6 +2176,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
+			exec: validExec,
 			want: wantEmpty,
 		},
 		{
@@ -2189,7 +2206,70 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
-			want: wantEmpty,
+			exec: validExec,
+			want: map[string]string{
+				"ascs_automatic_recover":   "",
+				"ascs_failure_timeout":     "",
+				"ascs_migration_threshold": "",
+				"ascs_resource_stickiness": "",
+				"ascs_monitor_interval":    "",
+				"ascs_monitor_timeout":     "",
+				"ensa2_capable":            "true",
+			},
+		},
+		{
+			name: "StartProfileError",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "SAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							MetaAttributes:     validMetaAttributes,
+							Operations:         validOperations,
+						},
+					},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: errors.New("Something went wrong")}
+			},
+			want: map[string]string{
+				"ascs_automatic_recover":   "false",
+				"ascs_failure_timeout":     "60",
+				"ascs_migration_threshold": "3",
+				"ascs_resource_stickiness": "5000",
+				"ascs_monitor_interval":    "20",
+				"ascs_monitor_timeout":     "60",
+				"ensa2_capable":            "false",
+			},
+		},
+		{
+			name: "NotENSA2Capable",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType:          "SAPInstance",
+							InstanceAttributes: validInstanceAttributes,
+							MetaAttributes:     validMetaAttributes,
+							Operations:         validOperations,
+						},
+					},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: errors.New("Pattern not found"), ExitCode: 1, ExitStatusParsed: true}
+			},
+			want: map[string]string{
+				"ascs_automatic_recover":   "false",
+				"ascs_failure_timeout":     "60",
+				"ascs_migration_threshold": "3",
+				"ascs_resource_stickiness": "5000",
+				"ascs_monitor_interval":    "20",
+				"ascs_monitor_timeout":     "60",
+				"ensa2_capable":            "false",
+			},
 		},
 		{
 			name: "Success",
@@ -2205,6 +2285,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 					},
 				},
 			},
+			exec: validExec,
 			want: map[string]string{
 				"ascs_automatic_recover":   "false",
 				"ascs_failure_timeout":     "60",
@@ -2212,6 +2293,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 				"ascs_resource_stickiness": "5000",
 				"ascs_monitor_interval":    "20",
 				"ascs_monitor_timeout":     "60",
+				"ensa2_capable":            "true",
 			},
 		},
 	}
@@ -2219,7 +2301,7 @@ func TestSetASCSConfigMetrics(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			setASCSConfigMetrics(context.Background(), got, test.groups)
+			setASCSConfigMetrics(context.Background(), got, test.groups, test.exec)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setASCSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}

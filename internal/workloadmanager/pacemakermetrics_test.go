@@ -137,6 +137,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"ascs_resource_stickiness":           "5000",
 					"ascs_monitor_interval":              "20",
 					"ascs_monitor_timeout":               "60",
+					"ensa2_capable":                      "true",
 					"ers_automatic_recover":              "false",
 					"is_ers":                             "true",
 					"ers_monitor_interval":               "20",

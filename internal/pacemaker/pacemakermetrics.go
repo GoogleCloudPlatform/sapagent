@@ -39,7 +39,7 @@ import (
 
 var (
 	sapInstanceRegex = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
-	sapstartsrvRegex = regexp.MustCompile("sapstartsrv pf=/sapmnt/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/")
+	sapstartsrvRegex = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
 )
 
 type (
@@ -117,6 +117,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ascs_resource_stickiness":           true,
 		"ascs_monitor_interval":              true,
 		"ascs_monitor_timeout":               true,
+		"ensa2_capable":                      true,
 		"ers_automatic_recover":              true,
 		"is_ers":                             true,
 		"ers_monitor_interval":               true,
@@ -274,7 +275,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, labels, params.Execute)
-	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
+	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
 
 	// sets the OP options from the pacemaker configuration.
@@ -700,13 +701,14 @@ func collectEnqueueServer(ctx context.Context, labels map[string]string, exec co
 }
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
-func setASCSConfigMetrics(ctx context.Context, labels map[string]string, groups []Group) {
+func setASCSConfigMetrics(ctx context.Context, labels map[string]string, groups []Group, exec commandlineexecutor.Execute) {
 	labels["ascs_automatic_recover"] = ""
 	labels["ascs_failure_timeout"] = ""
 	labels["ascs_migration_threshold"] = ""
 	labels["ascs_resource_stickiness"] = ""
 	labels["ascs_monitor_interval"] = ""
 	labels["ascs_monitor_timeout"] = ""
+	labels["ensa2_capable"] = ""
 	metaAttributesKeys := map[string]string{
 		"failure-timeout":     "ascs_failure_timeout",
 		"migration-threshold": "ascs_migration_threshold",
@@ -735,13 +737,17 @@ ASCSLoop:
 		return
 	}
 
+	var ascsProfile string
 	for _, primitive := range ascsGroup.Primitives {
 		if primitive.ClassType != "SAPInstance" {
 			continue
 		}
 		for _, nvPair := range primitive.InstanceAttributes.NVPairs {
-			if nvPair.Name == "AUTOMATIC_RECOVER" {
+			switch nvPair.Name {
+			case "AUTOMATIC_RECOVER":
 				labels["ascs_automatic_recover"] = nvPair.Value
+			case "START_PROFILE":
+				ascsProfile = nvPair.Value
 			}
 		}
 		for _, nvPair := range primitive.MetaAttributes.NVPairs {
@@ -755,6 +761,22 @@ ASCSLoop:
 				labels["ascs_monitor_timeout"] = op.Timeout
 			}
 		}
+	}
+
+	if ascsProfile == "" {
+		return
+	}
+
+	labels["ensa2_capable"] = "false"
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: fmt.Sprintf("'^_ENQ' %s", ascsProfile),
+	})
+	switch {
+	case result.Error != nil && !result.ExitStatusParsed:
+		log.CtxLogger(ctx).Debugw("Could not grep ASCS profile.", "error", result.Error, "start_profile", ascsProfile)
+	case result.ExitCode == 0:
+		labels["ensa2_capable"] = "true"
 	}
 }
 

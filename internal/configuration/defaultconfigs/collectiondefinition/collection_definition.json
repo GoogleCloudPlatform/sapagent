@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 27,
+    "version": 28,
     "validation_system": {
       "system_metrics": [
         {
@@ -1450,6 +1450,14 @@
               "min_version": "3.7"
             },
             "value": "ERS_ILB_MONITOR_TIMEOUT"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ensa2_capable",
+              "min_version": "3.8"
+            },
+            "value": "ENSA2_CAPABLE"
           }
         ],
         "op_option_metrics": [
