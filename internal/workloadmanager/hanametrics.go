@@ -29,17 +29,20 @@ import (
 	"github.com/google/safetext/shsprintf"
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	wpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
+	systempb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
 	sapValidationHANA = "workload.googleapis.com/sap/validation/hana"
 	timestampLayout   = "2006-01-02T15:04:05-07:00"
+	instancesURIPart  = "instances"
 )
 
 var instanceURIRegex = regexp.MustCompile("/projects/(.+)/zones/(.+)/instances/(.+)")
@@ -100,6 +103,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
+	sidAdm := sidAdminUser(ctx, params)
 	globalINIFilePath := hanaSystemConfigDir + "/global.ini"
 	// Short-circuit HANA metrics collection if global.ini file is not found.
 	// In addition to the metrics contained in the file, global.ini also contains
@@ -124,7 +128,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		}
 	}
 	for _, volume := range hana.GetHanaDiskVolumeMetrics() {
-		diskInfo := diskInfo(ctx, volume, globalINIFilePath, params)
+		diskInfo := diskInfo(ctx, volume, globalINIFilePath, sidAdm, params)
 		for _, m := range volume.GetMetrics() {
 			k := m.GetMetricInfo().GetLabel()
 			switch m.GetValue() {
@@ -146,6 +150,13 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		switch m.GetValue() {
 		case wpb.HANAHighAvailabilityVariable_HA_IN_SAME_ZONE:
 			l[k] = fmt.Sprint(checkHAZones(ctx, params))
+		}
+	}
+	for _, m := range hana.GetDrMetrics() {
+		k := m.GetMetricInfo().GetLabel()
+		switch m.GetValue() {
+		case wpb.HANADisasterRecoveryVariable_DR_IN_SAME_REGION:
+			l[k] = fmt.Sprint(checkDRRegions(ctx, sidAdm, params))
 		}
 	}
 	hanaBackupMetrics := hanaBackupMetrics(ctx, params.Execute)
@@ -206,10 +217,9 @@ func sapHANAInstance(ctx context.Context, params Parameters) *sapb.SAPInstance {
 	return nil
 }
 
-func diskInfo(ctx context.Context, volume *wpb.HANADiskVolumeMetric, globalINILocation string, params Parameters) map[string]string {
+func diskInfo(ctx context.Context, volume *wpb.HANADiskVolumeMetric, globalINILocation, sidAdminUser string, params Parameters) map[string]string {
 	diskInfo := map[string]string{}
 	volumeMountpoint := ""
-	sidAdminUser := sidAdminUser(ctx, params)
 
 	switch volume.GetMetricSource() {
 	case wpb.HANADiskVolumeMetricSource_GLOBAL_INI:
@@ -436,6 +446,49 @@ func checkHAZones(ctx context.Context, params Parameters) string {
 		}
 	}
 	return haNodesSameZone
+}
+
+// checkDRRegions determines if the host instance is serving as the primary
+// for system replication, and if so, checks if the replication site for DR
+// is in the same region as the primary.
+func checkDRRegions(ctx context.Context, sidAdminUser string, params Parameters) string {
+	var drSitesSameRegion []string
+
+	// Check if the host instance is serving as the primary.
+	result := params.Execute(ctx, commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: fmt.Sprintf(`-i -u %s hdbnsutil -sr_state | grep "^mode: primary"`, sidAdminUser),
+	})
+	switch {
+	case result.Error != nil && !result.ExitStatusParsed:
+		log.CtxLogger(ctx).Debugw("Could not execute hdbnsutil command", "error", result.Error, "sidAdminUser", sidAdminUser)
+		return ""
+	case result.ExitCode != 0:
+		return ""
+	}
+
+	// Check if the replication site is in the same region as the primary.
+	for _, system := range params.Discovery.GetSAPSystems() {
+		for _, site := range system.GetDatabaseLayer().GetReplicationSites() {
+			if site.GetComponent().GetRegion() != system.GetDatabaseLayer().GetRegion() {
+				continue
+			}
+			drSitesSameRegion = append(drSitesSameRegion, instanceNameFromResources(site.GetComponent().GetResources()))
+		}
+	}
+
+	return strings.Join(drSitesSameRegion, ",")
+}
+
+// instanceNameFromResources returns the first instance name found in the resources list.
+func instanceNameFromResources(resources []*systempb.SapDiscovery_Resource) string {
+	for _, resource := range resources {
+		if resource.GetResourceKind() != systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+			continue
+		}
+		return clouddiscovery.ExtractFromURI(resource.GetResourceUri(), instancesURIPart)
+	}
+	return ""
 }
 
 // hanaBackupMetrics gathers information about the backups for the HANA DB.

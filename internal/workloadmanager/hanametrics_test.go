@@ -757,7 +757,7 @@ func TestDiskInfo(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.params.InstanceInfoReader.Read(context.Background(), test.params.Config, test.mapper)
-			got := diskInfo(context.Background(), test.volume, test.globalINILocation, test.params)
+			got := diskInfo(context.Background(), test.volume, test.globalINILocation, "sidadm", test.params)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("%s failed, diskInfo returned unexpected metric labels diff (-want +got):\n%s", test.name, diff)
 			}
@@ -1048,6 +1048,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
 					},
 				},
+				systems: []*spb.SapDiscovery{},
 			},
 			wantHanaExists: float64(1.0),
 			wantLabels: map[string]string{
@@ -1074,6 +1075,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": "",
 				"transparent_hugepages":                     "disabled",
 				"ha_in_same_zone":                           "",
+				"dr_in_same_region":                         "",
 				"hana_data_volume":                          "",
 				"hana_log_volume":                           "",
 				"hana_backup_volume":                        "",
@@ -1094,6 +1096,12 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 					if strings.Contains(params.ArgsToSplit, "command:") {
 						return commandlineexecutor.Result{
 							StdOut: backupLogGrepCommandOut,
+							StdErr: "",
+						}
+					}
+					if strings.Contains(params.ArgsToSplit, "hdbnsutil") {
+						return commandlineexecutor.Result{
+							StdOut: "mode: primary",
 							StdErr: "",
 						}
 					}
@@ -1185,6 +1193,20 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 								"/projects/test-project-id/zones/test-region-zone/instances/other-instance-1",
 								"resourceURI/does/not/match/regexp",
 							},
+							Region: "us-central1",
+							ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{
+								{
+									Component: &spb.SapDiscovery_Component{
+										Resources: []*spb.SapDiscovery_Resource{
+											{
+												ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+												ResourceUri:  "https://www.googleapis.com/compute/v1/projects/test-project-id/zones/test-region-zone/instances/dr-instance-1",
+											},
+										},
+										Region: "us-central1",
+									},
+								},
+							},
 						},
 					},
 				},
@@ -1214,6 +1236,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 				"transparent_hugepages":                     "enabled",
 				"ha_in_same_zone":                           "other-instance-1",
+				"dr_in_same_region":                         "dr-instance-1",
 				"hana_data_volume":                          "/dev/sdb",
 				"hana_log_volume":                           "/dev/sdc",
 				"hana_backup_volume":                        "/dev/sdf",
@@ -1517,6 +1540,114 @@ systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/pr
 			got := hanaBackupMetrics(context.Background(), test.exec)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("hanaBackupMetrics() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCheckDRRegions(t *testing.T) {
+	discoveryResult := func(primaryRegion, drRegion, instance string) *fakeDiscoveryInterface {
+		return &fakeDiscoveryInterface{
+			systems: []*spb.SapDiscovery{
+				{
+					DatabaseLayer: &spb.SapDiscovery_Component{
+						Region: primaryRegion,
+						ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{
+							{
+								Component: &spb.SapDiscovery_Component{
+									Resources: []*spb.SapDiscovery_Resource{
+										{
+											ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+											ResourceUri:  fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instances/%s", instance),
+										},
+									},
+									Region: drRegion,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name   string
+		params Parameters
+		want   string
+	}{
+		{
+			name: "cliError",
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						Error:            errors.New("something went wrong"),
+						ExitStatusParsed: false,
+					}
+				},
+				Discovery: discoveryResult("us-central1", "us-central1", "dr-instance-1"),
+			},
+			want: "",
+		},
+		{
+			name: "notPrimary",
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						Error:            errors.New("pattern not found"),
+						ExitStatusParsed: true,
+						ExitCode:         1,
+					}
+				},
+				Discovery: discoveryResult("us-central1", "us-central1", "dr-instance-1"),
+			},
+			want: "",
+		},
+		{
+			name: "noReplication",
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "mode: primary"}
+				},
+				Discovery: &fakeDiscoveryInterface{
+					systems: []*spb.SapDiscovery{
+						{
+							DatabaseLayer: &spb.SapDiscovery_Component{
+								Region: "us-central1",
+							},
+						},
+					},
+				},
+			},
+			want: "",
+		},
+		{
+			name: "differentRegions",
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "mode: primary"}
+				},
+				Discovery: discoveryResult("us-central1", "us-east1", "dr-instance-1"),
+			},
+			want: "",
+		},
+		{
+			name: "sameRegion",
+			params: Parameters{
+				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "mode: primary"}
+				},
+				Discovery: discoveryResult("us-central1", "us-central1", "dr-instance-1"),
+			},
+			want: "dr-instance-1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := checkDRRegions(context.Background(), "sidadm", test.params)
+			if got != test.want {
+				t.Errorf("checkDRRegions() = %q, want %q", got, test.want)
 			}
 		})
 	}
