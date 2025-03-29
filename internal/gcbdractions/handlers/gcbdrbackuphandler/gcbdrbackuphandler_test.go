@@ -20,8 +20,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/subcommands"
-
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
@@ -29,7 +27,7 @@ func TestGCBDRBackupHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		command        *gpb.Command
-		wantExitStatus subcommands.ExitStatus
+		wantExitStatus int32
 	}{
 		{
 			name: "InvalidParameters",
@@ -40,7 +38,7 @@ func TestGCBDRBackupHandler(t *testing.T) {
 					},
 				},
 			},
-			wantExitStatus: subcommands.ExitUsageError,
+			wantExitStatus: -1,
 		},
 		{
 			name: "FailureForPrepare",
@@ -55,14 +53,14 @@ func TestGCBDRBackupHandler(t *testing.T) {
 					},
 				},
 			},
-			wantExitStatus: subcommands.ExitFailure,
+			wantExitStatus: 127,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			res := GCBDRBackupHandler(context.Background(), tc.command, nil)
-			if res.ExitCode != int32(tc.wantExitStatus) {
-				t.Errorf("GCBDRBackupHandler(%v) = %q, want: %q", tc.command, res.ExitCode, tc.wantExitStatus)
+			if res.ExitCode != tc.wantExitStatus {
+				t.Errorf("GCBDRBackupHandler(%v) = %v, want: %v", tc.command, res.ExitCode, tc.wantExitStatus)
 			}
 		})
 	}

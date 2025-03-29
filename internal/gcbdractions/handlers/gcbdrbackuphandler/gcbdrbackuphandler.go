@@ -19,10 +19,8 @@ package gcbdrbackuphandler
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -31,7 +29,6 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
-	apb "google.golang.org/protobuf/types/known/anypb"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
@@ -42,23 +39,7 @@ func GCBDRBackupHandler(ctx context.Context, command *gpb.Command, cp *metadatas
 	log.CtxLogger(ctx).Debugw("gcbdr-backup handler called.", "command", prototext.Format(command))
 	b := &backup.Backup{}
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
-	backupResponse, message, exitStatus := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
-	anyBackupResponse, err := apb.New(backupResponse)
-	if err != nil {
-		failureMessage := fmt.Sprintf("failed to marshal response to any. Error: %v", err)
-		log.CtxLogger(ctx).Debug(failureMessage)
-		result := &gpb.CommandResult{
-			Command:  command,
-			Stdout:   failureMessage,
-			ExitCode: int32(subcommands.ExitFailure),
-		}
-		return result
-	}
-	result := &gpb.CommandResult{
-		Command:  command,
-		Payload:  anyBackupResponse,
-		Stdout:   message,
-		ExitCode: int32(exitStatus),
-	}
+	result := b.Run(ctx, commandlineexecutor.ExecuteCommand, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
+	result.Command = command
 	return result
 }
