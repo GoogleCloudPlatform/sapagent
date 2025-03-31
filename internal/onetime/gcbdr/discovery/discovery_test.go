@@ -190,7 +190,8 @@ func TestDiscoveryHandler(t *testing.T) {
 		exec       commandlineexecutor.Execute
 		fsh        filesystem.FileSystem
 		want       *Applications
-		wantStatus subcommands.ExitStatus
+		wantStatus int32
+		wantStdErr bool
 	}{
 		{
 			name: "Success",
@@ -200,14 +201,14 @@ func TestDiscoveryHandler(t *testing.T) {
 				ReadFileErr:  []error{nil},
 			},
 			want:       successfulApplications(validXMLString),
-			wantStatus: subcommands.ExitSuccess,
+			wantStatus: 0,
 		},
 		{
 			name:       "FailureInExecutingCommand",
 			exec:       testCommandExecute("", "", &exec.ExitError{}),
 			fsh:        &fake.FileSystem{},
 			want:       nil,
-			wantStatus: subcommands.ExitFailure,
+			wantStatus: -1,
 		},
 		{
 			name: "FailureInReadingFile",
@@ -217,7 +218,8 @@ func TestDiscoveryHandler(t *testing.T) {
 				ReadFileErr:  []error{cmpopts.AnyError},
 			},
 			want:       nil,
-			wantStatus: subcommands.ExitFailure,
+			wantStatus: 0,
+			wantStdErr: true,
 		},
 		{
 			name: "FailureInUmarshallingXML",
@@ -227,7 +229,8 @@ func TestDiscoveryHandler(t *testing.T) {
 				ReadFileErr:  []error{nil},
 			},
 			want:       nil,
-			wantStatus: subcommands.ExitFailure,
+			wantStatus: 0,
+			wantStdErr: true,
 		},
 	}
 
@@ -241,8 +244,11 @@ func TestDiscoveryHandler(t *testing.T) {
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("discoveryHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.exec, tc.fsh, diff)
 			}
-			if tc.wantStatus != gotStatus {
-				t.Errorf("discoveryHandler(%v, %v) returned an unexpected status: %v", tc.exec, tc.fsh, gotStatus)
+			if tc.wantStatus != gotStatus.GetExitCode() {
+				t.Errorf("discoveryHandler(%v, %v) returned an unexpected status: %v", tc.exec, tc.fsh, gotStatus.GetExitCode())
+			}
+			if (tc.wantStdErr && gotStatus.GetStderr() == "") || (!tc.wantStdErr && gotStatus.GetStderr() != "") {
+				t.Errorf("discoveryHandler(%v, %v) returned an unexpected stderr: %v", tc.exec, tc.fsh, gotStatus.GetStderr())
 			}
 		})
 	}
@@ -255,7 +261,7 @@ func TestRun(t *testing.T) {
 		exec           commandlineexecutor.Execute
 		fsh            filesystem.FileSystem
 		want           *hdpb.ApplicationsList
-		wantExitStatus subcommands.ExitStatus
+		wantExitStatus int32
 	}{
 		{
 			name: "Success",
@@ -265,13 +271,13 @@ func TestRun(t *testing.T) {
 				ReadFileErr:  []error{nil},
 			},
 			want:           successfulProtoMessage(validXMLString),
-			wantExitStatus: subcommands.ExitSuccess,
+			wantExitStatus: 0,
 		},
 		{
 			name:           "FailureInExecutingCommand",
 			exec:           testCommandExecute("", "", &exec.ExitError{}),
 			fsh:            &fake.FileSystem{},
-			wantExitStatus: subcommands.ExitFailure,
+			wantExitStatus: -1,
 			want:           nil,
 		},
 	}
@@ -286,7 +292,7 @@ func TestRun(t *testing.T) {
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("GetHANADiscoveryApplications(%v, %v) returned an unexpected diff (-want +got): %v", tc.exec, tc.fsh, diff)
 			}
-			if tc.wantExitStatus != exitStatus {
+			if tc.wantExitStatus != exitStatus.GetExitCode() {
 				t.Errorf("GetHANADiscoveryApplications(%v, %v) returned an unexpected status: %v", tc.exec, tc.fsh, exitStatus)
 			}
 		})

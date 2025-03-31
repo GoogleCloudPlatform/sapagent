@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/discovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -41,31 +40,18 @@ func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metada
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
 	d := &discovery.Discovery{}
-	applications, exitStatus := d.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
-	if exitStatus != subcommands.ExitSuccess {
-		result := &gpb.CommandResult{
-			Command:  command,
-			Stdout:   fmt.Sprintf("Failed to get HANA discovery applications: %v", exitStatus),
-			ExitCode: int32(exitStatus),
-		}
+	applications, result := d.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
+	result.Command = command
+	if result.GetExitCode() != 0 {
 		return result
 	}
 	anyApplications, err := apb.New(applications)
 	if err != nil {
 		failureMessage := fmt.Sprintf("Failed to marshal response to any. Error: %v", err)
 		log.CtxLogger(ctx).Debug(failureMessage)
-		result := &gpb.CommandResult{
-			Command:  command,
-			Stdout:   failureMessage,
-			ExitCode: int32(subcommands.ExitFailure),
-		}
+		result.Stderr = failureMessage
 		return result
 	}
-	result := &gpb.CommandResult{
-		Command:  command,
-		Payload:  anyApplications,
-		Stdout:   "HANA Applications discovered",
-		ExitCode: int32(subcommands.ExitSuccess),
-	}
+	result.Payload = anyApplications
 	return result
 }
