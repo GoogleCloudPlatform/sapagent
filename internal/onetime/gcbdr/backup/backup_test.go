@@ -97,7 +97,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "SuccessfullyParseArgs",
 			b:    Backup{},
-			want: subcommands.ExitUsageError,
+			want: subcommands.ExitFailure,
 			args: []any{
 				"test",
 				log.Parameters{},
@@ -129,23 +129,22 @@ func TestExecute(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	tests := []struct {
-		name               string
-		b                  Backup
-		exec               commandlineexecutor.Execute
-		wantExitStatus     subcommands.ExitStatus
-		wantResponseStatus bool
+		name         string
+		b            Backup
+		exec         commandlineexecutor.Execute
+		wantExitCode int32
 	}{
 		{
-			name:           "InvalidParamsMissingOperationType",
-			b:              Backup{},
-			wantExitStatus: subcommands.ExitUsageError,
+			name:         "InvalidParamsMissingOperationType",
+			b:            Backup{},
+			wantExitCode: -1,
 		},
 		{
 			name: "InvalidParamsMissingSID",
 			b: Backup{
 				OperationType: "prepare",
 			},
-			wantExitStatus: subcommands.ExitUsageError,
+			wantExitCode: -1,
 		},
 		{
 			name: "InvalidParamsMissingHDBUserstoreKey",
@@ -153,7 +152,7 @@ func TestRun(t *testing.T) {
 				OperationType: "prepare",
 				SID:           "sid",
 			},
-			wantExitStatus: subcommands.ExitUsageError,
+			wantExitCode: -1,
 		},
 		{
 			name: "InvalidOperationType",
@@ -162,7 +161,7 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			wantExitStatus: subcommands.ExitUsageError,
+			wantExitCode: -1,
 		},
 		{
 			name: "SuccessForPrepare",
@@ -171,9 +170,8 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec:               fakeExecSuccess,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecSuccess,
+			wantExitCode: 0,
 		},
 		{
 			name: "SuccessForFreeze",
@@ -182,9 +180,8 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec:               fakeExecHANAVersion,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecHANAVersion,
+			wantExitCode: 0,
 		},
 		{
 			name: "SuccessForUnfreeze",
@@ -194,9 +191,8 @@ func TestRun(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 				JobName:         "jobname",
 			},
-			exec:               fakeExecHANAVersion,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecHANAVersion,
+			wantExitCode: 0,
 		},
 		{
 			name: "SuccessForLogbackup",
@@ -205,9 +201,8 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec:               fakeExecSuccess,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecSuccess,
+			wantExitCode: 0,
 		},
 		{
 			name: "SuccessForLogpurge",
@@ -217,9 +212,8 @@ func TestRun(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 				LogBackupEndPIT: "2024-01-01 00:00:00",
 			},
-			exec:               fakeExecHANAVersion,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecHANAVersion,
+			wantExitCode: 0,
 		},
 		{
 			name: "CheckForCaseInsensitiveOperationType",
@@ -228,19 +222,15 @@ func TestRun(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			exec:               fakeExecSuccess,
-			wantExitStatus:     subcommands.ExitSuccess,
-			wantResponseStatus: true,
+			exec:         fakeExecSuccess,
+			wantExitCode: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			response, _, exitStatus := tc.b.Run(context.Background(), tc.exec, onetime.CreateRunOptions(nil, false))
-			if exitStatus != tc.wantExitStatus {
-				t.Errorf("Run(%v) = %v; want %v", tc.b, exitStatus, tc.wantExitStatus)
-			}
-			if response != nil && response.Status.GetValue() != tc.wantResponseStatus {
-				t.Errorf("Run(%v) = %v; want %v", tc.b, response.Status, tc.wantResponseStatus)
+			result := tc.b.Run(context.Background(), tc.exec, onetime.CreateRunOptions(nil, false))
+			if result.GetExitCode() != tc.wantExitCode {
+				t.Errorf("Run(%v) = %v; want %v", tc.b, result.GetExitCode(), tc.wantExitCode)
 			}
 		})
 	}
@@ -251,7 +241,7 @@ func TestPrepareHandler(t *testing.T) {
 		name string
 		b    Backup
 		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		want int32
 	}{
 		{
 			name: "ScriptError",
@@ -261,7 +251,7 @@ func TestPrepareHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecError,
-			want: subcommands.ExitFailure,
+			want: 1,
 		},
 		{
 			name: "Success",
@@ -271,14 +261,14 @@ func TestPrepareHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecSuccess,
-			want: subcommands.ExitSuccess,
+			want: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, got := tc.b.prepareHandler(context.Background(), tc.exec)
-			if got != tc.want {
-				t.Errorf("prepareHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			got := tc.b.prepareHandler(context.Background(), tc.exec)
+			if got.GetExitCode() != tc.want {
+				t.Errorf("prepareHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
 			}
 		})
 	}
@@ -289,7 +279,7 @@ func TestFreezeHandler(t *testing.T) {
 		name string
 		b    Backup
 		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		want int32
 	}{
 		{
 			name: "VersionFailure",
@@ -299,7 +289,7 @@ func TestFreezeHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecError,
-			want: subcommands.ExitFailure,
+			want: -1,
 		},
 		{
 			name: "VersionSuccessButFreezeFailure",
@@ -314,7 +304,7 @@ func TestFreezeHandler(t *testing.T) {
 				}
 				return fakeExecError(ctx, p)
 			},
-			want: subcommands.ExitFailure,
+			want: 1,
 		},
 		{
 			name: "FreezeSuccess",
@@ -324,14 +314,14 @@ func TestFreezeHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			want: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, got := tc.b.freezeHandler(context.Background(), tc.exec)
-			if got != tc.want {
-				t.Errorf("freezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			got := tc.b.freezeHandler(context.Background(), tc.exec)
+			if got.GetExitCode() != tc.want {
+				t.Errorf("freezeHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
 			}
 		})
 	}
@@ -342,7 +332,7 @@ func TestUnfreezeHandler(t *testing.T) {
 		name string
 		b    Backup
 		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		want int32
 	}{
 		{
 			name: "InvalidParamsMissingJobName",
@@ -351,7 +341,7 @@ func TestUnfreezeHandler(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			want: subcommands.ExitUsageError,
+			want: -1,
 		},
 		{
 			name: "VersionFailure",
@@ -362,7 +352,7 @@ func TestUnfreezeHandler(t *testing.T) {
 				JobName:         "jobname",
 			},
 			exec: fakeExecError,
-			want: subcommands.ExitFailure,
+			want: -1,
 		},
 		{
 			name: "VersionSuccessButUnfreezeFailure",
@@ -378,7 +368,7 @@ func TestUnfreezeHandler(t *testing.T) {
 				}
 				return fakeExecError(ctx, p)
 			},
-			want: subcommands.ExitFailure,
+			want: 1,
 		},
 		{
 			name: "UnfreezeSuccess",
@@ -391,14 +381,14 @@ func TestUnfreezeHandler(t *testing.T) {
 				SnapshotType:    "PD",
 			},
 			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			want: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, got := tc.b.unfreezeHandler(context.Background(), tc.exec)
-			if got != tc.want {
-				t.Errorf("unfreezeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			got := tc.b.unfreezeHandler(context.Background(), tc.exec)
+			if got.GetExitCode() != tc.want {
+				t.Errorf("unfreezeHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
 			}
 		})
 	}
@@ -409,7 +399,7 @@ func TestLogbackupHandler(t *testing.T) {
 		name string
 		b    Backup
 		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		want int32
 	}{
 		{
 			name: "ScriptError",
@@ -419,7 +409,7 @@ func TestLogbackupHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecError,
-			want: subcommands.ExitFailure,
+			want: 1,
 		},
 		{
 			name: "Success",
@@ -429,13 +419,13 @@ func TestLogbackupHandler(t *testing.T) {
 				HDBUserstoreKey: "userstorekey",
 			},
 			exec: fakeExecSuccess,
-			want: subcommands.ExitSuccess,
+			want: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, got := tc.b.logbackupHandler(context.Background(), tc.exec); got != tc.want {
-				t.Errorf("logbackupHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			if got := tc.b.logbackupHandler(context.Background(), tc.exec); got.GetExitCode() != tc.want {
+				t.Errorf("logbackupHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
 			}
 		})
 	}
@@ -446,7 +436,7 @@ func TestLogpurgeHandler(t *testing.T) {
 		name string
 		b    Backup
 		exec commandlineexecutor.Execute
-		want subcommands.ExitStatus
+		want int32
 	}{
 		{
 			name: "InvalidParamsMissingLogBackupEndPIT",
@@ -455,7 +445,7 @@ func TestLogpurgeHandler(t *testing.T) {
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
-			want: subcommands.ExitUsageError,
+			want: -1,
 		},
 		{
 			name: "ScriptError",
@@ -466,7 +456,7 @@ func TestLogpurgeHandler(t *testing.T) {
 				LogBackupEndPIT: "2024-01-01 00:00:00",
 			},
 			exec: fakeExecError,
-			want: subcommands.ExitFailure,
+			want: -1,
 		},
 		{
 			name: "VersionSuccessButLogpurgeFailure",
@@ -482,7 +472,7 @@ func TestLogpurgeHandler(t *testing.T) {
 				}
 				return fakeExecError(ctx, p)
 			},
-			want: subcommands.ExitFailure,
+			want: 1,
 		},
 		{
 			name: "Success",
@@ -493,13 +483,13 @@ func TestLogpurgeHandler(t *testing.T) {
 				LogBackupEndPIT: "2024-01-01 00:00:00",
 			},
 			exec: fakeExecHANAVersion,
-			want: subcommands.ExitSuccess,
+			want: 0,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, got := tc.b.logpurgeHandler(context.Background(), tc.exec); got != tc.want {
-				t.Errorf("logpurgeHandler(%v) = %v, want %v", tc.b, got, tc.want)
+			if got := tc.b.logpurgeHandler(context.Background(), tc.exec); got.GetExitCode() != tc.want {
+				t.Errorf("logpurgeHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
 			}
 		})
 	}
