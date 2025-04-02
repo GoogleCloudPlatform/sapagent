@@ -22,6 +22,6 @@ import "google/protobuf/wrappers.proto";
 option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrlogbackup";
 
 message LogBackupResponse {
-  google.protobuf.BoolValue status = 1;
-  string job_id = 2;
+  google.protobuf.BoolValue log_gap = 1;
+  string recovery_point = 2;
 }
