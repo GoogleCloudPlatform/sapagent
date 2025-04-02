@@ -1,3 +1,0 @@
-[submodule "workloadagentplatform"]
-        path = workloadagentplatform
-        url = https://github.com/GoogleCloudPlatform/workloadagentplatform
