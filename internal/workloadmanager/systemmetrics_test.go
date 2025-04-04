@@ -42,18 +42,30 @@ import (
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
+const (
+	testBaseInstanceName = "test-instance-name"
+	testInstanceName1    = "test-instance-name-1"
+	testInstanceName2    = "test-instance-name-2"
+	testInstanceName3    = "test-instance-name-3"
+	testInstanceID       = "test-instance-id"
+	testBaseZone         = "test-region-zone"
+	testZone1            = "test-region-zone-1"
+	testZone2            = "test-region-zone-2"
+	testProjectID        = "test-project-id"
+)
+
 var (
 	cnf = &cnfpb.Configuration{
 		CloudProperties: &iipb.CloudProperties{
-			InstanceName: "test-instance-name",
-			InstanceId:   "test-instance-id",
-			Zone:         "test-region-zone",
-			ProjectId:    "test-project-id",
+			InstanceName: testBaseInstanceName,
+			InstanceId:   testInstanceID,
+			Zone:         testBaseZone,
+			ProjectId:    testProjectID,
 		},
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "29"
+	collectionConfigVersion = "30"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -67,9 +79,9 @@ func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) Work
 			Resource: &monitoredresourcepb.MonitoredResource{
 				Type: "gce_instance",
 				Labels: map[string]string{
-					"instance_id": "test-instance-id",
-					"zone":        "test-region-zone",
-					"project_id":  "test-project-id",
+					"instance_id": testInstanceID,
+					"zone":        testBaseZone,
+					"project_id":  testProjectID,
 				},
 			},
 			Points: []*mrpb.Point{{
@@ -203,7 +215,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"instance_name":               "test-instance-name",
+				"instance_name":               testBaseInstanceName,
 				"os":                          "debian-11",
 				"agent":                       "sapagent",
 				"agent_version":               "1.0",
@@ -219,6 +231,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"saptune":                     "active",
 				"has_app_server":              "false",
 				"app_server_zonal_separation": "false",
+				"has_ascs":                    "false",
+				"has_ers":                     "false",
 				"tuned":                       "active",
 				"collection_config_version":   collectionConfigVersion,
 			},
@@ -343,8 +357,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-2", "test-region-zone-3"},
-					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+					[]string{testBaseZone, testZone1, testZone2},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 				),
 			),
 			wantLabels: map[string]string{
@@ -363,8 +377,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS_APP_SERVER,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-2", "test-region-zone-3"},
-					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+					[]string{testBaseZone, testZone1, testZone2},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 				),
 			),
 			wantLabels: map[string]string{
@@ -383,8 +397,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-1", "test-region-zone-1"},
-					[]string{"instance-name-1", "instance-name-2", "instance-name-3"},
+					[]string{testBaseZone, testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 				),
 			),
 			wantLabels: map[string]string{
@@ -400,8 +414,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 					},
-					[]string{"test-region-zone-1"},
-					[]string{"instance-name-1"},
+					[]string{testBaseZone},
+					[]string{testInstanceName1},
 				),
 			),
 			wantLabels: map[string]string{
@@ -418,8 +432,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-1"},
-					[]string{"test-instance-name", "instance-name-1"},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testInstanceName1},
 				),
 			),
 			wantLabels: map[string]string{
@@ -436,8 +450,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-2"},
-					[]string{"instance-name-1", "instance-name-2"},
+					[]string{testBaseZone, testZone1},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -454,8 +468,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-1"},
-					[]string{"test-instance-name", "test-instance-name"},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -472,12 +486,155 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
-					[]string{"test-region-zone-1", "test-region-zone-1"},
-					[]string{"instance-name-1", "test-instance-name"},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
 				"has_app_server": "false",
+			},
+		},
+		{
+			name: "HasAscs_True",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ascs": "true",
+			},
+		},
+		{
+			name: "HasAscs_False_No_Ascs",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ascs": "false",
+			},
+		},
+		{
+			name: "HasAscs_False_Non_Compute_Resource",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ascs": "false",
+			},
+		},
+		{
+			name: "HasAscs_False_Different_Instance",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testInstanceName1},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ascs": "false",
+			},
+		},
+		{
+			name: "HasErs_True",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ers": "true",
+			},
+		},
+		{
+			name: "HasErs_False_No_Ers",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ers": "false",
+			},
+		},
+		{
+			name: "HasErs_False_Non_Compute_Resource",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+					},
+					[]string{testBaseZone},
+					[]string{testBaseInstanceName},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ers": "false",
+			},
+		},
+		{
+			name: "HasErs_False_Different_Instance",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
+				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_UNSPECIFIED,
+						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testInstanceName1},
+				),
+			),
+			wantLabels: map[string]string{
+				"has_ers": "false",
 			},
 		},
 	}
