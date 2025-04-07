@@ -37,6 +37,9 @@ import (
 const (
 	sapValidationSystem = "workload.googleapis.com/sap/validation/system"
 	zonesURIPart        = "zones"
+	appServerRoleString = "APP_SERVER"
+	ascsRoleString      = "ASCS"
+	ersRoleString       = "ERS"
 )
 
 var (
@@ -98,7 +101,11 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 	case wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION:
 		return fmt.Sprint(appServerZonalSeparation(ctx, params))
 	case wlmpb.SystemVariable_HAS_APP_SERVER:
-		return fmt.Sprint(hasAppServer(ctx, params))
+		return fmt.Sprint(hasInstanceRole(ctx, params, appServerRoleString))
+	case wlmpb.SystemVariable_HAS_ASCS:
+		return fmt.Sprint(hasInstanceRole(ctx, params, ascsRoleString))
+	case wlmpb.SystemVariable_HAS_ERS:
+		return fmt.Sprint(hasInstanceRole(ctx, params, ersRoleString))
 	default:
 		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
@@ -118,11 +125,11 @@ func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 			if r.GetResourceType() != spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE || r.GetResourceKind() != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 				continue
 			}
-			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") {
+			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), appServerRoleString) {
 				log.CtxLogger(ctx).Debugw("Found app server in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart))
 				appServerZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart)] = true
 			}
-			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ASCS") || strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "ERS") {
+			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), ascsRoleString) || strings.Contains(r.InstanceProperties.GetInstanceRole().String(), ersRoleString) {
 				log.CtxLogger(ctx).Debugw("Found central service in zone", "zone", clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart))
 				centralServiceZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart)] = true
 			}
@@ -137,8 +144,8 @@ func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 	return false
 }
 
-// hasAppServer checks if the instance the agent is running on is functioning as an application server.
-func hasAppServer(ctx context.Context, params Parameters) bool {
+// hasInstanceRole checks if the instance the agent is running on is functioning as an application server, ASCS, or ERS.
+func hasInstanceRole(ctx context.Context, params Parameters, role string) bool {
 	if params.Discovery == nil {
 		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
 		return false
@@ -147,14 +154,14 @@ func hasAppServer(ctx context.Context, params Parameters) bool {
 	for _, system := range params.Discovery.GetSAPSystems() {
 		for _, r := range system.GetApplicationLayer().GetResources() {
 			if r.GetResourceType() == spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
-				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), "APP_SERVER") && clouddiscovery.ExtractFromURI(r.GetResourceUri(), "instances") == instanceName {
-					log.CtxLogger(ctx).Debugw("Found app server running in the instance", "instanceName", instanceName)
+				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), role) && clouddiscovery.ExtractFromURI(r.GetResourceUri(), "instances") == instanceName {
+					log.CtxLogger(ctx).Debugw(fmt.Sprintf("Found %s running in the instance", role), "instanceName", instanceName)
 					return true
 				}
 			}
 		}
 	}
-	log.CtxLogger(ctx).Debugw("No app server found running in the instance", "instanceName", instanceName)
+	log.CtxLogger(ctx).Debugw(fmt.Sprintf("No %s found running in the instance", role), "instanceName", instanceName)
 	return false
 }
 

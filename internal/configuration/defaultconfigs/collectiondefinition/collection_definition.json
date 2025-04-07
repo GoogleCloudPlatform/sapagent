@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 29,
+    "version": 30,
     "validation_system": {
       "system_metrics": [
         {
@@ -67,6 +67,20 @@
             "label": "has_app_server"
           },
           "value": "HAS_APP_SERVER"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "has_ascs"
+          },
+          "value": "HAS_ASCS"
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "has_ers"
+          },
+          "value": "HAS_ERS"
         }
       ],
       "os_command_metrics": [
