@@ -23,5 +23,7 @@ option go_package = "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrlogback
 
 message LogBackupResponse {
   google.protobuf.BoolValue log_gap = 1;
+  // The point in time to which the log backup can be restored.
+  // Format: "YYYY-MM-DD HH24:MM:SS"
   string recovery_point = 2;
 }

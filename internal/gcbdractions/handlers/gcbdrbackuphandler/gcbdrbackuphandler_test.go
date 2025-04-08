@@ -46,7 +46,7 @@ func TestGCBDRBackupHandler(t *testing.T) {
 				CommandType: &gpb.Command_AgentCommand{
 					AgentCommand: &gpb.AgentCommand{
 						Parameters: map[string]string{
-							"operation-type":   "prepare",
+							"operation-type":   "gcbdr-backup-prepare",
 							"sid":              "sid",
 							"hdbuserstore-key": "userstorekey",
 						},

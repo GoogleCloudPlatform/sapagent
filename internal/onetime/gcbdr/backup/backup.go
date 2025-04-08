@@ -25,10 +25,13 @@ import (
 	"strings"
 
 	"flag"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"github.com/google/safetext/shsprintf"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	backuppb "github.com/GoogleCloudPlatform/sapagent/protos/gcbdrlogbackup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
@@ -138,11 +141,13 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute, runO
 		}
 	}
 	operationHandlers := map[string]operationHandler{
-		"prepare":   b.prepareHandler,
-		"freeze":    b.freezeHandler,
-		"unfreeze":  b.unfreezeHandler,
-		"logbackup": b.logbackupHandler,
-		"logpurge":  b.logpurgeHandler,
+		"gcbdr-backup-prepare":  b.prepareHandler,
+		"gcbdr-backup-freeze":   b.freezeHandler,
+		"gcbdr-backup-unfreeze": b.unfreezeHandler,
+		"gcbdr-backup-cleanup":  b.cleanupHandler,
+		"gcbdr-log-backup":      b.logbackupHandler,
+		"gcbdr-log-backuppost":  b.logbackuppostHandler,
+		"gcbdr-log-purge":       b.logpurgeHandler,
 	}
 	b.OperationType = strings.ToLower(b.OperationType)
 	handler, ok := operationHandlers[b.OperationType]
@@ -166,7 +171,7 @@ func (b *Backup) Run(ctx context.Context, exec commandlineexecutor.Execute, runO
 
 // prepareHandler executes the GCBDR CoreAPP script for prepare operation.
 func (b *Backup) prepareHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
-	cmd := fmt.Sprintf("%s %s -d %s -u %s -v %s", scriptPath, "prepare", b.SID, b.HDBUserstoreKey, b.hanaVersion)
+	cmd := fmt.Sprintf("%s %s -d %s -u %s -v %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.hanaVersion)
 	args := commandlineexecutor.Params{
 		Executable:  "/bin/bash",
 		ArgsToSplit: cmd,
@@ -188,7 +193,7 @@ func (b *Backup) freezeHandler(ctx context.Context, exec commandlineexecutor.Exe
 			Stderr:   fmt.Sprintf("failed to extract HANA version: %v", err),
 		}
 	}
-	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -v %s -p %s", scriptPath, "freeze", b.SID, b.HDBUserstoreKey, b.hanaVersion, b.DBPort)
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -v %s -p %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.DBPort)
 	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
 	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{
@@ -220,7 +225,32 @@ func (b *Backup) unfreezeHandler(ctx context.Context, exec commandlineexecutor.E
 			Stderr:   fmt.Sprintf("failed to extract HANA version: %v", err),
 		}
 	}
-	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -v %s -j %s -s %s -p %s", scriptPath, "unfreeze", b.SID, b.HDBUserstoreKey, b.hanaVersion, b.JobName, b.SnapshotStatus, b.DBPort)
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -v %s -j %s -s %s -p %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.JobName, b.SnapshotStatus, b.DBPort)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
+	args := commandlineexecutor.Params{
+		Executable:  "/bin/bash",
+		User:        sidAdm,
+		ArgsToSplit: cmd,
+	}
+	res := exec(ctx, args)
+	return &gpb.CommandResult{
+		ExitCode: int32(res.ExitCode),
+		Stdout:   res.StdOut,
+		Stderr:   res.StdErr,
+	}
+}
+
+// cleanupHandler executes the GCBDR CoreAPP script for cleanup operation.
+func (b *Backup) cleanupHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
+	if err := b.extractHANAVersion(ctx, exec); err != nil {
+		return &gpb.CommandResult{
+			ExitCode: -1,
+			Stdout:   fmt.Sprintf("failed to extract HANA version: %v", err),
+			Stderr:   fmt.Sprintf("failed to extract HANA version: %v", err),
+		}
+	}
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -v %s -p %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.hanaVersion, b.DBPort)
 	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
 	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{
@@ -238,7 +268,7 @@ func (b *Backup) unfreezeHandler(ctx context.Context, exec commandlineexecutor.E
 
 // logbackupHandler executes the GCBDR CoreAPP script for logbackup operation.
 func (b *Backup) logbackupHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
-	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -j %s", scriptPath, "logbackup", b.SID, b.HDBUserstoreKey, b.JobName)
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -j %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.JobName)
 	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
 	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{
@@ -252,6 +282,34 @@ func (b *Backup) logbackupHandler(ctx context.Context, exec commandlineexecutor.
 		Stdout:   res.StdOut,
 		Stderr:   res.StdErr,
 	}
+}
+
+// TODO: b/404203493 - Set the payload fields based on the script output. Also make sure parameters match the script's expectations.
+// logbackuppostHandler executes the GCBDR CoreAPP script for logbackuppost operation.
+func (b *Backup) logbackuppostHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -j %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.JobName)
+	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
+	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
+	args := commandlineexecutor.Params{
+		Executable:  "/bin/bash",
+		User:        sidAdm,
+		ArgsToSplit: cmd,
+	}
+	res := exec(ctx, args)
+	result := &gpb.CommandResult{
+		ExitCode: int32(res.ExitCode),
+		Stdout:   res.StdOut,
+		Stderr:   res.StdErr,
+	}
+	payload := &backuppb.LogBackupResponse{
+		LogGap:        &wpb.BoolValue{Value: false},
+		RecoveryPoint: "2025-04-08 18:00:00",
+	}
+	anyPayload, err := anypb.New(payload)
+	if err == nil {
+		result.Payload = anyPayload
+	}
+	return result
 }
 
 // logpurgeHandler executes the GCBDR CoreAPP script for logpurge operation.
@@ -270,7 +328,7 @@ func (b *Backup) logpurgeHandler(ctx context.Context, exec commandlineexecutor.E
 			Stderr:   fmt.Sprintf("failed to extract HANA version: %v", err),
 		}
 	}
-	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -C %d -v %s -t %s -l %d -b %s -p %s -n %t", scriptPath, "logpurge", b.SID, b.HDBUserstoreKey, b.CatalogBackupRetentionDays, b.hanaVersion, b.LogBackupEndPIT, b.ProductionLogRetentionHours, b.LastBackedUpDBNames, b.DBPort, b.NoLogPurge)
+	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -C %d -v %s -t %s -l %d -b %s -p %s -n %t", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.CatalogBackupRetentionDays, b.hanaVersion, b.LogBackupEndPIT, b.ProductionLogRetentionHours, b.LastBackedUpDBNames, b.DBPort, b.NoLogPurge)
 	cmd := fmt.Sprintf("-c 'source /usr/sap/%s/home/.sapenv.sh && %s'", strings.ToUpper(b.SID), scriptCMD)
 	sidAdm := fmt.Sprintf("%sadm", strings.ToLower(b.SID))
 	args := commandlineexecutor.Params{

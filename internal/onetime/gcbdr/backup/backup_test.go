@@ -142,14 +142,14 @@ func TestRun(t *testing.T) {
 		{
 			name: "InvalidParamsMissingSID",
 			b: Backup{
-				OperationType: "prepare",
+				OperationType: "gcbdr-backup-prepare",
 			},
 			wantExitCode: -1,
 		},
 		{
 			name: "InvalidParamsMissingHDBUserstoreKey",
 			b: Backup{
-				OperationType: "prepare",
+				OperationType: "gcbdr-backup-prepare",
 				SID:           "sid",
 			},
 			wantExitCode: -1,
@@ -166,7 +166,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "SuccessForPrepare",
 			b: Backup{
-				OperationType:   "prepare",
+				OperationType:   "gcbdr-backup-prepare",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
@@ -176,7 +176,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "SuccessForFreeze",
 			b: Backup{
-				OperationType:   "freeze",
+				OperationType:   "gcbdr-backup-freeze",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
@@ -186,7 +186,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "SuccessForUnfreeze",
 			b: Backup{
-				OperationType:   "unfreeze",
+				OperationType:   "gcbdr-backup-unfreeze",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 				JobName:         "jobname",
@@ -197,7 +197,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "SuccessForLogbackup",
 			b: Backup{
-				OperationType:   "logbackup",
+				OperationType:   "gcbdr-log-backup",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
@@ -207,7 +207,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "SuccessForLogpurge",
 			b: Backup{
-				OperationType:   "logpurge",
+				OperationType:   "gcbdr-log-purge",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 				LogBackupEndPIT: "2024-01-01 00:00:00",
@@ -218,7 +218,7 @@ func TestRun(t *testing.T) {
 		{
 			name: "CheckForCaseInsensitiveOperationType",
 			b: Backup{
-				OperationType:   "PREPARE",
+				OperationType:   "GCBDR-BACKUP-PREPARE",
 				SID:             "sid",
 				HDBUserstoreKey: "userstorekey",
 			},
@@ -394,6 +394,56 @@ func TestUnfreezeHandler(t *testing.T) {
 	}
 }
 
+func TestCleanupHandler(t *testing.T) {
+	tests := []struct {
+		name string
+		b    Backup
+		exec commandlineexecutor.Execute
+		want int32
+	}{
+		{
+			name: "VersionFailure",
+			b: Backup{
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecError,
+			want: -1,
+		},
+		{
+			name: "VersionSuccessButFreezeFailure",
+			b: Backup{
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(p.ArgsToSplit, "version") {
+					return fakeExecHANAVersion(ctx, p)
+				}
+				return fakeExecError(ctx, p)
+			},
+			want: 1,
+		},
+		{
+			name: "FreezeSuccess",
+			b: Backup{
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec: fakeExecHANAVersion,
+			want: 0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.b.cleanupHandler(context.Background(), tc.exec)
+			if got.GetExitCode() != tc.want {
+				t.Errorf("cleanupHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
+			}
+		})
+	}
+}
+
 func TestLogbackupHandler(t *testing.T) {
 	tests := []struct {
 		name string
@@ -426,6 +476,49 @@ func TestLogbackupHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.b.logbackupHandler(context.Background(), tc.exec); got.GetExitCode() != tc.want {
 				t.Errorf("logbackupHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
+			}
+		})
+	}
+}
+
+func TestLogbackuppostHandler(t *testing.T) {
+	tests := []struct {
+		name        string
+		b           Backup
+		exec        commandlineexecutor.Execute
+		want        int32
+		wantPayload bool
+	}{
+		{
+			name: "ScriptError",
+			b: Backup{
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec:        fakeExecError,
+			want:        1,
+			wantPayload: true,
+		},
+		{
+			name: "Success",
+			b: Backup{
+				SID:             "sid",
+				HDBUserstoreKey: "userstorekey",
+			},
+			exec:        fakeExecSuccess,
+			want:        0,
+			wantPayload: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.b.logbackuppostHandler(context.Background(), tc.exec)
+			if got.GetExitCode() != tc.want {
+				t.Errorf("logbackuppostHandler(%v) = %v, want %v", tc.b, got.GetExitCode(), tc.want)
+			}
+			gotPayload := got.GetPayload() != nil
+			if tc.wantPayload != gotPayload {
+				t.Errorf("logbackuppostHandler(%v) = %v, want payload = %v", tc.b, got.GetPayload(), tc.wantPayload)
 			}
 		})
 	}
