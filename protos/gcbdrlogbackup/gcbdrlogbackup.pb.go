@@ -41,8 +41,10 @@ type LogBackupResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	LogGap        *wrapperspb.BoolValue `protobuf:"bytes,1,opt,name=log_gap,json=logGap,proto3" json:"log_gap,omitempty"`
-	RecoveryPoint string                `protobuf:"bytes,2,opt,name=recovery_point,json=recoveryPoint,proto3" json:"recovery_point,omitempty"`
+	LogGap *wrapperspb.BoolValue `protobuf:"bytes,1,opt,name=log_gap,json=logGap,proto3" json:"log_gap,omitempty"`
+	// The point in time to which the log backup can be restored.
+	// Format: "YYYY-MM-DD HH24:MM:SS"
+	RecoveryPoint string `protobuf:"bytes,2,opt,name=recovery_point,json=recoveryPoint,proto3" json:"recovery_point,omitempty"`
 }
 
 func (x *LogBackupResponse) Reset() {
