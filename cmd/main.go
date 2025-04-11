@@ -78,6 +78,7 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 	// NOTE: The order of the commands here is the order they will be displayed in the help message.
 	//       Be sure to keep the ordering in ascending order by subcommand name.
 	d := &startdaemon.Daemon{}
+
 	scs := []subcommands.Command{
 		&aianalyze.AiAnalyzer{},
 		&backint.Backint{},
