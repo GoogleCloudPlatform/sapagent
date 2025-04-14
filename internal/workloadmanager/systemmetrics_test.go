@@ -65,7 +65,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "30"
+	collectionConfigVersion = "31"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -211,6 +211,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdOut: "Mem: 2000000000\nSwap: 1000000000",
 						}
 					}
+					if params.Executable == "uname" {
+						return commandlineexecutor.Result{
+							StdOut: "5.14.21-150400.24.63-default",
+						}
+					}
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -220,6 +225,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"agent":                       "sapagent",
 				"agent_version":               "1.0",
 				"network_ips":                 "192.168.0.1,192.168.0.2",
+				"os_kernel_version":           "5.14.21-150400.24.63-default",
 				"gcloud":                      "true",
 				"gsutil":                      "true",
 				"agent_state":                 "running",

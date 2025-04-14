@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 30,
+    "version": 31,
     "validation_system": {
       "system_metrics": [
         {
@@ -84,6 +84,30 @@
         }
       ],
       "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "os_kernel_version"
+          },
+          "os_vendor": "ALL",
+          "command": "uname",
+          "args": ["-r"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_output": true,
+              "output_source": "STDOUT"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",

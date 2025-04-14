@@ -391,7 +391,16 @@ func TestFromJSONFile(t *testing.T) {
 			name:   "IgnoreUnknownFields",
 			reader: func(string) ([]byte, error) { return collectionDefinitionWithUnknownFields, nil },
 			path:   LinuxConfigPath,
-			want:   wantCollectionDefinition1,
+			want: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					Version: 30,
+					ValidationCustom: &wlmpb.ValidationCustom{
+						OsCommandMetrics: []*cmpb.OSCommandMetric{
+							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "foo", cmpb.OSVendor_ALL),
+						},
+					},
+				},
+			},
 		},
 	}
 
