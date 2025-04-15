@@ -141,7 +141,7 @@ var (
 )
 
 func TestNewService_shouldValidateParameters(t *testing.T) {
-	var testData = []struct {
+	testData := []struct {
 		testName string
 		params   Parameters
 		want     error
@@ -243,7 +243,7 @@ func TestNewService_shouldValidateParameters(t *testing.T) {
 }
 
 func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T) {
-	var testData = []struct {
+	testData := []struct {
 		testName  string
 		health    bool
 		timestamp *tspb.Timestamp
@@ -391,7 +391,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 
 func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T) {
 
-	var testData = []struct {
+	testData := []struct {
 		testName  string
 		cpu       float64
 		memory    uint64
@@ -747,7 +747,7 @@ func TestStart_returnsImmediatelyIfNotConfigured(t *testing.T) {
 }
 
 func TestCollectAndSubmitLoop_respectsContextCancellation(t *testing.T) {
-	var testData = []struct {
+	testData := []struct {
 		testName  string
 		timeout   time.Duration
 		frequency int64 // seconds
