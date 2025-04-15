@@ -54,7 +54,11 @@ jobs:
         git config --global user.email 'bot@noreply.github.com'
         git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
         git add protos
-        git commit -m "Auto updated compiled protocol buffers" && git push || echo "No changes to commit"
+        if ! git commit -m "Auto updated compiled protocol buffers"; then
+            echo "No changes to commit."
+          else
+            git push
+        fi
 
     - name: Notify on failure
       if: ${{ failure() }}
