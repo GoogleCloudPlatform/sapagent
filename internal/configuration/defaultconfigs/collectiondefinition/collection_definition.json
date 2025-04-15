@@ -57,28 +57,32 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "app_server_zonal_separation"
+            "label": "app_server_zonal_separation",
+            "min_version": "3.8"
           },
           "value": "APP_SERVER_ZONAL_SEPARATION"
         },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "has_app_server"
+            "label": "has_app_server",
+            "min_version": "3.8"
           },
           "value": "HAS_APP_SERVER"
         },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "has_ascs"
+            "label": "has_ascs",
+            "min_version": "3.8"
           },
           "value": "HAS_ASCS"
         },
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/system",
-            "label": "has_ers"
+            "label": "has_ers",
+            "min_version": "3.8"
           },
           "value": "HAS_ERS"
         }
