@@ -57,7 +57,7 @@ message CollectionConfiguration {
   WorkloadValidationRemoteCollection workload_validation_remote_collection = 6;
   bool collect_experimental_metrics = 7;
   HANAMetricsConfig hana_metrics_config =
-      8;  // HANA DB user credentials for process metrics
+      8;  // HANA DB user credentials for process metrics.
   google.protobuf.BoolValue sap_system_discovery = 9 [deprecated = true];
   bool collect_agent_metrics = 10;
   int64 agent_metrics_frequency = 11;
@@ -66,7 +66,7 @@ message CollectionConfiguration {
   int64 agent_health_frequency = 14;
   int64 workload_validation_db_metrics_frequency = 15;
   HANAMetricsConfig workload_validation_db_metrics_config =
-      16;  // HANA DB user credentials for WLM DB based metrics
+      16;  // HANA DB user credentials for WLM DB based metrics.
   string data_warehouse_endpoint = 17;
   int64 slow_process_metrics_frequency = 18;
   repeated string process_metrics_to_skip =
@@ -105,7 +105,7 @@ message RemoteCollectionInstance {
 
 message RemoteCollectionGcloud {
   // user that will be used when issue gcloud ssh commands, if omitted then the
-  // owner of the systemd service is used, usually root
+  // owner of the systemd service is used, usually root.
   string ssh_username = 1;
   bool use_internal_ip = 2;
   bool tunnel_through_iap = 3;
@@ -144,7 +144,7 @@ message HANAMonitoringConfiguration {
   bool enabled = 6;
   bool send_query_response_time = 7;
   // If provided, a connection will try to be established to the HANA database
-  // before starting the queries.
+  // before running the queries.
   google.protobuf.Duration connection_timeout = 8;
   google.protobuf.Int32Value max_connect_retries = 9;
 }
