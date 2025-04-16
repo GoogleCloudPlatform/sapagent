@@ -466,7 +466,7 @@ type CollectionConfiguration struct {
 	ProcessMetricsSendFrequency        int64                               `protobuf:"varint,5,opt,name=process_metrics_send_frequency,json=processMetricsSendFrequency,proto3" json:"process_metrics_send_frequency,omitempty"`
 	WorkloadValidationRemoteCollection *WorkloadValidationRemoteCollection `protobuf:"bytes,6,opt,name=workload_validation_remote_collection,json=workloadValidationRemoteCollection,proto3" json:"workload_validation_remote_collection,omitempty"`
 	CollectExperimentalMetrics         bool                                `protobuf:"varint,7,opt,name=collect_experimental_metrics,json=collectExperimentalMetrics,proto3" json:"collect_experimental_metrics,omitempty"`
-	HanaMetricsConfig                  *HANAMetricsConfig                  `protobuf:"bytes,8,opt,name=hana_metrics_config,json=hanaMetricsConfig,proto3" json:"hana_metrics_config,omitempty"` // HANA DB user credentials for process metrics
+	HanaMetricsConfig                  *HANAMetricsConfig                  `protobuf:"bytes,8,opt,name=hana_metrics_config,json=hanaMetricsConfig,proto3" json:"hana_metrics_config,omitempty"` // HANA DB user credentials for process metrics.
 	// Deprecated: Marked as deprecated in protos/configuration/configuration.proto.
 	SapSystemDiscovery                   *wrapperspb.BoolValue `protobuf:"bytes,9,opt,name=sap_system_discovery,json=sapSystemDiscovery,proto3" json:"sap_system_discovery,omitempty"`
 	CollectAgentMetrics                  bool                  `protobuf:"varint,10,opt,name=collect_agent_metrics,json=collectAgentMetrics,proto3" json:"collect_agent_metrics,omitempty"`
@@ -475,7 +475,7 @@ type CollectionConfiguration struct {
 	MissedHeartbeatThreshold             int64                 `protobuf:"varint,13,opt,name=missed_heartbeat_threshold,json=missedHeartbeatThreshold,proto3" json:"missed_heartbeat_threshold,omitempty"`
 	AgentHealthFrequency                 int64                 `protobuf:"varint,14,opt,name=agent_health_frequency,json=agentHealthFrequency,proto3" json:"agent_health_frequency,omitempty"`
 	WorkloadValidationDbMetricsFrequency int64                 `protobuf:"varint,15,opt,name=workload_validation_db_metrics_frequency,json=workloadValidationDbMetricsFrequency,proto3" json:"workload_validation_db_metrics_frequency,omitempty"`
-	WorkloadValidationDbMetricsConfig    *HANAMetricsConfig    `protobuf:"bytes,16,opt,name=workload_validation_db_metrics_config,json=workloadValidationDbMetricsConfig,proto3" json:"workload_validation_db_metrics_config,omitempty"` // HANA DB user credentials for WLM DB based metrics
+	WorkloadValidationDbMetricsConfig    *HANAMetricsConfig    `protobuf:"bytes,16,opt,name=workload_validation_db_metrics_config,json=workloadValidationDbMetricsConfig,proto3" json:"workload_validation_db_metrics_config,omitempty"` // HANA DB user credentials for WLM DB based metrics.
 	DataWarehouseEndpoint                string                `protobuf:"bytes,17,opt,name=data_warehouse_endpoint,json=dataWarehouseEndpoint,proto3" json:"data_warehouse_endpoint,omitempty"`
 	SlowProcessMetricsFrequency          int64                 `protobuf:"varint,18,opt,name=slow_process_metrics_frequency,json=slowProcessMetricsFrequency,proto3" json:"slow_process_metrics_frequency,omitempty"`
 	ProcessMetricsToSkip                 []string              `protobuf:"bytes,19,rep,name=process_metrics_to_skip,json=processMetricsToSkip,proto3" json:"process_metrics_to_skip,omitempty"` // List of process metrics to skip during metrics collection
@@ -912,7 +912,7 @@ type RemoteCollectionGcloud struct {
 	unknownFields protoimpl.UnknownFields
 
 	// user that will be used when issue gcloud ssh commands, if omitted then the
-	// owner of the systemd service is used, usually root
+	// owner of the systemd service is used, usually root.
 	SshUsername      string `protobuf:"bytes,1,opt,name=ssh_username,json=sshUsername,proto3" json:"ssh_username,omitempty"`
 	UseInternalIp    bool   `protobuf:"varint,2,opt,name=use_internal_ip,json=useInternalIp,proto3" json:"use_internal_ip,omitempty"`
 	TunnelThroughIap bool   `protobuf:"varint,3,opt,name=tunnel_through_iap,json=tunnelThroughIap,proto3" json:"tunnel_through_iap,omitempty"`
@@ -1197,7 +1197,7 @@ type HANAMonitoringConfiguration struct {
 	Enabled               bool            `protobuf:"varint,6,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	SendQueryResponseTime bool            `protobuf:"varint,7,opt,name=send_query_response_time,json=sendQueryResponseTime,proto3" json:"send_query_response_time,omitempty"`
 	// If provided, a connection will try to be established to the HANA database
-	// before starting the queries.
+	// before running the queries.
 	ConnectionTimeout *durationpb.Duration   `protobuf:"bytes,8,opt,name=connection_timeout,json=connectionTimeout,proto3" json:"connection_timeout,omitempty"`
 	MaxConnectRetries *wrapperspb.Int32Value `protobuf:"bytes,9,opt,name=max_connect_retries,json=maxConnectRetries,proto3" json:"max_connect_retries,omitempty"`
 }
