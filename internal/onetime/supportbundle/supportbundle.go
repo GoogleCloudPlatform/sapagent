@@ -21,10 +21,12 @@ package supportbundle
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path"
 	"regexp"
@@ -33,27 +35,30 @@ import (
 	"time"
 
 	"flag"
-	st "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
+
+	st "cloud.google.com/go/storage"
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 type (
 	// SupportBundle has args for support bundle collection one time mode.
 	SupportBundle struct {
-		Sid                    string                        `json:"sid"`
-		InstanceNums           string                        `json:"instance-numbers"`
-		instanceNumsAfterSplit []string                      `json:"-"`
-		Hostname               string                        `json:"hostname"`
-		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
-		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
+		Sid                    string   `json:"sid"`
+		InstanceNums           string   `json:"instance-numbers"`
+		instanceNumsAfterSplit []string `json:"-"`
+		Hostname               string   `json:"hostname"`
+		PacemakerDiagnosis     bool     `json:"pacemaker-diagnosis,string"`
+		AgentLogsOnly          bool     `json:"agent-logs-only,string"`
+		rest                   RestService
 		Help                   bool                          `json:"help,string"`
 		LogLevel               string                        `json:"loglevel"`
 		ResultBucket           string                        `json:"result-bucket"`
@@ -71,6 +76,39 @@ type (
 
 	// getReaderWriter is a function to get the reader writer for uploading the file.
 	getReaderWriter func(rw storage.ReadWriter) uploader
+
+	// RestService is the interface for rest.Rest.
+	RestService interface {
+		NewRest()
+		GetResponse(ctx context.Context, method string, baseURL string, data []byte) ([]byte, error)
+	}
+	// httpClient is the interface for http.Client.
+	httpClient interface {
+		Do(req *http.Request) (*http.Response, error)
+	}
+
+	// EntriesResponse is the response for listEntries which mirrors the proto.
+	EntriesResponse struct {
+		Entries       []Entry `json:"entries"`
+		NextPageToken string  `json:"nextPageToken"`
+	}
+
+	// Entry is the entry for listEntries which mirrors the proto.
+	Entry struct {
+		InsertID         string      `json:"insertId"`
+		JSONPayload      JSONPayload `json:"jsonPayload"`
+		Resource         any         `json:"resource"`
+		Timestamp        string      `json:"timestamp"`
+		Severity         string      `json:"severity"`
+		LogName          string      `json:"logName"`
+		ReceiveTimestamp string      `json:"receiveTimestamp"`
+	}
+
+	// JSONPayload is the payload for the entry which mirrors the proto.
+	JSONPayload struct {
+		Type      string `json:"type"`
+		Discovery string `json:"discovery"`
+	}
 )
 
 // NewWriter is testable version of zip.NewWriter method.
@@ -105,6 +143,7 @@ const (
 	backintErrorsFile     = `_BACKINT_ERROR.txt`
 	globalINIFile         = `/custom/config/global.ini`
 	backintGCSPath        = `/opt/backint/backint-gcs`
+	sapDiscoveryFile      = `sapdiscovery.json`
 )
 
 // Name implements the subcommand interface for collecting support bundle report collection for support team.
@@ -163,7 +202,7 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 // Run executes the command and returns the message and exit status.
 func (s *SupportBundle) Run(ctx context.Context, opts *onetime.RunOptions, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	return s.supportBundleHandler(ctx, destFilePathPrefix, exec, filesystem.Helper{}, zipperHelper{})
+	return s.supportBundleHandler(ctx, destFilePathPrefix, exec, filesystem.Helper{}, zipperHelper{}, opts.CloudProperties)
 }
 
 // CollectAgentSupport collects the agent support bundle on the local machine.
@@ -179,7 +218,7 @@ func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters
 	return s.Execute(ctx, f, lp, cp)
 }
 
-func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper) (string, subcommands.ExitStatus) {
+func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
@@ -248,8 +287,16 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 	}
 
-	var successMsgs []string
+	if !s.AgentLogsOnly {
+		baseURL := "https://logging.googleapis.com/v2/entries:list"
+		if err := s.collectSapDiscovery(ctx, baseURL, destFilesPath, cp, fs); err != nil {
+			errMessage := "Error while collecting GCP Agent for SAP's Discovery data"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			failureMsgs = append(failureMsgs, errMessage)
+		}
+	}
 
+	var successMsgs []string
 	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, bundlename)
 	if err := zipSource(destFilesPath, zipfile, fs, z); err != nil {
 		errMessage := fmt.Sprintf("Error while zipping destination folder %s", destFilesPath)
@@ -800,12 +847,90 @@ func (s *SupportBundle) fetchSystemDServices(ctx context.Context, destFilesPath,
 	return s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, "systemd_services.txt", fu)
 }
 
+// collectSapDiscovery collects the SAP Discovery logs from cloud logging.
+func (s *SupportBundle) collectSapDiscovery(ctx context.Context, baseURL, destFilePathPrefix string, cp *ipb.CloudProperties, fs filesystem.FileSystem) (err error) {
+	// Read from cloud logging
+	logName := fmt.Sprintf("logName=\"projects/%s/logs/google-cloud-sap-agent\"", cp.GetProjectId())
+	resourceFilter := fmt.Sprintf("resource.type=\"gce_instance\" AND resource.labels.instance_id=\"%s\"", cp.GetInstanceId())
+	sapDiscoverFilter := "jsonPayload.type=\"SapDiscovery\""
+	timestampFilter := fmt.Sprintf("timestamp>=\"%s\"", time.Now().Add(-24*time.Hour).Format(time.RFC3339))
+
+	filter := fmt.Sprintf("%s AND %s AND %s AND %s", logName, resourceFilter, sapDiscoverFilter, timestampFilter)
+	log.CtxLogger(ctx).Infof("Filter: %s", filter)
+
+	discovery, err := s.queryDiscovery(ctx, baseURL, filter, cp.GetProjectId())
+	if err != nil {
+		return err
+	}
+
+	f, err := fs.Create(fmt.Sprintf("%s/%s", destFilePathPrefix, sapDiscoveryFile))
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while creating file", "err", err)
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write([]byte(discovery))
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while writing to file", "err", err)
+		return err
+	}
+	return nil
+}
+
+// queryDiscovery queries the discovery logs from cloud logging.
+func (s *SupportBundle) queryDiscovery(ctx context.Context, baseURL, filter, project string) (string, error) {
+	request := struct {
+		ResourceNames []string `json:"resourceNames"`
+		Filter        string   `json:"filter"`
+		OrderBy       string   `json:"orderBy"`
+		PageSize      int      `json:"pageSize"`
+	}{
+		ResourceNames: []string{fmt.Sprintf("projects/%s", project)},
+		Filter:        filter,
+		OrderBy:       "timestamp desc",
+		PageSize:      1,
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while marshaling JSON", "err", err)
+		return "", err
+	}
+	data := []byte(string(jsonData))
+
+	bodyBytes, err := s.rest.GetResponse(ctx, "POST", baseURL, data)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while getting response", "err", err)
+		return "", err
+	}
+
+	var entriesResponse EntriesResponse
+	err = json.Unmarshal(bodyBytes, &entriesResponse)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Error while unmarshaling JSON", "err", err)
+		return "", err
+	}
+
+	var entry Entry
+	if len(entriesResponse.Entries) == 0 {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "No entries found, could not discover SAP Landscape configuration")
+		return "", fmt.Errorf("no entries found, could not discover SAP Landscape configuration")
+	}
+	entry = entriesResponse.Entries[0]
+	discovery := entry.JSONPayload.Discovery
+
+	return discovery, nil
+}
+
 func (s *SupportBundle) validateParams() []string {
 	var errs []string
 	if s.AgentLogsOnly {
 		return errs
 	}
+	fmt.Println("sid: ", s.Sid)
 	if s.Sid == "" {
+		fmt.Println("no value provided for sid")
 		errs = append(errs, "no value provided for sid")
 	}
 	if s.InstanceNums == "" {
@@ -821,6 +946,10 @@ func (s *SupportBundle) validateParams() []string {
 	if s.Hostname == "" {
 		errs = append(errs, "no value provided for hostname")
 	}
+
+	s.rest = &rest.Rest{}
+	s.rest.NewRest()
+
 	return errs
 }
 

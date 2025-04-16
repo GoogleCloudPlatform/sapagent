@@ -19,10 +19,13 @@ package supportbundle
 import (
 	"archive/zip"
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"io/fs"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"slices"
@@ -34,6 +37,7 @@ import (
 	st "cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
@@ -41,11 +45,40 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
+
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
-var defaultRunOptions = onetime.CreateRunOptions(nil, false)
-var defaultOTELogger = onetime.CreateOTELogger(false)
+var (
+	defaultRunOptions      = onetime.CreateRunOptions(nil, false)
+	defaultOTELogger       = onetime.CreateOTELogger(false)
+	defaultCloudProperties = &ipb.CloudProperties{
+		ProjectId:  "sample-project",
+		InstanceId: "123456789",
+	}
+
+	defaultNewClient = func(timeout time.Duration, trans *http.Transport) httpClient {
+		return &http.Client{Timeout: timeout, Transport: trans}
+	}
+	defaultTransport = func() *http.Transport {
+		return &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxConnsPerHost:       100,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       10 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		}
+	}
+
+	//go:embed testdata/sample_sap_discovery_response.txt
+	sampleDiscoveryResponse string
+	//go:embed testdata/wanted_discovery.txt
+	discoveryResponse string
+)
 
 func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
@@ -79,6 +112,15 @@ type (
 	}
 
 	mockedWriter struct {
+		err error
+	}
+
+	mockToken struct {
+		token *oauth2.Token
+		err   error
+	}
+
+	mockRest struct {
 		err error
 	}
 )
@@ -172,6 +214,13 @@ func (mfu mockedfilesystem) Create(path string) (*os.File, error) {
 	if strings.Contains(path, "failure") {
 		return nil, cmpopts.AnyError
 	}
+	if strings.Contains(path, "sap-discovery-success") {
+		f, err := os.CreateTemp(os.TempDir(), "sap-discovery-success")
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
+	}
 	return &os.File{}, nil
 }
 
@@ -249,6 +298,16 @@ func (mz mockedZipper) Close(w *zip.Writer) error {
 func (f *fakeReadWriter) Upload(ctx context.Context) (int64, error) {
 	return 0, f.err
 }
+
+func (m *mockToken) Token() (*oauth2.Token, error) {
+	return m.token, m.err
+}
+
+func (m *mockRest) GetResponse(ctx context.Context, url string) ([]byte, error) {
+	return nil, m.err
+}
+
+func (m *mockRest) NewRest() {}
 
 func fakeExec(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
 	if p.ArgsToSplit == "error" {
@@ -429,7 +488,7 @@ func TestCollectAgentSupport(t *testing.T) {
 		{
 			name: "Failure",
 			sosr: &SupportBundle{
-				AgentLogsOnly: true,
+				Sid: "",
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -558,9 +617,10 @@ func TestSOSReportHandler(t *testing.T) {
 		{
 			name: "Success",
 			sosr: &SupportBundle{
-				Sid:          "DEH",
-				InstanceNums: "00 11",
-				Hostname:     "sample_host",
+				Sid:           "DEH",
+				InstanceNums:  "00 11",
+				Hostname:      "sample_host",
+				AgentLogsOnly: true,
 			},
 			destFilePrefix: "samplefile",
 			ctx:            context.Background(),
@@ -583,6 +643,7 @@ func TestSOSReportHandler(t *testing.T) {
 				Sid:                "DEH",
 				InstanceNums:       "00 11",
 				Hostname:           "sample_host",
+				AgentLogsOnly:      true,
 				PacemakerDiagnosis: true,
 			},
 			destFilePrefix: "samplefile",
@@ -605,7 +666,7 @@ func TestSOSReportHandler(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.sosr.oteLogger = defaultOTELogger
-			message, exitStatus := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z)
+			message, exitStatus := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z, defaultCloudProperties)
 			if !strings.Contains(message, test.wantMessage) || exitStatus != test.wantExitStatus {
 				t.Errorf("sosReportHandler() = %v, %v; want %v, %v", message, exitStatus, test.wantMessage, test.wantExitStatus)
 			}
@@ -1964,6 +2025,297 @@ func TestFetchSystemDServicesErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if gotErr := sosr.fetchSystemDServices(context.Background(), tc.destFilesPath, tc.hostname, tc.exec, tc.fu); !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("fetchSystemDServices(%q, %q, %v, %v) returned an unexpected error: %v", tc.destFilesPath, tc.hostname, tc.exec, tc.fu, gotErr)
+			}
+		})
+	}
+}
+
+func TestCollectSapDiscoveryErrors(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/test/success":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, sampleDiscoveryResponse)
+		case "/test/error":
+			hj, _ := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			conn.Close()
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	tests := []struct {
+		name               string
+		s                  *SupportBundle
+		baseURL            string
+		destFilePathPrefix string
+		cp                 *ipb.CloudProperties
+		fs                 filesystem.FileSystem
+		wantErr            error
+	}{
+		{
+			name: "QueryDiscoveryError",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/error",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "CreateFileError",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/success",
+			destFilePathPrefix: "failure",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/success",
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.s.collectSapDiscovery(ctx, tc.baseURL, tc.destFilePathPrefix, tc.cp, tc.fs)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("collectSapDiscovery(%q, %v, %v) returned an unexpected error: %v", tc.destFilePathPrefix, tc.cp, tc.fs, diff)
+			}
+		})
+	}
+}
+
+func TestQueryDiscovery(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/test/success":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, sampleDiscoveryResponse)
+		case "/test/error":
+			hj, _ := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			conn.Close()
+		case "/test/error_response":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error": {"code": 404, "message": "Project does not exist: core-connect-dev-a", "status": "NOT_FOUND"}}`)
+		case "/test/empty_entries_1":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"nextPageToken": "eo8BCooBAfQucPiUM0WFCK4rapeQ61o35Yt3tvyb0ijSOsy2KD5jfiyCEK2A3ekvvpNJhKPP5HMnc0fQlBLPXxtwSRbu2g2rIMv7cBGVxRaNAtPgW4YSo6E1UTRzS-wNX7-wLaRw2EHeyRzVeHhMAahmcoFBDaprD453wWtjVsMbYCOelakVjDN7wZhqyQ4gEAA"}`)
+		case "/test/empty_entries_2":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{}`)
+		case "/test/empty_entries_3":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"entries": []"}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	tests := []struct {
+		name          string
+		s             *SupportBundle
+		baseURL       string
+		filter        string
+		project       string
+		wantDiscovery string
+		wantError     error
+	}{
+		{
+			name: "GetResponseError1",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/error",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: "",
+			wantError:     cmpopts.AnyError,
+		},
+		{
+			name: "GetResponseError2",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/error_response",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: "",
+			wantError:     cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntries1",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/empty_entries_1",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: "",
+			wantError:     cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntries2",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/empty_entries_2",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: "",
+			wantError:     cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntries3",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/empty_entries_3",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: "",
+			wantError:     cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:       ts.URL + "/test/success",
+			filter:        "test",
+			project:       "test-project",
+			wantDiscovery: strings.TrimSpace(discoveryResponse),
+			wantError:     nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			got, err := tc.s.queryDiscovery(ctx, tc.baseURL, tc.filter, tc.project)
+			if diff := cmp.Diff(got, fmt.Sprintf("%s", tc.wantDiscovery)); diff != "" {
+				t.Errorf("queryDiscovery() returned diff (-want +got):\n%s", diff)
+			}
+			if !cmp.Equal(err, tc.wantError, cmpopts.EquateErrors()) {
+				t.Errorf("queryDiscovery(%q) returned an unexpected error: %v", tc.filter, err)
 			}
 		})
 	}

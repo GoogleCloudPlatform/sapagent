@@ -1,0 +1,153 @@
+{
+  "databaseLayer": {
+    "resources": [
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_ADDRESS",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/regions/us-central1/addresses/sample-vm",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:47.081931524Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_NETWORK",
+        "resourceKind": "RESOURCE_KIND_SUBNETWORK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/regions/us-central1/subnetworks/default",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:45.403258475Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_INSTANCE",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-boot00001",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-data00001-01",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-data00001-02",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-log00001",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-shared00001",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-usrsap00001",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-backup",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/global/networks/default",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/regions/us-central1/subnetworks/default",
+          "https://www.googleapis.com/compute/v1/projects/sample-project/regions/us-central1/addresses/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:31.882312366Z",
+        "instanceProperties": {
+          "virtualHostname": "sample-vm",
+          "instanceNumber": "123458690123",
+          "instanceRole": "INSTANCE_ROLE_DATABASE",
+          "diskMounts": [
+            {
+              "mountPoint": "basepath_logvolumes",
+              "diskNames": [
+                "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-log00001"
+              ]
+            },
+            {
+              "mountPoint": "basepath_logbackup",
+              "diskNames": [
+                "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-backup"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-boot00001",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:31.985833028Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-data00001-01",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.069553372Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-data00001-02",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.160459537Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-log00001",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.255821562Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-shared00001",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.342981085Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-usrsap00001",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.435292655Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_COMPUTE",
+        "resourceKind": "RESOURCE_KIND_DISK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/disks/sample-vm-backup",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.514007234Z"
+      },
+      {
+        "resourceType": "RESOURCE_TYPE_NETWORK",
+        "resourceKind": "RESOURCE_KIND_NETWORK",
+        "resourceUri": "https://www.googleapis.com/compute/v1/projects/sample-project/global/networks/default",
+        "relatedResources": [
+          "https://www.googleapis.com/compute/v1/projects/sample-project/zones/us-central1-a/instances/sample-vm"
+        ],
+        "updateTime": "2025-04-14T03:41:32.711114214Z"
+      }
+    ],
+    "databaseProperties": {
+      "databaseType": "HANA",
+      "databaseVersion": "HANA 2.0 Rev 70",
+      "instanceNumber": "00",
+      "databaseSid": "HDB",
+      "landscapeId": "7e184639-dd8f-b946-bdee-dd5e651b920e"
+    },
+    "hostProject": "123458690123",
+    "sid": "HDB",
+    "topologyType": "TOPOLOGY_SCALE_UP"
+  },
+  "updateTime": "2025-04-14T03:41:48.323952587Z",
+  "projectNumber": "123458690123",
+  "workloadProperties": {
+    "productVersions": [
+      {
+        "name": "SAP HANA",
+        "version": "2.0 SPS07 Rev70.00"
+      }
+    ]
+  }
+}
