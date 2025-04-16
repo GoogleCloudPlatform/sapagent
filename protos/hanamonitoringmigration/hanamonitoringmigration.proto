@@ -54,10 +54,10 @@ message HANAInstance {
   string host_name_in_certificate = 10;
   int64 connections = 11;
   string key_store = 12;
-  string key_store_password = 13;
+  string key_store_password = 13 ;
   string key_store_secret_name = 14;
   string trust_store = 15;
-  string trust_store_password = 16;
+  string trust_store_password = 16 ;
   string trust_store_secret_name = 17;
 }
 
