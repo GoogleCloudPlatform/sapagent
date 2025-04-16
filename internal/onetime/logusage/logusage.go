@@ -49,9 +49,9 @@ func (*LogUsage) Synopsis() string { return "invoke usage status logging" }
 
 // Usage implements the subcommand interface for logusage.
 func (*LogUsage) Usage() string {
-	return `Usage: logusage [-name <tool or agent name>] [-av <tool or agent version>]
-	[-status <RUNNING|INSTALLED|...>] [-action <integer action code>] [-error <integer error code>]
-	[-image <image URL of the compute instance>] [-log-path <log-path>] [-h]` + "\n"
+	return `Usage: logusage [--name <tool or agent name>] [--av <tool or agent version>]
+	[--status <RUNNING|INSTALLED|...>] [--action <integer action code>] [--error <integer error code>]
+	[--image <image URL of the compute instance>] [--log-path <log-path>] [-h]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for logusage.
