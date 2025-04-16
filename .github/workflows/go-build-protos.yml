@@ -66,4 +66,4 @@ jobs:
       with:
         to: 'sapagent-github-dev@google.com'
         subject: '[Failure] GitHub Agent for SAP Protocol Buffer Build and Commit failed'
-        body: 'There was a failure for the GitHub Agent for SAP workflow go-build-protos action.\n\n https://github.com/GoogleCloudPlatform/sapagent/actions/runs/${{ github.run_id }}'
+        body: 'There was a failure for the GitHub Agent for SAP workflow go-build-protos action.\n\n https://github.com/GoogleCloudPlatform/sapagent/actions/runs/${{ github.run_id }}/jobs/${{ github.job }}'
