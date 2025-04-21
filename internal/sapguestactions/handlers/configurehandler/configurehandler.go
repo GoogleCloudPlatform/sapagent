@@ -20,9 +20,9 @@ package configurehandler
 import (
 	"context"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"

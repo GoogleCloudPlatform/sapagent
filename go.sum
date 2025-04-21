@@ -41,10 +41,10 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.49.0/go.mod h1:l2fIqmwB+FKSfvn3bAD/0i+AXAxhIZjTK2svT/mgUXs=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 h1:GYUJLfvd++4DMuMhCFLgLXvFwofIxh/qOwoGuS/LTew=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0/go.mod h1:wRbFgBQUVm1YXrvWKofAEmq9HNJTDphbAaJSSX01KUI=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250324170036-9415bc1e0e46 h1:wiYTUGiD9dy+e3q4A90miqWFhGzg5yIKsQ066Ce6Q3A=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250324170036-9415bc1e0e46/go.mod h1:JWg3Gcbir6VMDl8ILpeFI4FoIeU3qftKZ7muCsy5U78=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250324170036-9415bc1e0e46 h1:nmYPSPeJiHrJELK7cQoC51err3SBaVHMi5J4vcCCIAY=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250324170036-9415bc1e0e46/go.mod h1:SI7fYmbniDIoVITS6rG9iqA2omufwj8GrkFu/EarxkE=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250421133725-67aaeb509d6e h1:2X0roGgmgg9S/13HCK96lgoiXajp0BArR0EQmPxYsug=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250421133725-67aaeb509d6e/go.mod h1:JWg3Gcbir6VMDl8ILpeFI4FoIeU3qftKZ7muCsy5U78=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250421133725-67aaeb509d6e h1:3BSS49oA/3GPbJr0GA5Kpnrvh8uLHhxS+DjhXIdM+QE=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250421133725-67aaeb509d6e/go.mod h1:SI7fYmbniDIoVITS6rG9iqA2omufwj8GrkFu/EarxkE=
 github.com/SAP/go-hdb v1.12.12 h1:pZtsnUU7VNNobksc13F5pGr7W3abiJq/W4v7g7GZpKk=
 github.com/SAP/go-hdb v1.12.12/go.mod h1:R6RDbzvPk9gTraxYbzfNcy3XRp3vXFGd5vEopvzr0zQ=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=

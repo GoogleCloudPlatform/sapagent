@@ -22,9 +22,9 @@ import (
 	"os"
 
 	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"

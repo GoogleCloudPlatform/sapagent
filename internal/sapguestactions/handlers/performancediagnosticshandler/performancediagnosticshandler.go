@@ -14,16 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package supportbundlehandler implements the handler for the support bundle command.
-package supportbundlehandler
+// Package performancediagnosticshandler contains the handler for the performance diagnostics command.
+package performancediagnosticshandler
 
 import (
 	"context"
 
-	"google.golang.org/protobuf/encoding/prototext"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -33,20 +32,19 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// SupportBundleHandler is the handler for support bundle command.
-func SupportBundleHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
+// PerformanceDiagnosticsHandler is the handler for the performance diagnostics command.
+func PerformanceDiagnosticsHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	return runCommand(ctx, command, cp, commandlineexecutor.ExecuteCommand)
 }
 
 func runCommand(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties, exec commandlineexecutor.Execute) *gpb.CommandResult {
-	usagemetrics.Action(usagemetrics.UAPSupportBundleCommand)
-	log.CtxLogger(ctx).Debugw("Support bundle handler called.", "command", prototext.Format(command))
-	sb := &supportbundle.SupportBundle{}
-	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), sb)
-	msg, exitStatus := sb.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), exec)
+	usagemetrics.Action(usagemetrics.UAPPerformanceDiagnosticsCommand)
+	d := &performancediagnostics.Diagnose{}
+	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), d)
+	message, exitStatus := d.Run(ctx, log.Parameters{}, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), exec)
 	result := &gpb.CommandResult{
 		Command:  command,
-		Stdout:   msg,
+		Stdout:   message,
 		ExitCode: int32(exitStatus),
 	}
 	return result

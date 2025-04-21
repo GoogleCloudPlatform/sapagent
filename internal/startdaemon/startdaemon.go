@@ -43,7 +43,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
@@ -52,6 +51,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
@@ -473,10 +473,7 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
 	// Start Guest Actions ACS Communication with a separate new context (not impacted by cancels).
 	guestActionsCtx := log.SetCtx(context.Background(), "context", "GuestActions")
-	ga := guestactions.GuestActions{
-		CancelFunc: cancel,
-	}
-	ga.StartACSCommunication(guestActionsCtx, d.config)
+	sapguestactions.StartACSCommunication(guestActionsCtx, d.config)
 }
 
 func (d *Daemon) startGCBDRActions() {

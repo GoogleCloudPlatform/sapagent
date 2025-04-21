@@ -14,31 +14,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package hanadiskbackuphandler contains the handler for the hanadiskbackup command.
-package hanadiskbackuphandler
+// Package backinthandler implements the handler for the backint command.
+package backinthandler
 
 import (
 	"context"
 
-	"github.com/GoogleCloudPlatform/sapagent/internal/guestactions/handlers"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
-// HANADiskBackupHandler is the handler for the hanadiskbackup command.
-func HANADiskBackupHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
-	usagemetrics.Action(usagemetrics.UAPHANADiskBackupCommand)
-	s := &hanadiskbackup.Snapshot{}
-	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), s)
-	message, exitStatus := s.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
+// BackintHandler is the handler for the backint command.
+func BackintHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
+	usagemetrics.Action(usagemetrics.UAPBackintCommand)
+	log.CtxLogger(ctx).Debugw("Handling command", "command", command)
+	b := &backint.Backint{}
+	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), b)
+	msg, exitStatus := b.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
+	log.CtxLogger(ctx).Debugw("Handled command result", "msg", msg, "exitStatus", exitStatus)
 	result := &gpb.CommandResult{
 		Command:  command,
-		Stdout:   message,
+		Stdout:   msg,
 		ExitCode: int32(exitStatus),
 	}
 	return result
