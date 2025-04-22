@@ -343,7 +343,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if s.ProcessMetrics {
-		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, "/tmp/google-cloud-sap-agent", cp, fs); len(errMsgs) > 0 {
+		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, destFilesPath, cp, fs); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 	}
