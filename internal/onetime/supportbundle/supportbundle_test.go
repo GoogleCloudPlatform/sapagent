@@ -39,16 +39,25 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/oauth2"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem/fake"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
 
+	lpb "google.golang.org/genproto/googleapis/api/label"
+	metricpb "google.golang.org/genproto/googleapis/api/metric"
+	monitoredrespb "google.golang.org/genproto/googleapis/api/monitoredres"
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	fakeCM "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
 )
 
 var (
@@ -2316,6 +2325,747 @@ func TestQueryDiscovery(t *testing.T) {
 			}
 			if !cmp.Equal(err, tc.wantError, cmpopts.EquateErrors()) {
 				t.Errorf("queryDiscovery(%q) returned an unexpected error: %v", tc.filter, err)
+			}
+		})
+	}
+}
+
+func TestCollectProcessMetrics(t *testing.T) {
+	tests := []struct {
+		name              string
+		s                 *SupportBundle
+		metrics           []string
+		destFilesPath     string
+		cp                *ipb.CloudProperties
+		fs                filesystem.FileSystem
+		wantNonZeroLength bool
+	}{
+		{
+			name: "GetProcessMetricsClientsError",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return nil, cmpopts.AnyError
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
+				},
+			},
+			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
+			destFilesPath:     "/tmp",
+			cp:                defaultCloudProperties,
+			fs:                mockedfilesystem{},
+			wantNonZeroLength: true,
+		},
+		{
+			name: "MkdirError",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
+				},
+			},
+			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
+			destFilesPath:     "failure",
+			cp:                defaultCloudProperties,
+			fs:                mockedfilesystem{},
+			wantNonZeroLength: true,
+		},
+		{
+			name: "FetchTimeSeriesDataError",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{
+						TS:  nil,
+						Err: cmpopts.AnyError,
+					}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{
+						ResourceDescriptor:    nil,
+						ResourceDescriptorErr: cmpopts.AnyError,
+						MetricDescriptor:      nil,
+						MetricDescriptorErr:   cmpopts.AnyError,
+					}, nil
+				},
+			},
+			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
+			destFilesPath:     "/tmp",
+			cp:                defaultCloudProperties,
+			fs:                mockedfilesystem{},
+			wantNonZeroLength: true,
+		},
+		{
+			name: "CreateFileError",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{
+						TS: []*mrpb.TimeSeriesData{
+							&mrpb.TimeSeriesData{
+								LabelValues: []*mrpb.LabelValue{
+									&mrpb.LabelValue{
+										Value: &mrpb.LabelValue_StringValue{
+											StringValue: "sample-project",
+										},
+									},
+									&mrpb.LabelValue{
+										Value: &mrpb.LabelValue_StringValue{
+											StringValue: "sample-instance-id",
+										},
+									},
+									&mrpb.LabelValue{
+										Value: &mrpb.LabelValue_StringValue{
+											StringValue: "sample-zone",
+										},
+									},
+									&mrpb.LabelValue{
+										Value: &mrpb.LabelValue_StringValue{
+											StringValue: "sample-process",
+										},
+									},
+								},
+								PointData: []*mrpb.TimeSeriesData_PointData{
+									&mrpb.TimeSeriesData_PointData{
+										Values: []*cpb.TypedValue{
+											&cpb.TypedValue{
+												Value: &cpb.TypedValue_DoubleValue{
+													DoubleValue: 123.456,
+												},
+											},
+										},
+										TimeInterval: &cpb.TimeInterval{
+											StartTime: &tpb.Timestamp{
+												Seconds: 1744790182,
+											},
+											EndTime: &tpb.Timestamp{
+												Seconds: 1744790182,
+											},
+										},
+									},
+								},
+							},
+						},
+						Err: nil,
+					}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{
+						MetricDescriptor: &metricpb.MetricDescriptor{
+							Name: "projects/test-project/metricDescriptors/workload.googleapis.com/test/cpu/utilization",
+							Type: "workload.googleapis.com/test/cpu/utilization",
+							Labels: []*lpb.LabelDescriptor{
+								{
+									Key:         "process",
+									ValueType:   lpb.LabelDescriptor_STRING,
+									Description: "The name of the process.",
+								},
+							},
+						},
+						MetricDescriptorErr: nil,
+						ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+							Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+							Type: "gce_instance",
+							Labels: []*lpb.LabelDescriptor{
+								{
+									Key:         "project_id",
+									ValueType:   lpb.LabelDescriptor_STRING,
+									Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+								},
+								{
+									Key:         "instance_id",
+									ValueType:   lpb.LabelDescriptor_STRING,
+									Description: "The numeric VM instance identifier assigned by Compute Engine.",
+								},
+								{
+									Key:         "zone",
+									ValueType:   lpb.LabelDescriptor_STRING,
+									Description: "The Compute Engine zone in which the VM is running.",
+								},
+							},
+						},
+						ResourceDescriptorErr: nil,
+					}, nil
+				},
+			},
+			metrics:           []string{"workload.googleapis.com/failure/cpu/utilization"},
+			destFilesPath:     "/tmp",
+			cp:                defaultCloudProperties,
+			fs:                mockedfilesystem{},
+			wantNonZeroLength: true,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			gotErr := tc.s.collectProcessMetrics(ctx, tc.metrics, tc.destFilesPath, tc.cp, tc.fs)
+			if tc.wantNonZeroLength && len(gotErr) == 0 {
+				t.Errorf("collectProcessMetrics() returned an empty error")
+			}
+		})
+	}
+}
+
+func TestGetProcessMetricsClients(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       *SupportBundle
+		wantCMR *cloudmetricreader.CloudMetricReader
+		wantMMC cloudmonitoring.TimeSeriesDescriptorQuerier
+		wantErr error
+	}{
+		{
+			name: "QueryClientFailure",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return nil, cmpopts.AnyError
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
+				},
+			},
+			wantCMR: nil,
+			wantMMC: nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "MetricClientFailure",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return nil, cmpopts.AnyError
+				},
+			},
+			wantCMR: nil,
+			wantMMC: nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
+				},
+			},
+			wantCMR: &cloudmetricreader.CloudMetricReader{
+				QueryClient: &fakeCM.TimeSeriesQuerier{},
+				BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
+			},
+			wantMMC: &fakeCM.TimeSeriesDescriptorQuerier{},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotCMR, gotMMC, err := tc.s.getProcessMetricsClients(ctx)
+			if diff := cmp.Diff(gotCMR, tc.wantCMR); diff != "" {
+				t.Errorf("getProcessMetricsClients() returned an unexpected diff (-want +got): %v", diff)
+			}
+			if diff := cmp.Diff(gotMMC, tc.wantMMC); diff != "" {
+				t.Errorf("getProcessMetricsClients() returned an unexpected diff (-want +got): %v", diff)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getProcessMetricsClients() returned an unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestFetchTimeSeriesData(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       *SupportBundle
+		cp      *ipb.CloudProperties
+		cmr     *cloudmetricreader.CloudMetricReader
+		mmc     cloudmonitoring.TimeSeriesDescriptorQuerier
+		metric  string
+		wantTS  []TimeSeries
+		wantErr error
+	}{
+		{
+			name: "FetchLabelDescriptorsFailure",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			cmr: &cloudmetricreader.CloudMetricReader{
+				QueryClient: &fakeCM.TimeSeriesQuerier{
+					TS:  nil,
+					Err: cmpopts.AnyError,
+				},
+				BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
+			},
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				ResourceDescriptor:    nil,
+				ResourceDescriptorErr: cmpopts.AnyError,
+				MetricDescriptor:      nil,
+				MetricDescriptorErr:   cmpopts.AnyError,
+			},
+			metric:  "workload.googleapis.com/test/cpu/utilization",
+			wantTS:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "QueryTimeSeriesFailure",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			cmr: &cloudmetricreader.CloudMetricReader{
+				QueryClient: &fakeCM.TimeSeriesQuerier{
+					TS:  nil,
+					Err: cmpopts.AnyError,
+				},
+				BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
+			},
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				MetricDescriptor: &metricpb.MetricDescriptor{
+					Name: "projects/test-project/metricDescriptors/workload.googleapis.com/test/cpu/utilization",
+					Type: "workload.googleapis.com/test/cpu/utilization",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "process",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The name of the process.",
+						},
+					},
+				},
+				MetricDescriptorErr: nil,
+				ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+					Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+					Type: "gce_instance",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "project_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+						},
+						{
+							Key:         "instance_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The numeric VM instance identifier assigned by Compute Engine.",
+						},
+						{
+							Key:         "zone",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The Compute Engine zone in which the VM is running.",
+						},
+					},
+				},
+				ResourceDescriptorErr: nil,
+			},
+			metric:  "workload.googleapiscom/test/cpu/utilization",
+			wantTS:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			cmr: &cloudmetricreader.CloudMetricReader{
+				QueryClient: &fakeCM.TimeSeriesQuerier{
+					TS: []*mrpb.TimeSeriesData{
+						&mrpb.TimeSeriesData{
+							LabelValues: []*mrpb.LabelValue{
+								&mrpb.LabelValue{
+									Value: &mrpb.LabelValue_StringValue{
+										StringValue: "sample-project",
+									},
+								},
+								&mrpb.LabelValue{
+									Value: &mrpb.LabelValue_StringValue{
+										StringValue: "sample-instance-id",
+									},
+								},
+								&mrpb.LabelValue{
+									Value: &mrpb.LabelValue_StringValue{
+										StringValue: "sample-zone",
+									},
+								},
+								&mrpb.LabelValue{
+									Value: &mrpb.LabelValue_StringValue{
+										StringValue: "sample-process",
+									},
+								},
+							},
+							PointData: []*mrpb.TimeSeriesData_PointData{
+								&mrpb.TimeSeriesData_PointData{
+									Values: []*cpb.TypedValue{
+										&cpb.TypedValue{
+											Value: &cpb.TypedValue_DoubleValue{
+												DoubleValue: 123.456,
+											},
+										},
+									},
+									TimeInterval: &cpb.TimeInterval{
+										StartTime: &tpb.Timestamp{
+											Seconds: 1744790182,
+										},
+										EndTime: &tpb.Timestamp{
+											Seconds: 1744790182,
+										},
+									},
+								},
+							},
+						},
+					},
+					Err: nil,
+				},
+				BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
+			},
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				MetricDescriptor: &metricpb.MetricDescriptor{
+					Name: "projects/test-project/metricDescriptors/workload.googleapis.com/test/cpu/utilization",
+					Type: "workload.googleapis.com/test/cpu/utilization",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "process",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The name of the process.",
+						},
+					},
+				},
+				MetricDescriptorErr: nil,
+				ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+					Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+					Type: "gce_instance",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "project_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+						},
+						{
+							Key:         "instance_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The numeric VM instance identifier assigned by Compute Engine.",
+						},
+						{
+							Key:         "zone",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The Compute Engine zone in which the VM is running.",
+						},
+					},
+				},
+				ResourceDescriptorErr: nil,
+			},
+			metric: "workload.googleapiscom/test/cpu/utilization",
+			wantTS: []TimeSeries{
+				TimeSeries{
+					Metric:    "workload.googleapiscom/test/cpu/utilization",
+					Labels:    map[string]string{"project_id": "sample-project", "instance_id": "sample-instance-id", "zone": "sample-zone", "process": "sample-process"},
+					Values:    []string{"123.456000"},
+					Timestamp: "2025-04-16 07:56:22",
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.fetchTimeSeriesData(ctx, tc.cp, tc.cmr, tc.mmc, tc.metric)
+			if diff := cmp.Diff(got, tc.wantTS); diff != "" {
+				t.Errorf("fetchTimeSeriesData() returned an unexpected diff (-want +got): %v", diff)
+			}
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("fetchTimeSeriesData() returned an unexpected error: %v", diff)
+			}
+		})
+	}
+}
+
+func TestGetLabelValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		lv      *mrpb.LabelValue
+		wantVal string
+		wantErr error
+	}{
+		{
+			name: "Int64Value",
+			lv: &mrpb.LabelValue{
+				Value: &mrpb.LabelValue_Int64Value{
+					Int64Value: 123,
+				},
+			},
+			wantVal: "123",
+			wantErr: nil,
+		},
+		{
+			name: "StringValue",
+			lv: &mrpb.LabelValue{
+				Value: &mrpb.LabelValue_StringValue{
+					StringValue: "test-string",
+				},
+			},
+			wantVal: "test-string",
+			wantErr: nil,
+		},
+		{
+			name: "BoolValue",
+			lv: &mrpb.LabelValue{
+				Value: &mrpb.LabelValue_BoolValue{
+					BoolValue: true,
+				},
+			},
+			wantVal: "true",
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := getLabelValue(ctx, tc.lv)
+			if diff := cmp.Diff(got, tc.wantVal); diff != "" {
+				t.Errorf("getLabelValue(%v) returned diff (-want +got):\n%s", tc.lv, diff)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getLabelValue(%v) returned an unexpected error: %v", tc.lv, err)
+			}
+		})
+	}
+}
+
+func TestGetPointValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		v       *cpb.TypedValue
+		wantVal string
+		wantErr error
+	}{
+		{
+			name: "Int64Value",
+			v: &cpb.TypedValue{
+				Value: &cpb.TypedValue_Int64Value{
+					Int64Value: 123,
+				},
+			},
+			wantVal: "123",
+			wantErr: nil,
+		},
+		{
+			name: "StringValue",
+			v: &cpb.TypedValue{
+				Value: &cpb.TypedValue_StringValue{
+					StringValue: "test-string",
+				},
+			},
+			wantVal: "test-string",
+			wantErr: nil,
+		},
+		{
+			name: "BoolValue",
+			v: &cpb.TypedValue{
+				Value: &cpb.TypedValue_BoolValue{
+					BoolValue: true,
+				},
+			},
+			wantVal: "true",
+			wantErr: nil,
+		},
+		{
+			name: "DoubleValue",
+			v: &cpb.TypedValue{
+				Value: &cpb.TypedValue_DoubleValue{
+					DoubleValue: 123.456,
+				},
+			},
+			wantVal: "123.456000",
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := getPointValue(ctx, tc.v)
+			if diff := cmp.Diff(got, tc.wantVal); diff != "" {
+				t.Errorf("getPointValue(%v) returned diff (-want +got):\n%s", tc.v, diff)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getPointValue(%v) returned an unexpected error: %v", tc.v, err)
+			}
+		})
+	}
+}
+
+func TestFetchLabelDescriptors(t *testing.T) {
+	tests := []struct {
+		name         string
+		s            *SupportBundle
+		cp           *ipb.CloudProperties
+		mmc          cloudmonitoring.TimeSeriesDescriptorQuerier
+		metricType   string
+		resourceType string
+		wantLabels   []string
+		wantErr      error
+	}{
+		{
+			name: "ResourceDescriptorFailure",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				MetricDescriptor:    nil,
+				MetricDescriptorErr: cmpopts.AnyError,
+			},
+			metricType:   "workload.googleapis.com/test/cpu/utilization",
+			resourceType: "gce_instance",
+			wantLabels:   nil,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "MetricDescriptorFailure",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+					Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+					Type: "gce_instance",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "project_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+						},
+						{
+							Key:         "instance_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The numeric VM instance identifier assigned by Compute Engine.",
+						},
+						{
+							Key:         "zone",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The Compute Engine zone in which the VM is running.",
+						},
+					},
+				},
+				ResourceDescriptorErr: nil,
+				MetricDescriptor:      nil,
+				MetricDescriptorErr:   cmpopts.AnyError,
+			},
+			wantLabels: nil,
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			cp: defaultCloudProperties,
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+					Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+					Type: "gce_instance",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "project_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+						},
+						{
+							Key:         "instance_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The numeric VM instance identifier assigned by Compute Engine.",
+						},
+						{
+							Key:         "zone",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The Compute Engine zone in which the VM is running.",
+						},
+					},
+				},
+				MetricDescriptor: &metricpb.MetricDescriptor{
+					Name: "projects/test-project/metricDescriptors/workload.googleapis.com/test/cpu/utilization",
+					Type: "workload.googleapis.com/test/cpu/utilization",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "process",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The name of the process.",
+						},
+					},
+				},
+				ResourceDescriptorErr: nil,
+				MetricDescriptorErr:   nil,
+			},
+			wantLabels: []string{"project_id", "instance_id", "zone", "process"},
+			wantErr:    nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.fetchLabelDescriptors(ctx, tc.cp, tc.mmc, tc.metricType, tc.resourceType)
+			if diff := cmp.Diff(got, tc.wantLabels); diff != "" {
+				t.Errorf("fetchLabelDescriptors(%v, %v, %q, %q) returned an unexpected diff (-want +got): %v", tc.cp, tc.mmc, tc.metricType, tc.resourceType, diff)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("fetchLabelDescriptors(%v, %v, %q, %q) returned an unexpected error: %v", tc.cp, tc.mmc, tc.metricType, tc.resourceType, err)
+			}
+		})
+	}
+}
+
+func TestNewQueryClient(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr error
+	}{
+		{
+			name:    "Failure",
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := newQueryClient(ctx)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("NewQueryClient() returned an unexpected error: %v", diff)
+			}
+		})
+	}
+}
+
+func TestNewMetricClient(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr error
+	}{
+		{
+			name:    "Failure",
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := newMetricClient(ctx)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("NewMetricClient() returned an unexpected error: %v", diff)
 			}
 		})
 	}

@@ -35,16 +35,23 @@ import (
 	"time"
 
 	"flag"
+	"cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
+	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
 
+	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
+	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	st "cloud.google.com/go/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -52,18 +59,24 @@ import (
 type (
 	// SupportBundle has args for support bundle collection one time mode.
 	SupportBundle struct {
-		Sid                    string   `json:"sid"`
-		InstanceNums           string   `json:"instance-numbers"`
-		instanceNumsAfterSplit []string `json:"-"`
-		Hostname               string   `json:"hostname"`
-		PacemakerDiagnosis     bool     `json:"pacemaker-diagnosis,string"`
-		AgentLogsOnly          bool     `json:"agent-logs-only,string"`
-		rest                   RestService
+		Sid                    string                        `json:"sid"`
+		InstanceNums           string                        `json:"instance-numbers"`
+		instanceNumsAfterSplit []string                      `json:"-"`
+		Hostname               string                        `json:"hostname"`
+		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
+		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
+		ProcessMetrics         bool                          `json:"process-metrics"`
+		Timestamp              string                        `json:"timestamp"`
+		BeforeDuration         int                           `json:"before-duration"`
+		AfterDuration          int                           `json:"after-duration"`
 		Help                   bool                          `json:"help,string"`
 		LogLevel               string                        `json:"loglevel"`
 		ResultBucket           string                        `json:"result-bucket"`
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 		LogPath                string                        `json:"log-path"`
+		rest                   RestService
+		createQueryClient      createQueryClient
+		createMetricClient     createMetricClient
 		oteLogger              *onetime.OTELogger
 	}
 	// zipperHelper is a testable struct for zipper.
@@ -109,6 +122,20 @@ type (
 		Type      string `json:"type"`
 		Discovery string `json:"discovery"`
 	}
+
+	// TimeSeries is the time series data which mirrors the proto.
+	TimeSeries struct {
+		Metric    string            `json:"metric"`
+		Labels    map[string]string `json:"labels"`
+		Values    []string          `json:"value"`
+		Timestamp string            `json:"timestamp"`
+	}
+
+	// createQueryClient is an abstracted function to create a query client.
+	createQueryClient func(context.Context) (cloudmonitoring.TimeSeriesQuerier, error)
+
+	// createMetricClient is an abstracted function to create a metric client.
+	createMetricClient func(context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error)
 )
 
 // NewWriter is testable version of zip.NewWriter method.
@@ -144,7 +171,22 @@ const (
 	globalINIFile         = `/custom/config/global.ini`
 	backintGCSPath        = `/opt/backint/backint-gcs`
 	sapDiscoveryFile      = `sapdiscovery.json`
+	metricPrefix          = "workload.googleapis.com"
 )
+
+var processMetricsList = []string{
+	"sap/control/cpu/utilization",
+	"sap/control/memory/utilization",
+	"sap/hana/availability",
+	"sap/hana/cpu/utilization",
+	"sap/hana/ha/availability",
+	"sap/hana/ha/replication",
+	"sap/hana/iops/reads",
+	"sap/hana/iops/writes",
+	"sap/hana/memory/utilization",
+	"sap/hana/query/state",
+	"sap/hana/service",
+}
 
 // Name implements the subcommand interface for collecting support bundle report collection for support team.
 func (*SupportBundle) Name() string {
@@ -171,6 +213,10 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - required for collecting HANA traces")
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
+	fs.BoolVar(&s.ProcessMetrics, "process-metrics", false, "Indicate if process metrics are to be collected (experimental)")
+	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp to be used for collecting process metrics")
+	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration to be used for collecting process metrics")
+	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration to be used for collecting process metrics")
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
@@ -293,6 +339,12 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 			errMessage := "Error while collecting GCP Agent for SAP's Discovery data"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
+		}
+	}
+
+	if s.ProcessMetrics {
+		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, "/tmp/google-cloud-sap-agent", cp, fs); len(errMsgs) > 0 {
+			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 	}
 
@@ -923,14 +975,215 @@ func (s *SupportBundle) queryDiscovery(ctx context.Context, baseURL, filter, pro
 	return discovery, nil
 }
 
+// collectProcessMetrics collects and writes the process metrics from cloud monitoring for a given time interval.
+func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []string, destFilesPath string, cp *ipb.CloudProperties, fs filesystem.FileSystem) []string {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting process metrics...")
+	var errMsgs []string
+	cmr, mmc, err := s.getProcessMetricsClients(ctx)
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create Cloud Monitoring clients: %v", err))
+		return errMsgs
+	}
+
+	pmFolderPath := path.Join(destFilesPath, "process_metrics")
+	if err := fs.MkdirAll(pmFolderPath, 0777); err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create process metrics folder: %v", err))
+		return errMsgs
+	}
+
+	for _, metric := range metrics {
+		var timeSeries []TimeSeries
+		metricFileName := strings.ReplaceAll(metric, "/", "_")
+		metric = path.Join(metricPrefix, metric)
+		ts, err := s.fetchTimeSeriesData(ctx, cp, cmr, mmc, metric)
+		if err != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Failed to fetch time series data for metric %s: %v", metric, err))
+			continue
+		}
+		timeSeries = append(timeSeries, ts...)
+
+		f, err := fs.Create(fmt.Sprintf("%s/%s.json", pmFolderPath, metricFileName))
+		if err != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Error while creating file: %v", err))
+			continue
+		}
+		defer f.Close()
+
+		jsonData, err := json.MarshalIndent(timeSeries, "", "  ")
+		if err != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Error while marshaling JSON: %v", err))
+			continue
+		}
+		_, err = f.Write(jsonData)
+		if err != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("Error while writing to file: %v", err))
+			continue
+		}
+	}
+
+	return errMsgs
+}
+
+// getProcessMetricsClients returns the clients for reading process metrics.
+func (s *SupportBundle) getProcessMetricsClients(ctx context.Context) (*cloudmetricreader.CloudMetricReader, cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+	qc, err := s.createQueryClient(ctx)
+	if err != nil {
+		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		return nil, nil, err
+	}
+	cmr := &cloudmetricreader.CloudMetricReader{
+		QueryClient: qc,
+		BackOffs:    cloudmonitoring.NewDefaultBackOffIntervals(),
+	}
+
+	mmc, err := s.createMetricClient(ctx)
+	if err != nil {
+		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		return nil, nil, err
+	}
+
+	return cmr, mmc, nil
+}
+
+// fetchTimeSeriesData fetches the time series data for a given metric.
+func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudProperties, cmr *cloudmetricreader.CloudMetricReader, mmc cloudmonitoring.TimeSeriesDescriptorQuerier, metric string) ([]TimeSeries, error) {
+	labelNames, err := s.fetchLabelDescriptors(ctx, cp, mmc, metric, "gce_instance")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch label descriptors for metric %s: %v", metric, err)
+	}
+
+	// TODO: Update the query to use time interval.
+	query := fmt.Sprintf("fetch gce_instance | metric '%s' | filter (resource.instance_id = '%s') | within 5m", metric, cp.GetInstanceId())
+	req := &mpb.QueryTimeSeriesRequest{
+		Name:  fmt.Sprintf("projects/%s", cp.GetProjectId()),
+		Query: query,
+	}
+	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, cmr.QueryClient, req, cmr.BackOffs)
+	if err != nil {
+		return nil, err
+	}
+
+	var timeSeries []TimeSeries
+	for _, d := range data {
+		labels := make(map[string]string)
+		itr := 0
+		for _, lv := range d.GetLabelValues() {
+			if labelValue, err := getLabelValue(ctx, lv); err == nil {
+				labels[labelNames[itr]] = labelValue
+			}
+			itr++
+		}
+
+		var values []string
+		var timestamp string
+		for _, p := range d.GetPointData() {
+			for _, v := range p.GetValues() {
+				if pv, err := getPointValue(ctx, v); err == nil {
+					values = append(values, pv)
+				}
+			}
+			unixTimestamp := int64(p.GetTimeInterval().GetEndTime().GetSeconds())
+			t := time.Unix(unixTimestamp, 0).In(time.UTC)
+			timestamp = t.Format("2006-01-02 15:04:05")
+			timeSeries = append(timeSeries, TimeSeries{
+				Metric:    metric,
+				Labels:    labels,
+				Values:    values,
+				Timestamp: timestamp,
+			})
+		}
+	}
+
+	return timeSeries, nil
+}
+
+// getLabelValue returns the string representation of the label value.
+func getLabelValue(ctx context.Context, lv *mrpb.LabelValue) (string, error) {
+	switch lv.Value.(type) {
+	case *mrpb.LabelValue_StringValue:
+		return lv.GetStringValue(), nil
+	case *mrpb.LabelValue_Int64Value:
+		return fmt.Sprintf("%d", lv.GetInt64Value()), nil
+	case *mrpb.LabelValue_BoolValue:
+		return fmt.Sprintf("%t", lv.GetBoolValue()), nil
+	default:
+		return "", fmt.Errorf("unsupported label value type: %T", lv.Value)
+	}
+}
+
+// getPointValue returns the string representation of the point value.
+func getPointValue(ctx context.Context, v *cpb.TypedValue) (string, error) {
+	switch tv := v.Value.(type) {
+	case *cpb.TypedValue_Int64Value:
+		return fmt.Sprintf("%d", tv.Int64Value), nil
+	case *cpb.TypedValue_StringValue:
+		return tv.StringValue, nil
+	case *cpb.TypedValue_BoolValue:
+		return fmt.Sprintf("%t", tv.BoolValue), nil
+	case *cpb.TypedValue_DoubleValue:
+		return fmt.Sprintf("%f", tv.DoubleValue), nil
+	default:
+		return "", fmt.Errorf("unsupported value type: %T", tv)
+	}
+}
+
+// fetchLabelDescriptors fetches the label descriptors for the given metric and resource type.
+func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.CloudProperties, mmc cloudmonitoring.TimeSeriesDescriptorQuerier, metricType, resourceType string) ([]string, error) {
+	var labels []string
+	rdReq := &mpb.GetMonitoredResourceDescriptorRequest{
+		Name: fmt.Sprintf("projects/%s/monitoredResourceDescriptors/%s", cp.GetProjectId(), resourceType),
+	}
+	rd, err := mmc.GetMonitoredResourceDescriptor(ctx, rdReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get monitored resource descriptor for %s: %v", resourceType, err)
+	}
+	for _, l := range rd.GetLabels() {
+		labels = append(labels, l.GetKey())
+	}
+
+	mdReq := &mpb.GetMetricDescriptorRequest{
+		Name: fmt.Sprintf("projects/%s/metricDescriptors/%s", cp.GetProjectId(), metricType),
+	}
+	md, err := mmc.GetMetricDescriptor(ctx, mdReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metric descriptor for %s: %v", metricType, err)
+	}
+	for _, l := range md.GetLabels() {
+		labels = append(labels, l.GetKey())
+	}
+
+	log.CtxLogger(ctx).Infof("Labels for metric %s: %v", labels, metricType)
+	return labels, nil
+}
+
+// newQueryClient abstracts the creation of a new Cloud Monitoring query client for testing purposes.
+func newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+	mqc, err := monitoring.NewQueryClient(ctx)
+	if err != nil {
+		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		return nil, fmt.Errorf("failed to create Cloud Monitoring query client: %v", err)
+	}
+
+	return &cloudmetricreader.QueryClient{Client: mqc}, nil
+}
+
+// newMetricClient abstracts the creation of a new Cloud Monitoring metric client for testing purposes.
+func newMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+	mmc, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		return nil, fmt.Errorf("failed to create Cloud Monitoring metric client: %v", err)
+	}
+
+	return mmc, nil
+}
+
 func (s *SupportBundle) validateParams() []string {
 	var errs []string
 	if s.AgentLogsOnly {
 		return errs
 	}
-	fmt.Println("sid: ", s.Sid)
 	if s.Sid == "" {
-		fmt.Println("no value provided for sid")
 		errs = append(errs, "no value provided for sid")
 	}
 	if s.InstanceNums == "" {
@@ -949,6 +1202,9 @@ func (s *SupportBundle) validateParams() []string {
 
 	s.rest = &rest.Rest{}
 	s.rest.NewRest()
+
+	s.createQueryClient = newQueryClient
+	s.createMetricClient = newMetricClient
 
 	return errs
 }
