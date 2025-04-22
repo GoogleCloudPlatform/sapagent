@@ -539,6 +539,16 @@ func TestValidateParams(t *testing.T) {
 			want:  []string{"no value provided for hostname"},
 		},
 		{
+			name: "NoTimestamp",
+			sosrc: SupportBundle{
+				Sid:            "DEH",
+				InstanceNums:   "00 01",
+				Hostname:       "sample_host",
+				ProcessMetrics: true,
+			},
+			want: []string{},
+		},
+		{
 			name: "AgentLogsOnly",
 			sosrc: SupportBundle{
 				AgentLogsOnly: true,
@@ -562,6 +572,9 @@ func TestValidateParams(t *testing.T) {
 			got := test.sosrc.validateParams()
 			if len(got) != len(test.want) || !slices.Equal(got, test.want) {
 				t.Errorf("validateParams() = %v, want %v", got, test.want)
+				fmt.Println("len(got): ", len(got))
+				fmt.Println("len(test.want): ", len(test.want))
+				fmt.Println("slices.Equal(got, test.want): ", slices.Equal(got, test.want))
 			}
 		})
 	}
@@ -2389,6 +2402,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 						MetricDescriptorErr:   cmpopts.AnyError,
 					}, nil
 				},
+				Timestamp: "2025-01-01 00:00:00",
 			},
 			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
 			destFilesPath:     "/tmp",
@@ -2399,6 +2413,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 		{
 			name: "CreateFileError",
 			s: &SupportBundle{
+				Timestamp: "2025-01-01 00:00:00",
 				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
 					return &fakeCM.TimeSeriesQuerier{
 						TS: []*mrpb.TimeSeriesData{
@@ -2615,9 +2630,64 @@ func TestFetchTimeSeriesData(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "TimeParseError",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+				Timestamp: "2222-01-01 44:00:00",
+			},
+			cp: defaultCloudProperties,
+			cmr: &cloudmetricreader.CloudMetricReader{
+				QueryClient: &fakeCM.TimeSeriesQuerier{
+					TS:  nil,
+					Err: cmpopts.AnyError,
+				},
+				BackOffs: cloudmonitoring.NewDefaultBackOffIntervals(),
+			},
+			mmc: &fakeCM.TimeSeriesDescriptorQuerier{
+				MetricDescriptor: &metricpb.MetricDescriptor{
+					Name: "projects/test-project/metricDescriptors/workload.googleapis.com/test/cpu/utilization",
+					Type: "workload.googleapis.com/test/cpu/utilization",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "process",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The name of the process.",
+						},
+					},
+				},
+				MetricDescriptorErr: nil,
+				ResourceDescriptor: &monitoredrespb.MonitoredResourceDescriptor{
+					Name: "projects/test-project/monitoredResourceDescriptors/gce_instance",
+					Type: "gce_instance",
+					Labels: []*lpb.LabelDescriptor{
+						{
+							Key:         "project_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The identifier of the GCP project associated with this resource, such as \"my-project\".",
+						},
+						{
+							Key:         "instance_id",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The numeric VM instance identifier assigned by Compute Engine.",
+						},
+						{
+							Key:         "zone",
+							ValueType:   lpb.LabelDescriptor_STRING,
+							Description: "The Compute Engine zone in which the VM is running.",
+						},
+					},
+				},
+				ResourceDescriptorErr: nil,
+			},
+			metric:  "workload.googleapiscom/test/cpu/utilization",
+			wantTS:  nil,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "QueryTimeSeriesFailure",
 			s: &SupportBundle{
 				oteLogger: defaultOTELogger,
+				Timestamp: "2025-01-01 00:00:00",
 			},
 			cp: defaultCloudProperties,
 			cmr: &cloudmetricreader.CloudMetricReader{
@@ -2671,6 +2741,7 @@ func TestFetchTimeSeriesData(t *testing.T) {
 			name: "Success",
 			s: &SupportBundle{
 				oteLogger: defaultOTELogger,
+				Timestamp: "2025-01-01 00:00:00",
 			},
 			cp: defaultCloudProperties,
 			cmr: &cloudmetricreader.CloudMetricReader{
@@ -2766,7 +2837,7 @@ func TestFetchTimeSeriesData(t *testing.T) {
 					Metric:    "workload.googleapiscom/test/cpu/utilization",
 					Labels:    map[string]string{"project_id": "sample-project", "instance_id": "sample-instance-id", "zone": "sample-zone", "process": "sample-process"},
 					Values:    []string{"123.456000"},
-					Timestamp: "2025-04-16 07:56:22",
+					Timestamp: "2025-04-16 00:56:22",
 				},
 			},
 			wantErr: nil,

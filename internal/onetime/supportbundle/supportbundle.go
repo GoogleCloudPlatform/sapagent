@@ -214,9 +214,9 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.ProcessMetrics, "process-metrics", false, "Indicate if process metrics are to be collected (experimental)")
-	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp to be used for collecting process metrics")
-	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration to be used for collecting process metrics")
-	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration to be used for collecting process metrics")
+	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp to be used for collecting process metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
+	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration(in seconds) to be used for collecting process metrics, default value is 3600 seconds (1 hour)")
+	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration(in seconds) to be used for collecting process metrics, default value is 1800 seconds (30 minutes)")
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
@@ -1052,8 +1052,16 @@ func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudPr
 		return nil, fmt.Errorf("failed to fetch label descriptors for metric %s: %v", metric, err)
 	}
 
-	// TODO: Update the query to use time interval.
-	query := fmt.Sprintf("fetch gce_instance | metric '%s' | filter (resource.instance_id = '%s') | within 5m", metric, cp.GetInstanceId())
+	t, err := time.Parse("2006-01-02 15:04:05", s.Timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse timestamp %s: %v", s.Timestamp, err)
+	}
+	endingTime := t.Add(time.Duration(s.AfterDuration) * time.Second)
+	totalDurationInMinutes := (s.AfterDuration + s.BeforeDuration) / 60
+
+	endingTimeStamp := strings.ReplaceAll(endingTime.Format("2006-01-02 15:04"), "-", "/")
+	query := fmt.Sprintf("fetch gce_instance | metric '%s' | filter (resource.instance_id = '%s') | within %dm, d'%s'", metric, cp.GetInstanceId(), totalDurationInMinutes, endingTimeStamp)
+	// TODO: - Fix deprecated mpb.QueryTimeSeriesRequest.
 	req := &mpb.QueryTimeSeriesRequest{
 		Name:  fmt.Sprintf("projects/%s", cp.GetProjectId()),
 		Query: query,
@@ -1083,7 +1091,7 @@ func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudPr
 				}
 			}
 			unixTimestamp := int64(p.GetTimeInterval().GetEndTime().GetSeconds())
-			t := time.Unix(unixTimestamp, 0).In(time.UTC)
+			t := time.Unix(unixTimestamp, 0)
 			timestamp = t.Format("2006-01-02 15:04:05")
 			timeSeries = append(timeSeries, TimeSeries{
 				Metric:    metric,
@@ -1198,6 +1206,9 @@ func (s *SupportBundle) validateParams() []string {
 	}
 	if s.Hostname == "" {
 		errs = append(errs, "no value provided for hostname")
+	}
+	if s.ProcessMetrics && s.Timestamp == "" {
+		s.Timestamp = time.Now().Format("2006-01-02 15:04:05")
 	}
 
 	s.rest = &rest.Rest{}
