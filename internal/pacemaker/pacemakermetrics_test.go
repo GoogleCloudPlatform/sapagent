@@ -237,6 +237,7 @@ func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemake
 	return map[string]string{
 		"fence_agent":          "fence_gce",
 		"pcmk_delay_max":       "test-instance-name=45",
+		"pcmk_delay_base":      "",
 		"pcmk_monitor_retries": "5",
 		"pcmk_reboot_timeout":  "200",
 	}
@@ -246,6 +247,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 	return map[string]string{
 		"fence_agent":                       "fence_gce",
 		"pcmk_delay_max":                    "test-instance-name=45",
+		"pcmk_delay_base":                   "",
 		"pcmk_monitor_retries":              "5",
 		"pcmk_reboot_timeout":               "200",
 		"fence_agent_compute_api_access":    "false",
@@ -305,6 +307,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 	return map[string]string{
 		"fence_agent":                        "gcpstonith",
 		"pcmk_delay_max":                     "test-instance-name=30",
+		"pcmk_delay_base":                    "",
 		"pcmk_monitor_retries":               "4",
 		"pcmk_reboot_timeout":                "300",
 		"migration_threshold":                "5000",
@@ -371,6 +374,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 	return map[string]string{
 		"fence_agent":                        "fence_gce",
 		"pcmk_delay_max":                     "rhel-ha1=30",
+		"pcmk_delay_base":                    "",
 		"pcmk_monitor_retries":               "4",
 		"pcmk_reboot_timeout":                "300",
 		"migration_threshold":                "5000",
@@ -441,6 +445,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 	return map[string]string{
 		"fence_agent":                       "fence_gce",
 		"pcmk_delay_max":                    "test-instance-name=45",
+		"pcmk_delay_base":                   "",
 		"pcmk_monitor_retries":              "5",
 		"pcmk_reboot_timeout":               "200",
 		"fence_agent_compute_api_access":    "true",
@@ -837,7 +842,11 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			returnMap:    map[string]string{},
 			instanceName: "instance_node_1",
 			want:         "test/account/path",
-			wantLabels:   map[string]string{},
+			wantLabels: map[string]string{
+				"pcmk_delay_base":      "",
+				"pcmk_reboot_timeout":  "",
+				"pcmk_monitor_retries": "",
+			},
 		},
 		{
 			name: "TestIteratePrimitiveChildFenceGCE",
@@ -860,7 +869,9 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			instanceName: "instance_node_1",
 			want:         "",
 			wantLabels: map[string]string{
-				"pcmk_delay_base": "0",
+				"pcmk_delay_base":      "0",
+				"pcmk_reboot_timeout":  "",
+				"pcmk_monitor_retries": "",
 			},
 		},
 		{
@@ -906,8 +917,10 @@ func TestIteratePrimitiveChild(t *testing.T) {
 			instanceName: "instance_node_1",
 			want:         "external/test/account/path",
 			wantLabels: map[string]string{
-				"pcmk_delay_base": "0",
-				"fence_agent":     "fake-type",
+				"pcmk_delay_base":      "0",
+				"pcmk_reboot_timeout":  "",
+				"pcmk_monitor_retries": "",
+				"fence_agent":          "fake-type",
 			},
 		},
 	}

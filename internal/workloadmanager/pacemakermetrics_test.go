@@ -113,6 +113,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"maintenance_mode_active":            "true",
 					"migration_threshold":                "5000",
 					"pcmk_delay_max":                     "test-instance-name=30",
+					"pcmk_delay_base":                    "",
 					"pcmk_monitor_retries":               "4",
 					"pcmk_reboot_timeout":                "300",
 					"resource_stickiness":                "1000",

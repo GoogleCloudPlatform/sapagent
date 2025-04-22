@@ -504,17 +504,16 @@ func instanceAttributeValue(key string, attribute ClusterPropertySet, instance s
 // iteratePrimitiveChild iterates through the primitive child nodes and sets the pacemaker primitives labels for the metric validation collector.
 func iteratePrimitiveChild(labels map[string]string, attribute ClusterPropertySet, classNode string, typeNode string, idNode string, returnMap map[string]string, instanceName string) string {
 	attributeChildren := attribute.NVPairs
-	fenceAttributes := map[string]string{}
+	fenceAttributes := map[string]string{
+		"pcmk_delay_base":      "",
+		"pcmk_reboot_timeout":  "",
+		"pcmk_monitor_retries": "",
+	}
 	portMatchesInstanceName := false
 	serviceAccountPath := ""
-	fenceKeys := map[string]bool{
-		"pcmk_delay_base":      true,
-		"pcmk_reboot_timeout":  true,
-		"pcmk_monitor_retries": true,
-	}
 
 	for _, nvPair := range attributeChildren {
-		if _, ok := fenceKeys[nvPair.Name]; ok {
+		if _, ok := fenceAttributes[nvPair.Name]; ok {
 			fenceAttributes[nvPair.Name] = nvPair.Value
 		} else if nvPair.Name == "serviceaccount" {
 			serviceAccountPath = nvPair.Value
