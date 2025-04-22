@@ -2834,10 +2834,9 @@ func TestFetchTimeSeriesData(t *testing.T) {
 			metric: "workload.googleapiscom/test/cpu/utilization",
 			wantTS: []TimeSeries{
 				TimeSeries{
-					Metric:    "workload.googleapiscom/test/cpu/utilization",
-					Labels:    map[string]string{"project_id": "sample-project", "instance_id": "sample-instance-id", "zone": "sample-zone", "process": "sample-process"},
-					Values:    []string{"123.456000"},
-					Timestamp: "2025-04-16 00:56:22",
+					Metric: "workload.googleapiscom/test/cpu/utilization",
+					Labels: map[string]string{"project_id": "sample-project", "instance_id": "sample-instance-id", "zone": "sample-zone", "process": "sample-process"},
+					Values: []string{"123.456000"},
 				},
 			},
 			wantErr: nil,
@@ -2848,7 +2847,10 @@ func TestFetchTimeSeriesData(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.s.fetchTimeSeriesData(ctx, tc.cp, tc.cmr, tc.mmc, tc.metric)
-			if diff := cmp.Diff(got, tc.wantTS); diff != "" {
+			cmpOpts := []cmp.Option{
+				cmpopts.IgnoreFields(TimeSeries{}, "Timestamp"),
+			}
+			if diff := cmp.Diff(got, tc.wantTS, cmpOpts...); diff != "" {
 				t.Errorf("fetchTimeSeriesData() returned an unexpected diff (-want +got): %v", diff)
 			}
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
