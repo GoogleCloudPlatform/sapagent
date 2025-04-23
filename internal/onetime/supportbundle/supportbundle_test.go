@@ -867,6 +867,57 @@ func TestExtractTenantDBErrors(t *testing.T) {
 	}
 }
 
+func TestPacemakerLogFiles(t *testing.T) {
+	tests := []struct {
+		name              string
+		s                 *SupportBundle
+		linuxLogFilesPath string
+		fu                filesystem.FileSystem
+		want              []string
+	}{
+		{
+			name: "ReadDirError",
+			s: &SupportBundle{
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
+			},
+			linuxLogFilesPath: "failure",
+			fu:                mockedfilesystem{},
+			want:              nil,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
+			},
+			linuxLogFilesPath: "success",
+			fu: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "bundles", isDir: true},
+					mockedFileInfo{name: "pacemaker.log", isDir: false},
+					mockedFileInfo{name: "pacemaker.log-20200304.gz", isDir: false},
+				},
+			},
+			want: []string{"success/pacemaker/pacemaker.log", "success/pacemaker/pacemaker.log-20200304.gz"},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			got := tc.s.pacemakerLogFiles(ctx, tc.linuxLogFilesPath, tc.fu)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("pacemakerLogFiles(%q, %v) returned an unexpected diff (-want +got): %v", tc.linuxLogFilesPath, tc.fu, diff)
+			}
+		})
+	}
+}
+
 func TestExtractJournalCTLLogs(t *testing.T) {
 	sosr := SupportBundle{
 		oteLogger: defaultOTELogger,

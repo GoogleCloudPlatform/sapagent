@@ -323,6 +323,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 	reqFilePaths = append(reqFilePaths, s.agentLogFiles(ctx, linuxLogFilesPath, fs)...)
 	reqFilePaths = append(reqFilePaths, s.agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
+	reqFilePaths = append(reqFilePaths, s.pacemakerLogFiles(ctx, linuxLogFilesPath, fs)...)
 
 	for _, path := range reqFilePaths {
 		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
@@ -634,6 +635,29 @@ func (s *SupportBundle) agentLogFiles(ctx context.Context, linuxLogFilesPath str
 		}
 	}
 	return res
+}
+
+// pacemakerLogFiles returns the list of pacemaker log files to be collected.
+func (s *SupportBundle) pacemakerLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.FileSystem) []string {
+	var pacemakerLogs []string
+	pacemakerFolderPath := path.Join(linuxLogFilesPath, "pacemaker")
+
+	// Open the folder and add the files to the list.
+	fds, err := fu.ReadDir(pacemakerFolderPath)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+pacemakerFolderPath, err)
+		return pacemakerLogs
+	}
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		if strings.Contains(fd.Name(), "pacemaker.log") {
+			pacemakerLogs = append(pacemakerLogs, path.Join(pacemakerFolderPath, fd.Name()))
+		}
+	}
+
+	return pacemakerLogs
 }
 
 // extractJournalCTLLogs extracts the journalctl logs for google-cloud-sap-agent.
