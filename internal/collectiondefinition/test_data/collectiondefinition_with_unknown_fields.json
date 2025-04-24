@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 30,
+    "version": 31,
     "unknown_field": "this does not exist",
     "another_unknown_field": {
       "key": "this still does not exist"

@@ -293,6 +293,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ers_ilb_monitor_interval":          "",
 		"ers_ilb_monitor_timeout":           "",
 		"has_alias_ip":                      "false",
+		"cluster_healthy":                   "true",
 	}
 }
 
@@ -367,6 +368,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ers_ilb_monitor_interval":           "",
 		"ers_ilb_monitor_timeout":            "",
 		"has_alias_ip":                       "false",
+		"cluster_healthy":                    "true",
 	}
 }
 
@@ -434,6 +436,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ers_ilb_monitor_interval":           "3600",
 		"ers_ilb_monitor_timeout":            "60",
 		"has_alias_ip":                       "false",
+		"cluster_healthy":                    "true",
 	}
 }
 
@@ -491,6 +494,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ers_ilb_monitor_interval":          "",
 		"ers_ilb_monitor_timeout":           "",
 		"has_alias_ip":                      "false",
+		"cluster_healthy":                   "true",
 	}
 }
 
@@ -702,6 +706,67 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setPacemakerMaintenanceMode() returned unexpected metric labels diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSetPacemakerClusterHealthy(t *testing.T) {
+	tests := []struct {
+		name string
+		exec commandlineexecutor.Execute
+		want map[string]string
+	}{
+		{
+			name: "TestClusterHealthy",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Cluster Summary:\n* Stack: corosync\n* Online: [ hana-ha-test-primary hana-ha-test-secondary ]",
+					StdErr: "",
+				}
+			},
+			want: map[string]string{"cluster_healthy": "true"},
+		},
+		{
+			name: "TestClusterUnhealthyOffline",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Cluster Summary\n*StackNode List\nOffline: [ hana-ha-test-primary hana-ha-test-secondary ]\nFailed Fencing Actions",
+					StdErr: "",
+				}
+			},
+			want: map[string]string{"cluster_healthy": "false"},
+		},
+		{
+			name: "TestClusterUnhealthyUnclean",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "Cluster Summary\n*StackNode List\nUnclean: [ hana-ha-test-secondary ]\nFailed Fencing Actions\nMigration Summary:\n",
+					StdErr: "",
+				}
+			},
+			want: map[string]string{"cluster_healthy": "false"},
+		},
+		{
+			name: "TestClusterHealthyCommandFailed",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "102",
+					Error:  errors.New("crm_mon: Error: cluster is not available on this node"),
+				}
+			},
+			want: map[string]string{"cluster_healthy": "command_failed"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			setPacemakerClusterHealthy(context.Background(), got, test.exec)
+
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("setPacemakerClusterHealthy() returned unexpected metric labels diff (-want +got):\n%s", diff)
 			}
 		})
 	}

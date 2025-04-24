@@ -147,6 +147,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ers_ilb_monitor_interval":           true,
 		"ers_ilb_monitor_timeout":            true,
 		"has_alias_ip":                       true,
+		"cluster_healthy":                    true,
 	}
 	pacemaker := params.WorkloadConfig.GetValidationPacemaker()
 	pconfig := params.WorkloadConfig.GetValidationPacemaker().GetConfigMetrics()
@@ -270,6 +271,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	setPacemakerAPIAccess(ctx, labels, projectID, bearerToken, params.Execute)
 	setPacemakerMaintenanceMode(ctx, labels, crmAvailable, params.Execute)
+	setPacemakerClusterHealthy(ctx, labels, params.Execute)
 
 	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
 
@@ -423,6 +425,40 @@ func setPacemakerMaintenanceMode(ctx context.Context, labels map[string]string, 
 		maintenanceModeLabel = "true"
 	}
 	labels["maintenance_mode_active"] = maintenanceModeLabel
+}
+
+func setPacemakerClusterHealthy(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
+	labels["cluster_healthy"] = "command_failed"
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "crm_mon",
+		ArgsToSplit: "-1 -r -f",
+	})
+	log.CtxLogger(ctx).Debugw("Pacemaker cluster_healthy check crm_mon output", "stdout", result.StdOut, "stderr", result.StdErr, "err", result.Error)
+	if result.Error != nil {
+		return
+	}
+
+	// If the unhealthyRegex is matched after 'Node List', before 'Failed Fencing Actions', then the
+	// cluster is unhealthy.
+	startProcessing := false
+	healthyStatus := true
+	unhealthyRegex := regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
+
+	for _, line := range strings.Split(result.StdOut, "\n") {
+		if strings.Contains(line, "Node List") {
+			startProcessing = true
+			continue
+		}
+		if strings.Contains(line, "Failed Fencing Actions") {
+			break
+		}
+		if startProcessing && unhealthyRegex.MatchString(strings.ToLower(line)) {
+			healthyStatus = false
+			break
+		}
+	}
+	log.CtxLogger(ctx).Debugw("Pacemaker cluster_healthy check string match output", "cluster_healthy", healthyStatus, "stderr", result.StdErr, "err", result.Error)
+	labels["cluster_healthy"] = strconv.FormatBool(healthyStatus)
 }
 
 // setLabelsForRscNvPairs converts a list of pacemaker name/value XML nodes to metric labels if they

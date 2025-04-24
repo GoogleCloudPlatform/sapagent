@@ -168,6 +168,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"ers_ilb_monitor_interval":           "3600",
 					"ers_ilb_monitor_timeout":            "60",
 					"has_alias_ip":                       "false",
+					"cluster_healthy":                    "true",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,

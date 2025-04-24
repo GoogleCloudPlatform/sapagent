@@ -95,6 +95,7 @@ enum PrimitiveVariable {
   ILB_MONITOR_INTERVAL = 16;
   ILB_MONITOR_TIMEOUT = 17;
   HAS_ALIAS_IP = 18;
+  CLUSTER_HEALTHY = 19;
 }
 
 enum RSCLocationVariable {

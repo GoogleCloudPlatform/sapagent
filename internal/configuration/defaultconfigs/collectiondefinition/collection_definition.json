@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 30,
+    "version": 31,
     "validation_system": {
       "system_metrics": [
         {
@@ -1166,6 +1166,14 @@
               "min_version": "3.7"
             },
             "value": "HAS_ALIAS_IP"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "cluster_healthy",
+              "min_version": "3.8"
+            },
+            "value": "CLUSTER_HEALTHY"
           }
         ],
         "rsc_location_metrics": [
