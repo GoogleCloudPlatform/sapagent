@@ -87,6 +87,21 @@ var (
 	sampleDiscoveryResponse string
 	//go:embed testdata/wanted_discovery.txt
 	discoveryResponse string
+
+	successfulTimezoneExec = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+			StdOut:   "location=America/Los_Angeles\n",
+			StdErr:   "",
+		}
+	}
+	failedTimezoneExec = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			ExitCode: 2,
+			StdOut:   "",
+			StdErr:   "failure",
+		}
+	}
 )
 
 func TestMain(t *testing.M) {
@@ -633,7 +648,7 @@ func TestSOSReportHandler(t *testing.T) {
 			exec:           fakeExec,
 			fs:             mockedfilesystem{reqErr: os.ErrInvalid},
 			z:              mockedZipper{},
-			wantMessage:    "Error while extracting system DB errors, Error while extracting tenant DB errors, Error while extracting journalctl logs, Error while copying var log messages to bundle, Error while extracting HANA version, Error while fetching package info, Error while fetching OS processes, Error while fetching systemd services, Error while copying file: /etc/google-cloud-sap-agent/configuration.json, Error while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
+			wantMessage:    "Error while extracting system DB errors\nError while extracting tenant DB errors\nError while extracting journalctl logs\nError while copying var log messages to bundle\nError while extracting HANA version\nError while fetching package info\nError while fetching OS processes\nError while fetching systemd services\nError while copying file: /etc/google-cloud-sap-agent/configuration.json\nError while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
 			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
@@ -2398,6 +2413,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 	tests := []struct {
 		name              string
 		s                 *SupportBundle
+		exec              commandlineexecutor.Execute
 		metrics           []string
 		destFilesPath     string
 		cp                *ipb.CloudProperties
@@ -2414,6 +2430,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
 				},
 			},
+			exec:              successfulTimezoneExec,
 			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
 			destFilesPath:     "/tmp",
 			cp:                defaultCloudProperties,
@@ -2430,8 +2447,35 @@ func TestCollectProcessMetrics(t *testing.T) {
 					return &fakeCM.TimeSeriesDescriptorQuerier{}, nil
 				},
 			},
+			exec:              successfulTimezoneExec,
 			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
 			destFilesPath:     "failure",
+			cp:                defaultCloudProperties,
+			fs:                mockedfilesystem{},
+			wantNonZeroLength: true,
+		},
+		{
+			name: "GetTimezoneError",
+			s: &SupportBundle{
+				createQueryClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+					return &fakeCM.TimeSeriesQuerier{
+						TS:  nil,
+						Err: cmpopts.AnyError,
+					}, nil
+				},
+				createMetricClient: func(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+					return &fakeCM.TimeSeriesDescriptorQuerier{
+						ResourceDescriptor:    nil,
+						ResourceDescriptorErr: cmpopts.AnyError,
+						MetricDescriptor:      nil,
+						MetricDescriptorErr:   cmpopts.AnyError,
+					}, nil
+				},
+				Timestamp: "2025-01-01 00:00:00",
+			},
+			exec:              failedTimezoneExec,
+			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
+			destFilesPath:     "/tmp",
 			cp:                defaultCloudProperties,
 			fs:                mockedfilesystem{},
 			wantNonZeroLength: true,
@@ -2455,6 +2499,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 				},
 				Timestamp: "2025-01-01 00:00:00",
 			},
+			exec:              successfulTimezoneExec,
 			metrics:           []string{"workload.googleapis.com/test/cpu/utilization"},
 			destFilesPath:     "/tmp",
 			cp:                defaultCloudProperties,
@@ -2554,6 +2599,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 					}, nil
 				},
 			},
+			exec:              successfulTimezoneExec,
 			metrics:           []string{"workload.googleapis.com/failure/cpu/utilization"},
 			destFilesPath:     "/tmp",
 			cp:                defaultCloudProperties,
@@ -2566,7 +2612,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.s.oteLogger = defaultOTELogger
-			gotErr := tc.s.collectProcessMetrics(ctx, tc.metrics, tc.destFilesPath, tc.cp, tc.fs)
+			gotErr := tc.s.collectProcessMetrics(ctx, tc.metrics, tc.destFilesPath, tc.cp, tc.fs, tc.exec)
 			if tc.wantNonZeroLength && len(gotErr) == 0 {
 				t.Errorf("collectProcessMetrics() returned an empty error")
 			}
@@ -2906,6 +2952,107 @@ func TestFetchTimeSeriesData(t *testing.T) {
 			}
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("fetchTimeSeriesData() returned an unexpected error: %v", diff)
+			}
+		})
+	}
+}
+
+func TestGetEndingTimestamp(t *testing.T) {
+	tests := []struct {
+		name      string
+		s         *SupportBundle
+		exec      commandlineexecutor.Execute
+		wantEndTs string
+		wantErr   error
+	}{
+		{
+			name: "GetTimezoneFailure",
+			s: &SupportBundle{
+				Timestamp: "2025-01-01 00:00:00",
+			},
+			exec:      failedTimezoneExec,
+			wantEndTs: "2025/01/01 00:00",
+			wantErr:   nil,
+		},
+		{
+			name: "LocationLoadErr",
+			s: &SupportBundle{
+				Timestamp: "2025-01-01 00:00:00",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					StdOut:   "location=wrongLocation",
+				}
+			},
+			wantEndTs: "",
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "TimeParseErr",
+			s: &SupportBundle{
+				Timestamp: "2025-01-01 25:00:00",
+			},
+			exec:      successfulTimezoneExec,
+			wantEndTs: "",
+			wantErr:   cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				Timestamp: "2025-01-01 00:00:00",
+			},
+			exec:      successfulTimezoneExec,
+			wantEndTs: "2025/01/01 08:00",
+			wantErr:   nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.s.getEndingTimestamp(ctx, tc.exec)
+			if diff := cmp.Diff(got, tc.wantEndTs); diff != "" {
+				t.Errorf("getEndingTimestamp(%v) returned an unexpected diff (-want +got): %v", tc.exec, diff)
+			}
+			fmt.Println("Err: ", err)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getEndingTimestamp(%v) returned an unexpected error: %v", tc.exec, err)
+			}
+		})
+	}
+}
+
+func TestGetTimezone(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		wantTZ  string
+		wantErr error
+	}{
+		{
+			name:    "Failure",
+			exec:    failedTimezoneExec,
+			wantTZ:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:    "Success",
+			exec:    successfulTimezoneExec,
+			wantTZ:  "America/Los_Angeles",
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := getTimezone(ctx, tc.exec)
+			if diff := cmp.Diff(got, tc.wantTZ); diff != "" {
+				t.Errorf("getTimezone(%v) returned an unexpected diff (-want +got): %v", tc.exec, diff)
+			}
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("getTimezone(%v) returned an unexpected error: %v", tc.exec, err)
 			}
 		})
 	}

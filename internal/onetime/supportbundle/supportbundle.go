@@ -74,6 +74,7 @@ type (
 		ResultBucket           string                        `json:"result-bucket"`
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 		LogPath                string                        `json:"log-path"`
+		endingTimestamp        string
 		rest                   RestService
 		createQueryClient      createQueryClient
 		createMetricClient     createMetricClient
@@ -214,7 +215,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.ProcessMetrics, "process-metrics", false, "Indicate if process metrics are to be collected (experimental)")
-	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp to be used for collecting process metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
+	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp(in system timezone) to be used for collecting process metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
 	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration(in seconds) to be used for collecting process metrics, default value is 3600 seconds (1 hour)")
 	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration(in seconds) to be used for collecting process metrics, default value is 1800 seconds (30 minutes)")
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
@@ -241,7 +242,9 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 		return exitStatus
 	}
 
-	_, exitStatus = s.Run(ctx, onetime.CreateRunOptions(cp, false), commandlineexecutor.ExecuteCommand)
+	// TODO: Colour code success and failure messages.
+	msg, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, false), commandlineexecutor.ExecuteCommand)
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Found the following errors: \n"+msg)
 	return exitStatus
 }
 
@@ -344,7 +347,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if s.ProcessMetrics {
-		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, destFilesPath, cp, fs); len(errMsgs) > 0 {
+		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, destFilesPath, cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 	}
@@ -402,9 +405,9 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if len(failureMsgs) > 0 {
-		return strings.Join(failureMsgs, ", "), subcommands.ExitFailure
+		return strings.Join(failureMsgs, "\n"), subcommands.ExitFailure
 	}
-	return strings.Join(successMsgs, ", "), subcommands.ExitSuccess
+	return strings.Join(successMsgs, "\n"), subcommands.ExitSuccess
 }
 
 // uploadZip uploads the zip file to the bucket provided.
@@ -1000,7 +1003,7 @@ func (s *SupportBundle) queryDiscovery(ctx context.Context, baseURL, filter, pro
 }
 
 // collectProcessMetrics collects and writes the process metrics from cloud monitoring for a given time interval.
-func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []string, destFilesPath string, cp *ipb.CloudProperties, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []string, destFilesPath string, cp *ipb.CloudProperties, fs filesystem.FileSystem, exec commandlineexecutor.Execute) []string {
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting process metrics...")
 	var errMsgs []string
 	cmr, mmc, err := s.getProcessMetricsClients(ctx)
@@ -1012,6 +1015,12 @@ func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []str
 	pmFolderPath := path.Join(destFilesPath, "process_metrics")
 	if err := fs.MkdirAll(pmFolderPath, 0777); err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create process metrics folder: %v", err))
+		return errMsgs
+	}
+
+	s.endingTimestamp, err = s.getEndingTimestamp(ctx, exec)
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("Failed to get ending timestamp: %v", err))
 		return errMsgs
 	}
 
@@ -1048,6 +1057,48 @@ func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []str
 	return errMsgs
 }
 
+// getEndingTimestamp returns the ending timestamp for the time interval for which the metrics are collected.
+func (s *SupportBundle) getEndingTimestamp(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
+	timezone, err := getTimezone(ctx, exec)
+	if err != nil {
+		log.CtxLogger(ctx).Infof("Using UTC as timezone as failed to get timezone: %v", err)
+		timezone = "UTC"
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return "", fmt.Errorf("failed to load location: %v", err)
+	}
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", s.Timestamp, location)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse timestamp %s: %v", s.Timestamp, err)
+	}
+
+	utcTime := t.UTC()
+	endingTime := utcTime.Add(time.Duration(s.AfterDuration) * time.Second)
+	endingTimestamp := strings.ReplaceAll(endingTime.Format("2006-01-02 15:04"), "-", "/")
+
+	return endingTimestamp, nil
+}
+
+// getTimezone returns the timezone of the system.
+func getTimezone(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
+	p := commandlineexecutor.Params{
+		Executable:  "sudo",
+		ArgsToSplit: "timedatectl show -p Timezone",
+	}
+	res := exec(ctx, p)
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("failed to get timezone: %v", res.StdErr)
+	}
+
+	parts := strings.Split(strings.TrimSpace(res.StdOut), "=")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("failed to get timezone: %v", res.StdErr)
+	}
+
+	return parts[1], nil
+}
+
 // getProcessMetricsClients returns the clients for reading process metrics.
 func (s *SupportBundle) getProcessMetricsClients(ctx context.Context) (*cloudmetricreader.CloudMetricReader, cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
 	qc, err := s.createQueryClient(ctx)
@@ -1076,15 +1127,8 @@ func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudPr
 		return nil, fmt.Errorf("failed to fetch label descriptors for metric %s: %v", metric, err)
 	}
 
-	t, err := time.Parse("2006-01-02 15:04:05", s.Timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse timestamp %s: %v", s.Timestamp, err)
-	}
-	endingTime := t.Add(time.Duration(s.AfterDuration) * time.Second)
 	totalDurationInMinutes := (s.AfterDuration + s.BeforeDuration) / 60
-
-	endingTimeStamp := strings.ReplaceAll(endingTime.Format("2006-01-02 15:04"), "-", "/")
-	query := fmt.Sprintf("fetch gce_instance | metric '%s' | filter (resource.instance_id = '%s') | within %dm, d'%s'", metric, cp.GetInstanceId(), totalDurationInMinutes, endingTimeStamp)
+	query := fmt.Sprintf("fetch gce_instance | metric '%s' | filter (resource.instance_id = '%s') | within %dm, d'%s'", metric, cp.GetInstanceId(), totalDurationInMinutes, s.endingTimestamp)
 	// TODO: - Fix deprecated mpb.QueryTimeSeriesRequest.
 	req := &mpb.QueryTimeSeriesRequest{
 		Name:  fmt.Sprintf("projects/%s", cp.GetProjectId()),
