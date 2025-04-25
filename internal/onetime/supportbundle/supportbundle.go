@@ -323,6 +323,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintLogs(ctx, globalPath, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.collectMessagesLogs(ctx, linuxLogFilesPath, fs)...)
 	}
 	reqFilePaths = append(reqFilePaths, s.agentLogFiles(ctx, linuxLogFilesPath, fs)...)
 	reqFilePaths = append(reqFilePaths, s.agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
@@ -700,6 +701,27 @@ func (s *SupportBundle) copyVarLogMessagesToBundle(ctx context.Context, destFile
 		return true
 	}
 	return false
+}
+
+// collectMessagesLogs collects the messages including rolled over messages file paths.
+func (s *SupportBundle) collectMessagesLogs(ctx context.Context, destFilesPath string, fu filesystem.FileSystem) []string {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Copying /var/log/messages file to the support bundle...")
+	var messagesLogs []string
+
+	fds, err := fu.ReadDir(destFilesPath)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+destFilesPath, err)
+		return messagesLogs
+	}
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		if strings.Contains(fd.Name(), "messages") {
+			messagesLogs = append(messagesLogs, path.Join(destFilesPath, fd.Name()))
+		}
+	}
+	return messagesLogs
 }
 
 // extractSystemDBErrors extracts the errors from system DB backup logs.

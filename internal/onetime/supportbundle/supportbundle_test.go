@@ -1044,6 +1044,45 @@ func TestExtractVarLogMessages(t *testing.T) {
 	}
 }
 
+func TestCollectMessagesLogs(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
+	tests := []struct {
+		name          string
+		destFilesPath string
+		fs            filesystem.FileSystem
+		want          []string
+	}{
+		{
+			name:          "ReadDirError",
+			destFilesPath: "failure",
+			fs:            mockedfilesystem{},
+			want:          nil,
+		},
+		{
+			name:          "Success",
+			destFilesPath: "success",
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "bundles", isDir: true},
+					mockedFileInfo{name: "messages", isDir: false},
+					mockedFileInfo{name: "messages-20200304", isDir: false},
+				},
+			},
+			want: []string{"success/messages", "success/messages-20200304"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sosr.collectMessagesLogs(context.Background(), test.destFilesPath, test.fs); !cmp.Equal(got, test.want) {
+				t.Errorf("collectMessagesLogs() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestExtractBackintErrors(t *testing.T) {
 	sosr := SupportBundle{
 		oteLogger: defaultOTELogger,
