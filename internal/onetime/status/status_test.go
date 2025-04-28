@@ -35,6 +35,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/fsouza/fake-gcs-server/fakestorage"
+	"github.com/googleapis/gax-go/v2"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
@@ -45,7 +47,9 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 
+	arpb "cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -62,6 +66,35 @@ var (
 		return fakeServer(defaultBucketName).Client(), nil
 	}
 )
+
+type mockArtifactRegistryClient struct {
+	Versions []*arpb.Version
+}
+
+type mockVersionIterator struct {
+	Versions []*arpb.Version
+}
+
+func (m *mockArtifactRegistryClient) ListVersions(ctx context.Context, req *arpb.ListVersionsRequest, opts ...gax.CallOption) statushelper.VersionIterator {
+	return &mockVersionIterator{Versions: m.Versions}
+}
+
+func (m *mockVersionIterator) Next() (*arpb.Version, error) {
+	if len(m.Versions) == 0 {
+		return nil, iterator.Done
+	}
+	version := m.Versions[0]
+	m.Versions = m.Versions[1:]
+	return version, nil
+}
+
+func fakeArtifactRegistryClient(versions []string) statushelper.ARClientInterface {
+	var arVersions []*arpb.Version
+	for _, version := range versions {
+		arVersions = append(arVersions, &arpb.Version{Name: version})
+	}
+	return &mockArtifactRegistryClient{Versions: arVersions}
+}
 
 type mockFileInfo struct{ perm os.FileMode }
 
@@ -1013,9 +1046,6 @@ func TestStatusHandler(t *testing.T) {
 				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
 				},
-				exists: func(string) bool {
-					return true
-				},
 				stat: func(name string) (os.FileInfo, error) {
 					return &mockFileInfo{perm: 0077}, nil
 				},
@@ -1030,6 +1060,7 @@ func TestStatusHandler(t *testing.T) {
 				httpGet:        httpGetSuccess,
 				createDBHandle: dbConnectorSuccess,
 				iamService:     &iam.IAM{},
+				arClient:       fakeArtifactRegistryClient([]string{""}),
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					return map[string]bool{
 						"monitoring.timeSeries.create": true,
@@ -1039,7 +1070,7 @@ func TestStatusHandler(t *testing.T) {
 			want: &spb.AgentStatus{
 				AgentName:                       agentPackageName,
 				InstalledVersion:                fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
-				AvailableVersion:                "enabled",
+				AvailableVersion:                "",
 				SystemdServiceEnabled:           spb.State_SUCCESS_STATE,
 				SystemdServiceRunning:           spb.State_SUCCESS_STATE,
 				ConfigurationFilePath:           configuration.LinuxConfigPath,
@@ -1185,9 +1216,6 @@ func TestStatusHandler(t *testing.T) {
 				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
 				},
-				exists: func(string) bool {
-					return true
-				},
 				cloudProps: &iipb.CloudProperties{
 					Scopes: []string{},
 				},
@@ -1201,6 +1229,7 @@ func TestStatusHandler(t *testing.T) {
 				},
 				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
 				backintClient:         defaultStorageClient,
+				arClient:              fakeArtifactRegistryClient([]string{"fake-version/0:1.10-1", "fake-version/0:1.1-2", "fake-version/0:1.2-3"}),
 				httpGet:               httpGetSuccess,
 				createDBHandle:        dbConnectorSuccess,
 				iamService:            &iam.IAM{},
@@ -1213,7 +1242,7 @@ func TestStatusHandler(t *testing.T) {
 			want: &spb.AgentStatus{
 				AgentName:                       agentPackageName,
 				InstalledVersion:                fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
-				AvailableVersion:                fetchLatestVersionError,
+				AvailableVersion:                "1.10-1",
 				SystemdServiceEnabled:           spb.State_ERROR_STATE,
 				SystemdServiceRunning:           spb.State_ERROR_STATE,
 				ConfigurationFilePath:           configuration.LinuxConfigPath,

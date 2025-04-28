@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"flag"
+	"cloud.google.com/go/artifactregistry/apiv1"
 	store "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
@@ -53,7 +54,9 @@ import (
 
 const (
 	agentPackageName        = "google-cloud-sap-agent"
-	agentRepoName           = "google-cloud-sap-agent"
+	projectName             = "sap-core-eng-products"
+	repositoryLocation      = "us"
+	repositoryName          = "google-cloud-sap-agent-sles15-x86-64"
 	fetchLatestVersionError = "Error: could not fetch latest version"
 	// TODO: Implement status OTE check for WIF based authentications access to scopes.
 	requiredScope       = "https://www.googleapis.com/auth/cloud-platform"
@@ -99,12 +102,12 @@ type Status struct {
 	config            *cpb.Configuration
 	gceService        onetime.GCEInterface
 	iamService        IAMService
+	arClient          statushelper.ARClientInterface
 	oteLogger         *onetime.OTELogger
 	cloudProps        *iipb.CloudProperties
 	readFile          configuration.ReadConfigFile
 	backintReadFile   backintconfiguration.ReadConfigFile
 	exec              commandlineexecutor.Execute
-	exists            commandlineexecutor.Exists
 	backintClient     storage.Client
 	permissionsStatus permissions.FetchStatusFunc
 	httpGet           httpGetter
@@ -171,15 +174,20 @@ func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentS
 	s.readFile = os.ReadFile
 	s.backintReadFile = os.ReadFile
 	s.exec = commandlineexecutor.ExecuteCommand
-	s.exists = commandlineexecutor.CommandExists
 	s.backintClient = store.NewClient
 	s.iamService, err = iam.NewIAMClient(ctx)
-	s.stat = os.Stat
-	s.readDir = ioutil.ReadDir
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
 		return nil, subcommands.ExitFailure
 	}
+	arClient, err := artifactregistry.NewClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not create artifact registry client", "error", err)
+		return nil, subcommands.ExitFailure
+	}
+	s.arClient = &statushelper.ArtifactRegistryClient{Client: arClient}
+	s.stat = os.Stat
+	s.readDir = ioutil.ReadDir
 	s.permissionsStatus = permissions.GetServicePermissionsStatus
 	s.httpGet = http.Get
 	s.createDBHandle = databaseconnector.CreateDBHandle
@@ -226,7 +234,7 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	}
 
 	var err error
-	agentStatus.AvailableVersion, err = statushelper.FetchLatestVersion(ctx, agentPackageName, agentPackageName, runtime.GOOS, s.exec, s.exists)
+	agentStatus.AvailableVersion, err = statushelper.LatestVersionArtifactRegistry(ctx, s.arClient, projectName, repositoryLocation, repositoryName, agentPackageName)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
 		agentStatus.AvailableVersion = fetchLatestVersionError

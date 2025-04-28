@@ -10,6 +10,7 @@ replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
 require (
   cloud.google.com/go/aiplatform v1.70.0
+  cloud.google.com/go/artifactregistry v1.16.1
   cloud.google.com/go/iam v1.3.1
   cloud.google.com/go/logging v1.13.0
   cloud.google.com/go/monitoring v1.23.0
@@ -17,10 +18,10 @@ require (
   cloud.google.com/go/storage v1.50.0
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250421133725-67aaeb509d6e
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250424195450-f648394235bb
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250421133725-67aaeb509d6e
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250424195450-f648394235bb
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.52.1
@@ -97,6 +98,7 @@ require (
   go.opentelemetry.io/otel/trace v1.34.0 // indirect
   go.uber.org/multierr v1.10.0 // indirect
   golang.org/x/crypto v0.32.0 // indirect
+  golang.org/x/mod v0.22.0 // indirect
   golang.org/x/net v0.34.0 // indirect
   golang.org/x/sync v0.11.0 // indirect
   golang.org/x/text v0.22.0 // indirect
