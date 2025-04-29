@@ -383,8 +383,6 @@ func matchQueryAndInstanceType(ctx context.Context, opts queryOptions) bool {
 	}
 	log.CtxLogger(ctx).Debugw("Site for the instance: ", "site", site, "instance", instance.Name)
 	switch site {
-	case 0: // stand alone mode
-		return true
 	case int(opts.query.RunOn.Number()):
 		return true
 	default:

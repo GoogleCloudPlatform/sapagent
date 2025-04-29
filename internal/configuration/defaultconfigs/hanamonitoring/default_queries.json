@@ -813,6 +813,37 @@
                 "value_type": "VALUE_STRING"
             }
         ]
+    },
+    {
+        "name": "fast_restart_enabled_queries",
+        "sql": "SELECT CASE WHEN COUNT(*) > 0 THEN TRUE ELSE FALSE END AS FAST_RESTART_ENABLED FROM M_PERSISTENT_MEMORY_VOLUMES WHERE FILESYSTEM_TYPE = 'tmpfs'",
+        "columns": [
+            {
+                "name": "FAST_RESTART_ENABLED",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_BOOL",
+                "name_override":"fast_restart_enabled"
+            }
+        ]
+    },
+    {
+        "name": "logshipping_max_retention_size_queries",
+        "sql": "select VALUE, FILE_NAME from M_INIFILE_CONTENTS where layer_name in ('DATABASE','DEFAULT') and key = 'logshipping_max_retention_size' and file_name in ('global.ini', 'indexserver.ini') order by file_name desc limit 1",
+        "columns": [
+            {
+                "name": "VALUE",
+                "metric_type": "METRIC_GAUGE",
+                "value_type": "VALUE_INT64",
+                "name_override":"logshipping_max_retention_size"
+            },
+            {
+                "name": "FILE_NAME",
+                "metric_type": "METRIC_LABEL",
+                "value_type": "VALUE_STRING",
+                "name_override":"logshipping_max_retention_size_source"
+            }
+        ],
+        "run_on": "PRIMARY"
     }
   ]
 }
