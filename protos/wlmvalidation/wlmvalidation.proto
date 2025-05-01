@@ -44,6 +44,7 @@ enum SystemVariable {
   HAS_APP_SERVER = 9;
   HAS_ASCS = 10;
   HAS_ERS = 11;
+  KERNEL_VERSION = 12;
 }
 
 enum DiskVariable {

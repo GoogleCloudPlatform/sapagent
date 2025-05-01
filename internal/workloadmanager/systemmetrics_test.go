@@ -31,6 +31,7 @@ import (
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -39,7 +40,8 @@ import (
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	cmpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/configurablemetrics"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
+	statuspb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
+	systempb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
@@ -65,7 +67,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "31"
+	collectionConfigVersion = "32"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -123,23 +125,23 @@ func createWorkloadValidation(label string, value wlmpb.SystemVariable) *wlmpb.W
 	}
 }
 
-func createFakeDiscovery(resourceType spb.SapDiscovery_Resource_ResourceType, instanceRoles []spb.SapDiscovery_Resource_InstanceProperties_InstanceRole, zones []string, instanceNames []string) *fakeDiscoveryInterface {
-	var resources []*spb.SapDiscovery_Resource
+func createFakeDiscovery(resourceType systempb.SapDiscovery_Resource_ResourceType, instanceRoles []systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole, zones []string, instanceNames []string) *fakeDiscoveryInterface {
+	var resources []*systempb.SapDiscovery_Resource
 	for i := 0; i < len(instanceRoles); i++ {
-		resource := &spb.SapDiscovery_Resource{
+		resource := &systempb.SapDiscovery_Resource{
 			ResourceType: resourceType,
-			ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			ResourceKind: systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 			ResourceUri:  "//compute.googleapis.com/projects/test-project/zones/" + zones[i] + "/instances/" + instanceNames[i],
-			InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+			InstanceProperties: &systempb.SapDiscovery_Resource_InstanceProperties{
 				InstanceRole: instanceRoles[i],
 			},
 		}
 		resources = append(resources, resource)
 	}
 	return &fakeDiscoveryInterface{
-		systems: []*spb.SapDiscovery{
+		systems: []*systempb.SapDiscovery{
 			{
-				ApplicationLayer: &spb.SapDiscovery_Component{
+				ApplicationLayer: &systempb.SapDiscovery_Component{
 					Resources: resources,
 				},
 			},
@@ -152,6 +154,14 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 	err := protojson.Unmarshal(configuration.DefaultCollectionDefinition, collectionDefinition)
 	if err != nil {
 		t.Fatalf("Failed to load collection definition. %v", err)
+	}
+
+	marshal := func(m proto.Message) string {
+		bytes, err := protojson.Marshal(m)
+		if err != nil {
+			t.Fatalf("Failed to marshal proto: %v", err)
+		}
+		return string(bytes)
 	}
 
 	systemMetricOSNameVersion := &wlmpb.WorkloadValidation{
@@ -178,6 +188,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: Parameters{
 				Config:         defaultConfiguration,
 				WorkloadConfig: collectionDefinition.GetWorkloadValidation(),
+				OSType:         "linux",
 				osVendorID:     "debian",
 				osVersion:      "11",
 				InterfaceAddrsGetter: func() ([]net.Addr, error) {
@@ -211,6 +222,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdOut: "Mem: 2000000000\nSwap: 1000000000",
 						}
 					}
+					if params.Executable == "uname" {
+						return commandlineexecutor.Result{
+							StdOut: "5.14.21-150500.55.73-default",
+						}
+					}
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -234,7 +250,21 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"has_ascs":                    "false",
 				"has_ers":                     "false",
 				"tuned":                       "active",
-				"collection_config_version":   collectionConfigVersion,
+				"kernel_version": marshal(&statuspb.KernelVersion{
+					RawString: "5.14.21-150500.55.73-default",
+					OsKernel: &statuspb.KernelVersion_Version{
+						Major: 5,
+						Minor: 14,
+						Build: 21,
+					},
+					DistroKernel: &statuspb.KernelVersion_Version{
+						Major:     150500,
+						Minor:     55,
+						Build:     73,
+						Remainder: "default",
+					},
+				}),
+				"collection_config_version": collectionConfigVersion,
 			},
 		},
 		{
@@ -351,11 +381,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testZone1, testZone2},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
@@ -371,11 +401,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				cnf,
 				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
 				createFakeDiscovery(
-					spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testZone1, testZone2},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
@@ -391,11 +421,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				cnf,
 				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
 				createFakeDiscovery(
-					spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testBaseZone, testBaseZone},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
@@ -410,9 +440,9 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 					},
 					[]string{testBaseZone},
 					[]string{testInstanceName1},
@@ -427,10 +457,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testInstanceName1},
@@ -445,10 +475,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testZone1},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -463,10 +493,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -481,10 +511,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_app_server", wlmpb.SystemVariable_HAS_APP_SERVER),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testInstanceName1, testBaseInstanceName},
@@ -499,10 +529,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testInstanceName1, testBaseInstanceName},
@@ -517,10 +547,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -535,10 +565,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -553,10 +583,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ascs", wlmpb.SystemVariable_HAS_ASCS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testInstanceName1},
@@ -571,10 +601,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -589,10 +619,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
@@ -607,9 +637,9 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_UNSPECIFIED,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS_APP_SERVER,
 					},
 					[]string{testBaseZone},
 					[]string{testBaseInstanceName},
@@ -624,10 +654,10 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			params: createParameters(
 				cnf,
 				createWorkloadValidation("has_ers", wlmpb.SystemVariable_HAS_ERS),
-				createFakeDiscovery(spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					[]spb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_UNSPECIFIED,
-						spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_UNSPECIFIED,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testInstanceName1},
@@ -635,6 +665,34 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 			),
 			wantLabels: map[string]string{
 				"has_ers": "false",
+			},
+		},
+		{
+			name: "KernelVersion_Error",
+			params: Parameters{
+				Config: defaultConfiguration,
+				WorkloadConfig: &wlmpb.WorkloadValidation{
+					ValidationSystem: &wlmpb.ValidationSystem{
+						SystemMetrics: []*wlmpb.SystemMetric{
+							&wlmpb.SystemMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/system",
+									Label: "kernel_version",
+								},
+								Value: wlmpb.SystemVariable_KERNEL_VERSION,
+							},
+						},
+					},
+				},
+				OSType: "linux",
+				Execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						Error: errors.New("Error in executing command"),
+					}
+				},
+			},
+			wantLabels: map[string]string{
+				"kernel_version": "",
 			},
 		},
 	}

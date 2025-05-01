@@ -23,15 +23,17 @@ import (
 	"os"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 
 	wlmpb "github.com/GoogleCloudPlatform/sapagent/protos/wlmvalidation"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
+	systempb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
@@ -106,6 +108,8 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 		return fmt.Sprint(hasInstanceRole(ctx, params, ascsRoleString))
 	case wlmpb.SystemVariable_HAS_ERS:
 		return fmt.Sprint(hasInstanceRole(ctx, params, ersRoleString))
+	case wlmpb.SystemVariable_KERNEL_VERSION:
+		return kernelVersion(ctx, params)
 	default:
 		log.CtxLogger(ctx).Warnw("System metric has no system variable value to collect from", "metric", m.GetMetricInfo().GetLabel())
 		return ""
@@ -122,7 +126,7 @@ func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 	centralServiceZones := make(map[string]bool)
 	for _, system := range params.Discovery.GetSAPSystems() {
 		for _, r := range system.GetApplicationLayer().GetResources() {
-			if r.GetResourceType() != spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE || r.GetResourceKind() != spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+			if r.GetResourceType() != systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE || r.GetResourceKind() != systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 				continue
 			}
 			if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), appServerRoleString) {
@@ -153,7 +157,7 @@ func hasInstanceRole(ctx context.Context, params Parameters, role string) bool {
 	instanceName := params.Config.GetCloudProperties().GetInstanceName()
 	for _, system := range params.Discovery.GetSAPSystems() {
 		for _, r := range system.GetApplicationLayer().GetResources() {
-			if r.GetResourceType() == spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+			if r.GetResourceType() == systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE && r.GetResourceKind() == systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 				if strings.Contains(r.InstanceProperties.GetInstanceRole().String(), role) && clouddiscovery.ExtractFromURI(r.GetResourceUri(), "instances") == instanceName {
 					log.CtxLogger(ctx).Debugw(fmt.Sprintf("Found %s running in the instance", role), "instanceName", instanceName)
 					return true
@@ -204,4 +208,19 @@ func networkIPAddrs(ctx context.Context, params Parameters) string {
 		v = append(v, ipaddr.String())
 	}
 	return strings.Join(v, ",")
+}
+
+// kernelVersion returns the OS and distro-level kernel version data for the system.
+func kernelVersion(ctx context.Context, params Parameters) string {
+	kernel, err := statushelper.KernelVersion(ctx, params.OSType, params.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Could not collect kernel version", "error", err)
+		return ""
+	}
+	kernelBytes, err := protojson.Marshal(kernel)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Could not marshal kernel version", "error", err)
+		return ""
+	}
+	return string(kernelBytes)
 }
