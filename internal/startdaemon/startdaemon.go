@@ -49,6 +49,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/status"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions"
@@ -80,6 +81,7 @@ const (
 	hostMetricsServiceName     = "hostmetrics"
 	processMetricsServiceName  = "processmetrics"
 	workloadManagerServiceName = "workloadmanager"
+	statusServiceName          = "status"
 )
 
 var (
@@ -467,6 +469,11 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		ConnectionRetryInterval: 300 * time.Second,
 	})
 
+	// Start Status Collection
+	statusCtx := log.SetCtx(ctx, "context", "Status")
+	sp := StatusParams{&status.Status{ConfigFilePath: d.configFilePath, CloudProps: d.cloudProps}, healthMonitor}
+	sp.startCollection(statusCtx)
+
 	waitForShutdown(ctx, shutdownch, cancel, restarting)
 }
 
@@ -591,6 +598,27 @@ func (wmp WorkloadManagerParams) startCollection(ctx context.Context) {
 	wmp.wlmparams.JSONCredentialsGetter = jsonCredentialsGetter
 	wmp.wlmparams.Init(ctx)
 	workloadmanager.StartMetricsCollection(ctx, wmp.wlmparams)
+}
+
+// StatusParams has arguments for StartStatusCollection.
+type StatusParams struct {
+	status        *status.Status
+	healthMonitor agentmetrics.HealthMonitor
+}
+
+func (sp StatusParams) startCollection(ctx context.Context) {
+	statusHeartbeatSpec, err := sp.healthMonitor.Register(statusServiceName)
+	if err != nil {
+		log.Logger.Error("Failed to register status service", log.Error(err))
+		usagemetrics.Error(usagemetrics.HeartbeatMonitorRegistrationFailure)
+		return
+	}
+	sp.status.HeartbeatSpec = statusHeartbeatSpec
+	if err := sp.status.Init(ctx); err != nil {
+		log.CtxLogger(ctx).Errorw("Could not initialize status", "error", err)
+		return
+	}
+	sp.status.StartStatusCollection(ctx)
 }
 
 // waitForShutdown observes a channel for a shutdown signal, then proceeds to shut down the Agent.

@@ -120,6 +120,7 @@ const (
 	HANAInsightsOTEFailure                         = 79 //	HANAInsightsOTEFailure
 	MultipartUploadFailure                         = 80 //	MultipartUploadFailure
 	GCBDRActionsFailure                            = 81 //	GCBDRActionsFailure
+	StatusCollectionFailure                        = 82 //	StatusCollectionFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -210,6 +211,7 @@ const (
 	MultipartUploadStarted                  = 81 //	MultipartUploadStarted
 	MultipartUploadFinished                 = 82 //	MultipartUploadFinished
 	GCBDRActionsStarted                     = 83 //	GCBDRActionsStarted
+	CollectStatus                           = 84 //	Collecting Status
 )
 
 // projectNumbers contains known project numbers for test instances.

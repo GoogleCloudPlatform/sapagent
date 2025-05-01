@@ -198,6 +198,16 @@ func TestExecuteStatus(t *testing.T) {
 				&iipb.CloudProperties{},
 			},
 		},
+		{
+			name: "FailedToCreateClient",
+			s:    Status{},
+			want: subcommands.ExitFailure,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&iipb.CloudProperties{},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -205,6 +215,148 @@ func TestExecuteStatus(t *testing.T) {
 			got := test.s.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.s, test.args, got, test.want)
+			}
+		})
+	}
+}
+
+func TestStartStatusCollection(t *testing.T) {
+	s := Status{
+		iamService: &iam.IAM{},
+		permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+			return nil, nil
+		},
+		config:     &cpb.Configuration{},
+		CloudProps: &iipb.CloudProperties{},
+	}
+	if !s.StartStatusCollection(context.Background()) {
+		t.Errorf("StartStatusCollection()=false, want true")
+	}
+}
+
+func TestCollectAndSendStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Status
+		want error
+	}{
+		{
+			name: "SuccessEmptyConfig",
+			s: Status{
+				readFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				backintReadFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0077}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					Scopes: []string{requiredScope},
+				},
+				httpGet:        httpGetSuccess,
+				createDBHandle: dbConnectorSuccess,
+				iamService:     &iam.IAM{},
+				arClient:       fakeArtifactRegistryClient([]string{""}),
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SuccessAllEnabled",
+			s: Status{
+				readFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+  "provide_sap_host_agent_metrics": true,
+  "log_level": "INFO",
+  "log_to_cloud": true,
+  "collection_configuration": {
+    "collect_workload_validation_metrics": true,
+    "collect_process_metrics": true
+  },
+  "discovery_configuration": {
+    "enable_discovery": true
+  },
+  "hana_monitoring_configuration": {
+    "enabled": true,
+		"hana_instances": [
+			{
+				"name": "instance1",
+				"user": "user1",
+				"host": "host1",
+				"port": "1234",
+				"secret_name": "secret1"
+			}
+		]
+  }
+}
+`), nil
+				},
+				backintReadFile: func(string) ([]byte, error) {
+					return []byte(`
+{
+  "bucket": "fake-bucket",
+  "log_to_cloud": true,
+	"parallel_streams": 16,
+	"threads": 1,
+	"service_account_key": "fake-key"
+}
+`), nil
+				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
+				},
+				CloudProps: &iipb.CloudProperties{
+					Scopes: []string{},
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0400}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
+				BackintParametersPath: "fake-path/backint-gcs/parameters.json",
+				backintClient:         defaultStorageClient,
+				arClient:              fakeArtifactRegistryClient([]string{"fake-version/0:1.10-1", "fake-version/0:1.1-2", "fake-version/0:1.2-3"}),
+				httpGet:               httpGetSuccess,
+				createDBHandle:        dbConnectorSuccess,
+				iamService:            &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "StatusStructNotInitialized",
+			s:    Status{},
+			want: cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := test.s.collectAndSendStatus(context.Background())
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("statusHandler()=%v want %v", got, test.want)
 			}
 		})
 	}
@@ -226,7 +378,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 						"compute.disks.createSnapshot": false,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -253,7 +405,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 						"compute.disks.createSnapshot": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -278,7 +430,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					return nil, fmt.Errorf("error getting permissions")
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -288,7 +440,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
 				IamPermissions:  nil,
-				ErrorMessage:    "Error checking IAM permissions",
+				ErrorMessage:    "Error checking IAM permissions: error getting permissions",
 			},
 		},
 	}
@@ -343,7 +495,7 @@ func TestHostMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.list":   true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
@@ -382,7 +534,7 @@ func TestHostMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
@@ -394,7 +546,7 @@ func TestHostMetricsStatus(t *testing.T) {
 				Name:            "Host Metrics",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
-				ErrorMessage:    "Error verifying endpoint",
+				ErrorMessage:    "Error verifying endpoint: endpoint failure",
 				IamPermissions: []*spb.IAMPermission{
 					{
 						Name:    "monitoring.timeSeries.create",
@@ -418,7 +570,7 @@ func TestHostMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
@@ -454,7 +606,7 @@ func TestHostMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
@@ -541,7 +693,7 @@ func TestProcessMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.list":   true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -586,7 +738,7 @@ func TestProcessMetricsStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -896,7 +1048,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 						"monitoring.timeSeries.create": false,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -941,7 +1093,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -983,7 +1135,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					return nil, fmt.Errorf("error getting permissions")
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
 				},
@@ -1004,7 +1156,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
 				IamPermissions:  nil,
-				ErrorMessage:    "Error checking IAM permissions",
+				ErrorMessage:    "Error checking IAM permissions: error getting permissions",
 				ConfigValues: []*spb.ConfigValue{
 					{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
 					{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
@@ -1054,7 +1206,7 @@ func TestStatusHandler(t *testing.T) {
 						&mockFileInfo{perm: 0400},
 					}, nil
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					Scopes: []string{requiredScope},
 				},
 				httpGet:        httpGetSuccess,
@@ -1076,6 +1228,7 @@ func TestStatusHandler(t *testing.T) {
 				ConfigurationFilePath:           configuration.LinuxConfigPath,
 				ConfigurationValid:              spb.State_SUCCESS_STATE,
 				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
+				KernelVersion:                   &spb.KernelVersion{RawString: "enabled"},
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Host Metrics",
@@ -1216,7 +1369,7 @@ func TestStatusHandler(t *testing.T) {
 				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
 				},
-				cloudProps: &iipb.CloudProperties{
+				CloudProps: &iipb.CloudProperties{
 					Scopes: []string{},
 				},
 				stat: func(name string) (os.FileInfo, error) {
@@ -1471,7 +1624,7 @@ func TestBackintStatusFailures(t *testing.T) {
 			name: "PermissionsStatusFailure",
 			s: Status{
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
-					return nil, fmt.Errorf("Error checking IAM permissions")
+					return nil, fmt.Errorf("error getting permissions")
 				},
 				backintReadFile: func(string) ([]byte, error) {
 					return []byte(`
@@ -1489,7 +1642,7 @@ func TestBackintStatusFailures(t *testing.T) {
 				Name:            "Backint",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
-				ErrorMessage:    "Error checking IAM permissions",
+				ErrorMessage:    "Error checking IAM permissions: error getting permissions",
 				IamPermissions:  nil,
 				ConfigValues: []*spb.ConfigValue{
 					{Name: "bucket", Value: "fake-bucket", IsDefault: false},
@@ -1705,7 +1858,7 @@ func TestSystemDiscoveryStatusFailures(t *testing.T) {
 			name: "IAMPermissionsError",
 			s: Status{
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
-					return nil, fmt.Errorf("Error checking IAM permissions")
+					return nil, fmt.Errorf("error getting permissions")
 				},
 				stat: func(name string) (os.FileInfo, error) {
 					return &mockFileInfo{perm: 0400}, nil
@@ -1723,7 +1876,7 @@ func TestSystemDiscoveryStatusFailures(t *testing.T) {
 				Name:            "System Discovery",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_ERROR_STATE,
-				ErrorMessage:    "Error checking IAM permissions",
+				ErrorMessage:    "Error checking IAM permissions: error getting permissions",
 				IamPermissions:  nil,
 				ConfigValues: []*spb.ConfigValue{
 					{Name: "enable_discovery", Value: "true", IsDefault: true},

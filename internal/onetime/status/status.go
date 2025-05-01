@@ -39,14 +39,17 @@ import (
 	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
@@ -76,6 +79,11 @@ const (
 	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
 )
 
+var (
+	dailyUsageRoutine *recovery.RecoverableRoutine
+	collectRoutine    *recovery.RecoverableRoutine
+)
+
 type (
 	// IAMService is an interface for the IAM service.
 	IAMService interface {
@@ -95,6 +103,8 @@ type (
 type Status struct {
 	ConfigFilePath        string
 	BackintParametersPath string
+	CloudProps            *iipb.CloudProperties
+	HeartbeatSpec         *heartbeat.Spec
 
 	compact           bool
 	help              bool
@@ -104,7 +114,6 @@ type Status struct {
 	iamService        IAMService
 	arClient          statushelper.ARClientInterface
 	oteLogger         *onetime.OTELogger
-	cloudProps        *iipb.CloudProperties
 	readFile          configuration.ReadConfigFile
 	backintReadFile   backintconfiguration.ReadConfigFile
 	exec              commandlineexecutor.Execute
@@ -154,7 +163,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	if !completed {
 		return exitStatus
 	}
-	s.cloudProps = cp
+	s.CloudProps = cp
 	// Run the status checks.
 	agentStatus, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if exitStatus == subcommands.ExitFailure {
@@ -167,36 +176,112 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	return exitStatus
 }
 
-// Run executes the command and returns the status.
-func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
+// Init initializes status parameters and creates clients.
+func (s *Status) Init(ctx context.Context) error {
 	var err error
-	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
 	s.readFile = os.ReadFile
 	s.backintReadFile = os.ReadFile
 	s.exec = commandlineexecutor.ExecuteCommand
 	s.backintClient = store.NewClient
-	s.iamService, err = iam.NewIAMClient(ctx)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
-		return nil, subcommands.ExitFailure
-	}
-	arClient, err := artifactregistry.NewClient(ctx)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not create artifact registry client", "error", err)
-		return nil, subcommands.ExitFailure
-	}
-	s.arClient = &statushelper.ArtifactRegistryClient{Client: arClient}
 	s.stat = os.Stat
 	s.readDir = ioutil.ReadDir
 	s.permissionsStatus = permissions.GetServicePermissionsStatus
 	s.httpGet = http.Get
 	s.createDBHandle = databaseconnector.CreateDBHandle
+	s.iamService, err = iam.NewIAMClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
+		return err
+	}
+	arClient, err := artifactregistry.NewClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not create artifact registry client", "error", err)
+		return err
+	}
+	s.arClient = &statushelper.ArtifactRegistryClient{Client: arClient}
+	return nil
+}
+
+// Run executes the command and returns the status.
+func (s *Status) Run(ctx context.Context, opts *onetime.RunOptions) (*spb.AgentStatus, subcommands.ExitStatus) {
+	s.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
+	if err := s.Init(ctx); err != nil {
+		return nil, subcommands.ExitFailure
+	}
 	status, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
 		return nil, subcommands.ExitFailure
 	}
 	return status, subcommands.ExitSuccess
+}
+
+// StartStatusCollection continuously sends status to data warehouse.
+// Returns true if the collection goroutine is started, and false otherwise.
+func (s *Status) StartStatusCollection(ctx context.Context) bool {
+	dailyUsageRoutine = &recovery.RecoverableRoutine{
+		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectStatus) },
+		RoutineArg:          nil,
+		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
+		UsageLogger:         *usagemetrics.Logger,
+		ExpectedMinDuration: 24 * time.Hour,
+	}
+	dailyUsageRoutine.StartRoutine(ctx)
+	collectRoutine = &recovery.RecoverableRoutine{
+		Routine:             start,
+		RoutineArg:          s,
+		ErrorCode:           usagemetrics.StatusCollectionFailure,
+		UsageLogger:         *usagemetrics.Logger,
+		ExpectedMinDuration: 60 * time.Second,
+	}
+	collectRoutine.StartRoutine(ctx)
+	return true
+}
+
+func start(ctx context.Context, a any) {
+	var s *Status
+	if v, ok := a.(*Status); ok {
+		s = v
+	} else {
+		log.CtxLogger(ctx).Error("Cannot collect status, no collection configuration detected")
+		return
+	}
+	statusTicker := time.NewTicker(time.Duration(60) * time.Second)
+	defer statusTicker.Stop()
+	heartbeatTicker := s.HeartbeatSpec.CreateTicker()
+	defer heartbeatTicker.Stop()
+
+	// Do not wait for the first tick and start status collection immediately.
+	select {
+	case <-ctx.Done():
+		log.CtxLogger(ctx).Debug("Status cancellation requested")
+		return
+	default:
+		s.collectAndSendStatus(ctx)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Debug("Status cancellation requested")
+			return
+		case <-heartbeatTicker.C:
+			s.HeartbeatSpec.Beat()
+		case <-statusTicker.C:
+			s.collectAndSendStatus(ctx)
+		}
+	}
+}
+
+func (s *Status) collectAndSendStatus(ctx context.Context) error {
+	s.HeartbeatSpec.Beat()
+	agentStatus, err := s.statusHandler(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
+		return err
+	}
+	// TODO: Send status to data warehouse.
+	log.CtxLogger(ctx).Debugw("Agent Status", "status", agentStatus)
+	return nil
 }
 
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
@@ -241,10 +326,10 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	}
 
 	switch {
-	case s.cloudProps == nil:
+	case s.CloudProps == nil:
 		log.CtxLogger(ctx).Errorw("Could not fetch scopes", "error", err)
 		agentStatus.CloudApiAccessFullScopesGranted = spb.State_ERROR_STATE
-	case slices.Contains(s.cloudProps.GetScopes(), requiredScope):
+	case slices.Contains(s.CloudProps.GetScopes(), requiredScope):
 		agentStatus.CloudApiAccessFullScopesGranted = spb.State_SUCCESS_STATE
 	default:
 		agentStatus.CloudApiAccessFullScopesGranted = spb.State_FAILURE_STATE
@@ -282,7 +367,12 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 		agentStatus.ConfigurationValid = spb.State_FAILURE_STATE
 		agentStatus.ConfigurationErrorMessage = err.Error()
 	}
-	config = configuration.ApplyDefaults(config, s.cloudProps)
+	config = configuration.ApplyDefaults(config, s.CloudProps)
+
+	agentStatus.KernelVersion, err = statushelper.KernelVersion(ctx, runtime.GOOS, s.exec)
+	if err != nil && runtime.GOOS == "linux" {
+		log.CtxLogger(ctx).Errorw("Could not fetch kernel version", "error", err)
+	}
 
 	return agentStatus, config
 }
@@ -302,12 +392,12 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 
 	status.State = spb.State_SUCCESS_STATE
 	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, hostMetricsLabel, &permissions.ResourceDetails{
-		ProjectID:    s.cloudProps.GetProjectId(),
-		InstanceName: s.cloudProps.GetInstanceId(),
-		Zone:         s.cloudProps.GetZone(),
+		ProjectID:    s.CloudProps.GetProjectId(),
+		InstanceName: s.CloudProps.GetInstanceId(),
+		Zone:         s.CloudProps.GetZone(),
 	})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
@@ -315,7 +405,7 @@ func (s *Status) hostMetricsStatus(ctx context.Context, config *cpb.Configuratio
 	}
 	resp, err := s.httpGet(hostMetricsEndpoint)
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error verifying endpoint", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error verifying endpoint: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	defer resp.Body.Close()
 
@@ -344,9 +434,9 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 	}
 
 	status.State = spb.State_SUCCESS_STATE
-	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.CloudProps.GetProjectId()})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
@@ -375,15 +465,15 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 	}
 
 	status.State = spb.State_SUCCESS_STATE
-	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, processMetricsLabel, &permissions.ResourceDetails{ProjectID: s.CloudProps.GetProjectId()})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
-	failedInstances := []string{}
+	var failedInstances []string
 	for _, i := range s.config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		// Note: We ignore timeout params here.
 		dbp := databaseconnector.Params{
@@ -432,9 +522,9 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 		return status
 	}
 	status.State = spb.State_SUCCESS_STATE
-	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, systemDiscoveryLabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, systemDiscoveryLabel, &permissions.ResourceDetails{ProjectID: s.CloudProps.GetProjectId()})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
@@ -522,19 +612,19 @@ func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
 	}
 
 	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, backintLabel, &permissions.ResourceDetails{
-		ProjectID:  s.cloudProps.GetProjectId(),
+		ProjectID:  s.CloudProps.GetProjectId(),
 		BucketName: printConfig.Bucket,
 	})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	if printConfig.XmlMultipartUpload {
 		multipartUploadPermissionsStatus, multipartAllGranted, err := s.fetchPermissionsStatus(ctx, backintMultipartLabel, &permissions.ResourceDetails{
-			ProjectID:  s.cloudProps.GetProjectId(),
+			ProjectID:  s.CloudProps.GetProjectId(),
 			BucketName: printConfig.Bucket,
 		})
 		if err != nil {
-			return logCheckFailureAndReturnStatus(ctx, status, "Error checking multipart upload IAM permissions", spb.State_ERROR_STATE)
+			return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking multipart upload IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 		}
 		permissionsStatus = append(permissionsStatus, multipartUploadPermissionsStatus...)
 		allGranted = allGranted && multipartAllGranted
@@ -567,10 +657,10 @@ func (s *Status) diskSnapshotStatus(ctx context.Context, config *cpb.Configurati
 		State: spb.State_SUCCESS_STATE, // Disk snapshot is an OTE so there's no enabled state to check.
 	}
 	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, diskBackupLabel, &permissions.ResourceDetails{
-		ProjectID: s.cloudProps.GetProjectId(),
+		ProjectID: s.CloudProps.GetProjectId(),
 	})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
@@ -599,9 +689,9 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 	}
 	status.State = spb.State_SUCCESS_STATE
 
-	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, workloadEvaluationMELabel, &permissions.ResourceDetails{ProjectID: s.cloudProps.GetProjectId()})
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, workloadEvaluationMELabel, &permissions.ResourceDetails{ProjectID: s.CloudProps.GetProjectId()})
 	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, "Error checking IAM permissions", spb.State_ERROR_STATE)
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
 	status.IamPermissions = permissionsStatus
 	if !allGranted {

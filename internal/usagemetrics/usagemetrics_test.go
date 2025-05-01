@@ -265,6 +265,9 @@ func TestErrorConstants(t *testing.T) {
 	if GCBDRActionsFailure != 81 {
 		t.Errorf("GCBDRActionsFailure = %v, want 81", GCBDRActionsFailure)
 	}
+	if StatusCollectionFailure != 82 {
+		t.Errorf("StatusCollectionFailure = %v, want 82", StatusCollectionFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -519,5 +522,8 @@ func TestActionConstants(t *testing.T) {
 	}
 	if GCBDRActionsStarted != 83 {
 		t.Errorf("GCBDRActionsStarted = %v, want 83", GCBDRActionsStarted)
+	}
+	if CollectStatus != 84 {
+		t.Errorf("CollectStatus = %v, want 84", CollectStatus)
 	}
 }
