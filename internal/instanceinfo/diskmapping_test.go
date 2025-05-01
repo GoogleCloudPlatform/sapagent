@@ -66,7 +66,7 @@ func TestForLinux(t *testing.T) {
 		got, err := d.ForDeviceName(context.Background(), "sda1")
 
 		if err != nil {
-			t.Errorf(err.Error())
+			t.Error(err.Error())
 			continue
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
@@ -119,7 +119,7 @@ func TestForWindows(t *testing.T) {
 		got, err := d.ForDeviceName(context.Background(), "C:")
 
 		if err != nil {
-			t.Errorf(err.Error())
+			t.Error(err.Error())
 			continue
 		}
 		if diff := cmp.Diff(want, got); diff != "" {

@@ -18,6 +18,7 @@ package networkstats
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -74,7 +75,7 @@ func returnExecutor(out, err string) commandlineexecutor.Execute {
 		return commandlineexecutor.Result{
 			StdOut: out,
 			StdErr: err,
-			Error:  fmt.Errorf(err),
+			Error:  errors.New(err),
 		}
 	}
 }
