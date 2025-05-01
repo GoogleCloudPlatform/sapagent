@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/sapagent
 
-go 1.23
+go 1.24
 
 replace github.com/GoogleCloudPlatform/sapagent/internal => ./internal
 

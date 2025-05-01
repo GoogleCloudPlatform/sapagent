@@ -61,12 +61,12 @@ if [ "${COMPILE_PROTOS}" == "TRUE" ] && [ ! -d "workloadagentplatform" ]; then
     find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
 fi
 
-echo "**************  Getting go 1.23.2"
-curl -sLOS https://go.dev/dl/go1.23.2.linux-amd64.tar.gz
+echo "**************  Getting go 1.24.2"
+curl -sLOS https://go.dev/dl/go1.24.2.linux-amd64.tar.gz
 chmod -fR u+rwx /tmp/sapagent || :
 rm -fr /tmp/sapagent
 mkdir -p /tmp/sapagent
-tar -C /tmp/sapagent -xzf go1.23.2.linux-amd64.tar.gz
+tar -C /tmp/sapagent -xzf go1.24.2.linux-amd64.tar.gz
 
 export GOROOT=/tmp/sapagent/go
 export GOPATH=/tmp/sapagent/gopath
