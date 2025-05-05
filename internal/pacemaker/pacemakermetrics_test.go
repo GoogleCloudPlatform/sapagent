@@ -275,6 +275,10 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ascs_monitor_interval":             "",
 		"ascs_monitor_timeout":              "",
 		"ensa2_capable":                     "",
+		"ascs_ip":                           "",
+		"ers_ip":                            "",
+		"ascs_virtual_ip":                   "",
+		"ers_virtual_ip":                    "",
 		"ers_automatic_recover":             "",
 		"is_ers":                            "",
 		"ers_monitor_interval":              "",
@@ -348,6 +352,10 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ascs_monitor_interval":              "",
 		"ascs_monitor_timeout":               "",
 		"ensa2_capable":                      "",
+		"ascs_ip":                            "",
+		"ers_ip":                             "",
+		"ascs_virtual_ip":                    "",
+		"ers_virtual_ip":                     "",
 		"ers_automatic_recover":              "",
 		"is_ers":                             "",
 		"ers_monitor_interval":               "",
@@ -407,6 +415,10 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ascs_monitor_interval":              "20",
 		"ascs_monitor_timeout":               "60",
 		"ensa2_capable":                      "true",
+		"ascs_ip":                            "",
+		"ers_ip":                             "",
+		"ascs_virtual_ip":                    "",
+		"ers_virtual_ip":                     "",
 		"ers_automatic_recover":              "false",
 		"is_ers":                             "true",
 		"ers_monitor_interval":               "20",
@@ -476,6 +488,10 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ascs_monitor_interval":             "",
 		"ascs_monitor_timeout":              "",
 		"ensa2_capable":                     "",
+		"ascs_ip":                           "",
+		"ers_ip":                            "",
+		"ascs_virtual_ip":                   "",
+		"ers_virtual_ip":                    "",
 		"ers_automatic_recover":             "",
 		"is_ers":                            "",
 		"ers_monitor_interval":              "",
@@ -2501,6 +2517,420 @@ func TestSetERSConfigMetrics(t *testing.T) {
 			setERSConfigMetrics(context.Background(), got, test.groups)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("setERSConfigMetrics() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCollectASCSIP(t *testing.T) {
+	tests := []struct {
+		name   string
+		groups []Group
+		want   map[string]string
+	}{
+		{
+			name:   "NoGroups",
+			groups: []Group{},
+			want:   map[string]string{"ascs_ip": "", "ers_ip": ""},
+		},
+		{
+			name: "Success",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS11_testascs11"},
+									{Name: "AUTOMATIC_RECOVER", Value: "false"},
+								},
+							},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "ip", Value: "12.123.123.12"},
+								},
+							},
+						},
+					},
+				},
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS11_testers11"},
+								},
+							},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "ip", Value: "12.123.123.23"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{"ascs_ip": "12.123.123.12", "ers_ip": "12.123.123.23"},
+		},
+		{
+			name: "NoIPaddr2",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS11_testascs11"},
+									{Name: "AUTOMATIC_RECOVER", Value: "false"},
+								},
+							},
+						},
+					},
+				},
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS11_testers11"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{"ascs_ip": "", "ers_ip": ""},
+		},
+		{
+			name: "MissingIPInOneGroup",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS11_testascs11"},
+								},
+							},
+						},
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "ip", Value: "12.123.123.12"},
+								},
+							},
+						},
+					},
+				},
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS11_testers11"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{"ascs_ip": "12.123.123.12", "ers_ip": ""},
+		},
+		{
+			name: "NoSAPInstance",
+			groups: []Group{
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "ip", Value: "12.123.123.12"},
+								},
+							},
+						},
+					},
+				},
+				{
+					Primitives: []PrimitiveClass{
+						PrimitiveClass{
+							ClassType: "IPaddr2",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "ip", Value: "12.123.123.23"},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: map[string]string{"ascs_ip": "", "ers_ip": ""},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := map[string]string{}
+			collectASCSIP(context.Background(), got, test.groups)
+			if diff := cmp.Diff(test.want, got); diff != "" {
+				t.Errorf("collectASCSIP() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCollectASCSVirtualIP(t *testing.T) {
+	tests := []struct {
+		name   string
+		exec   commandlineexecutor.Execute
+		labels map[string]string
+		want   map[string]string
+	}{
+		{
+			name: "SuccessENSA2",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ERS12_testers12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enq/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enq/replicatorhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/replicatorhost=12.123.123.23\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA2",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "12.123.123.12",
+				"ers_virtual_ip":  "12.123.123.23",
+				"enqueue_server":  "ENSA2",
+			},
+		},
+		{
+			name: "SuccessENSA1",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enque/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA1",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "12.123.123.12",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "ENSA1",
+			},
+		},
+		{
+			name: "InvalidEnqueueServer",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "/profile/DEFAULT.PFL"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "INVALID",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "INVALID",
+			},
+		},
+		{
+			name: "UnknownEnqueueServer",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "/profile/DEFAULT.PFL"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "",
+			},
+		},
+		{
+			name: "LookupIPError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enque/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=sapxapp21\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA1",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "ENSA1",
+			},
+		},
+		{
+			name: "VirtualHostNameError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "/profile/DEFAULT.PFL"):
+					return commandlineexecutor.Result{
+						StdOut: "enq/serverhost=12.123.123.12\n",
+						Error:  errors.New("Something went wrong"),
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA2",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "ENSA2",
+			},
+		},
+		{
+			name: "VirtualHostNameEmpty",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enq/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA2",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "ENSA2",
+			},
+		},
+		{
+			name: "NoSapServices",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						Error: errors.New("Something went wrong"),
+					}
+				case strings.Contains(params.ArgsToSplit, "^enq/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enq/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA2",
+			},
+			want: map[string]string{
+				"ascs_virtual_ip": "",
+				"ers_virtual_ip":  "",
+				"enqueue_server":  "ENSA2",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			collectASCSVirtualIP(context.Background(), test.labels, test.exec)
+			if diff := cmp.Diff(test.want, test.labels); diff != "" {
+				t.Errorf("collectASCSVirtualIP() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

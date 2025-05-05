@@ -393,7 +393,7 @@ func TestFromJSONFile(t *testing.T) {
 			path:   LinuxConfigPath,
 			want: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{
-					Version: 31,
+					Version: 32,
 					ValidationCustom: &wlmpb.ValidationCustom{
 						OsCommandMetrics: []*cmpb.OSCommandMetric{
 							createOSCommandMetric("workload.googleapis.com/sap/validation/custom", "foo", "foo", cmpb.OSVendor_ALL),

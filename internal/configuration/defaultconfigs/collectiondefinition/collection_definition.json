@@ -1502,6 +1502,38 @@
               "min_version": "3.8"
             },
             "value": "ENSA2_CAPABLE"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_ip",
+              "min_version": "3.8"
+            },
+            "value": "ASCS_IP"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_ip",
+              "min_version": "3.8"
+            },
+            "value": "ERS_IP"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ascs_virtual_ip",
+              "min_version": "3.8"
+            },
+            "value": "ASCS_VIRTUAL_IP"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "ers_virtual_ip",
+              "min_version": "3.8"
+            },
+            "value": "ERS_VIRTUAL_IP"
           }
         ],
         "op_option_metrics": [

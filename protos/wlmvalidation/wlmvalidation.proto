@@ -157,6 +157,10 @@ enum ASCSVariable {
   ERS_ILB_MONITOR_INTERVAL = 20;
   ERS_ILB_MONITOR_TIMEOUT = 21;
   ENSA2_CAPABLE = 22;
+  ASCS_IP = 23;
+  ERS_IP = 24;
+  ASCS_VIRTUAL_IP = 25;
+  ERS_VIRTUAL_IP = 26;
 }
 
 enum CIBBootstrapOptionVariable {

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
@@ -38,8 +39,10 @@ import (
 )
 
 var (
-	sapInstanceRegex = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
-	sapstartsrvRegex = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
+	sapInstanceRegex               = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
+	sapstartsrvRegex               = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
+	pacemakerClusterUnhealthyRegex = regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
+	ipAddressRegex                 = regexp.MustCompile(`\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)`)
 )
 
 type (
@@ -118,6 +121,10 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"ascs_monitor_interval":              true,
 		"ascs_monitor_timeout":               true,
 		"ensa2_capable":                      true,
+		"ascs_ip":                            true,
+		"ers_ip":                             true,
+		"ascs_virtual_ip":                    true,
+		"ers_virtual_ip":                     true,
 		"ers_automatic_recover":              true,
 		"is_ers":                             true,
 		"ers_monitor_interval":               true,
@@ -279,6 +286,8 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	collectEnqueueServer(ctx, labels, params.Execute)
 	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
+	collectASCSIP(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
+	collectASCSVirtualIP(ctx, labels, params.Execute)
 
 	// sets the OP options from the pacemaker configuration.
 	setOPOptions(labels, pacemakerDocument.Configuration.OPDefaults)
@@ -442,7 +451,6 @@ func setPacemakerClusterHealthy(ctx context.Context, labels map[string]string, e
 	// cluster is unhealthy.
 	startProcessing := false
 	healthyStatus := true
-	unhealthyRegex := regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
 
 	for _, line := range strings.Split(result.StdOut, "\n") {
 		if strings.Contains(line, "Node List") {
@@ -452,7 +460,7 @@ func setPacemakerClusterHealthy(ctx context.Context, labels map[string]string, e
 		if strings.Contains(line, "Failed Fencing Actions") {
 			break
 		}
-		if startProcessing && unhealthyRegex.MatchString(strings.ToLower(line)) {
+		if startProcessing && pacemakerClusterUnhealthyRegex.MatchString(strings.ToLower(line)) {
 			healthyStatus = false
 			break
 		}
@@ -691,17 +699,14 @@ func collectASCSInstance(ctx context.Context, labels map[string]string, exists c
 	}
 }
 
-// collectEnqueueServer determines the enqueue server (ENSA or ENSA2) in use by the Pacemaker cluster.
-func collectEnqueueServer(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
-	labels["enqueue_server"] = ""
-
+// sapSid extracts the SAP SID from the sapservices file.
+func sapSid(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "grep",
 		ArgsToSplit: "'pf=' /usr/sap/sapservices",
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Debugw("Could not grep /usr/sap/sapservices. Skipping enqueue_server metric collection.", "error", result.Error)
-		return
+		return "", fmt.Errorf("could not grep /usr/sap/sapservices: %w", result.Error)
 	}
 
 	var sapsid string
@@ -716,12 +721,21 @@ func collectEnqueueServer(ctx context.Context, labels map[string]string, exec co
 			break
 		}
 	}
-	if sapsid == "" {
-		log.CtxLogger(ctx).Debug("Could not determine SAP SID from /usr/sap/sapservices. Skipping enqueue_server metric collection.")
+	return sapsid, nil
+}
+
+// collectEnqueueServer determines the enqueue server (ENSA or ENSA2) in use by the Pacemaker cluster.
+func collectEnqueueServer(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
+	log.CtxLogger(ctx).Debug("Collecting enqueue server")
+	labels["enqueue_server"] = ""
+
+	sapsid, err := sapSid(ctx, exec)
+	if err != nil || sapsid == "" {
+		log.CtxLogger(ctx).Debugw("Could not determine SAP SID. Skipping enqueue_server metric collection.", "error", err)
 		return
 	}
 
-	result = exec(ctx, commandlineexecutor.Params{
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "grep",
 		ArgsToSplit: fmt.Sprintf("'^enq/replicator' /sapmnt/%s/profile/DEFAULT.PFL", sapsid),
 	})
@@ -733,6 +747,101 @@ func collectEnqueueServer(ctx context.Context, labels map[string]string, exec co
 	default: // File not found
 		log.CtxLogger(ctx).Debugw("Could not grep DEFAULT.PFL. Skipping enqueue_server metric collection.", "error", result.Error)
 	}
+}
+
+// collectASCSIP determines the IP addresses of the ASCS and ERS instances in the Pacemaker cluster.
+func collectASCSIP(ctx context.Context, labels map[string]string, groups []Group) {
+	log.CtxLogger(ctx).Debug("Collecting ASCS and ERS IPs")
+	labels["ascs_ip"] = ""
+	labels["ers_ip"] = ""
+
+	for _, group := range groups {
+		var ipAddress string
+		var isASCS, isERS bool
+		for _, primitive := range group.Primitives {
+			switch primitive.ClassType {
+			case "IPaddr2":
+				for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+					log.CtxLogger(ctx).Debug("IPaddr2 NVPAIR name: %s, value: %s", nvPair.Name, nvPair.Value)
+					if nvPair.Name == "ip" {
+						ipAddress = nvPair.Value
+						break
+					}
+				}
+			case "SAPInstance":
+				for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+					if nvPair.Name == "START_PROFILE" {
+						log.CtxLogger(ctx).Debug("START_PROFILE NVPAIR name: %s, value: %s", nvPair.Name, nvPair.Value)
+						isASCS = strings.Contains(nvPair.Value, "SCS")
+						isERS = strings.Contains(nvPair.Value, "ERS")
+						break
+					}
+				}
+			}
+		}
+		if isASCS {
+			labels["ascs_ip"] = ipAddress
+		}
+		if isERS {
+			labels["ers_ip"] = ipAddress
+		}
+	}
+}
+
+// collectASCSVirtualIP determines the virtual IP addresses of the ASCS and ERS instances in the Pacemaker cluster.
+func collectASCSVirtualIP(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
+	log.CtxLogger(ctx).Debug("Collecting ASCS and ERS virtual IPs")
+	labels["ascs_virtual_ip"] = ""
+	labels["ers_virtual_ip"] = ""
+	sapsid, err := sapSid(ctx, exec)
+	if err != nil || sapsid == "" || labels["enqueue_server"] == "" {
+		log.CtxLogger(ctx).Debugw("Could not determine SAP SID or enqueue server. Skipping ascs_virtual_ip metric collection.", "error", err)
+		return
+	}
+
+	// Determine the virtual host name patterns based on the enqueue server.
+	var ascsVirtualNamePattern, ersVirtualNamePattern string
+	switch labels["enqueue_server"] {
+	case "ENSA2":
+		ascsVirtualNamePattern = "^enq/serverhost"
+		ersVirtualNamePattern = "^enq/replicatorhost"
+	case "ENSA1":
+		ascsVirtualNamePattern = "^enque/serverhost"
+	default:
+		log.CtxLogger(ctx).Debug("Unknown enqueue server. Skipping ascs_virtual_ip and ers_virtual_ip metric collection.")
+		return
+	}
+
+	// Get the ASCS virtual host name and IP address.
+	ascsVirtualName := virtualHostName(ctx, exec, sapsid, ascsVirtualNamePattern)
+	if ascsVirtualName != "" {
+		if ip, err := net.LookupIP(ascsVirtualName); err == nil {
+			labels["ascs_virtual_ip"] = ip[0].String()
+		}
+	}
+	// Get the ERS virtual host name and IP address.
+	if ersVirtualNamePattern != "" {
+		ersVirtualName := virtualHostName(ctx, exec, sapsid, ersVirtualNamePattern)
+		if ersVirtualName != "" {
+			if ip, err := net.LookupIP(ersVirtualName); err == nil {
+				labels["ers_virtual_ip"] = ip[0].String()
+			}
+		}
+	}
+}
+
+// virtualHostName gets the virtual host name from the DEFAULT.PFL file.
+func virtualHostName(ctx context.Context, exec commandlineexecutor.Execute, sapsid, pattern string) string {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "grep",
+		ArgsToSplit: fmt.Sprintf("%s /sapmnt/%s/profile/DEFAULT.PFL", pattern, sapsid),
+	})
+	parts := strings.Split(result.StdOut, "=")
+	if result.Error != nil || len(parts) < 2 {
+		log.CtxLogger(ctx).Debugw("Could not find virtual host name. Skipping ascs_virtual_ip and ers_virtual_ip metric collection.", "error", result.Error)
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
 }
 
 // setASCSMetrics sets the metrics collected from the ASCS resource group.
