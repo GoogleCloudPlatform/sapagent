@@ -65,7 +65,7 @@ type (
 		Hostname               string                        `json:"hostname"`
 		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
 		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
-		ProcessMetrics         bool                          `json:"process-metrics"`
+		Metrics                bool                          `json:"metrics,string"`
 		Timestamp              string                        `json:"timestamp"`
 		BeforeDuration         int                           `json:"before-duration"`
 		AfterDuration          int                           `json:"after-duration"`
@@ -75,6 +75,8 @@ type (
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 		LogPath                string                        `json:"log-path"`
 		endingTimestamp        string
+		cmr                    *cloudmetricreader.CloudMetricReader
+		mmc                    cloudmonitoring.TimeSeriesDescriptorQuerier
 		rest                   RestService
 		createQueryClient      createQueryClient
 		createMetricClient     createMetricClient
@@ -175,19 +177,30 @@ const (
 	metricPrefix          = "workload.googleapis.com"
 )
 
-var processMetricsList = []string{
-	"sap/control/cpu/utilization",
-	"sap/control/memory/utilization",
-	"sap/hana/availability",
-	"sap/hana/cpu/utilization",
-	"sap/hana/ha/availability",
-	"sap/hana/ha/replication",
-	"sap/hana/iops/reads",
-	"sap/hana/iops/writes",
-	"sap/hana/memory/utilization",
-	"sap/hana/query/state",
-	"sap/hana/service",
-}
+var (
+	processMetricsList = []string{
+		"sap/control/cpu/utilization",
+		"sap/control/memory/utilization",
+		"sap/hana/availability",
+		"sap/hana/cpu/utilization",
+		"sap/hana/ha/availability",
+		"sap/hana/ha/replication",
+		"sap/hana/iops/reads",
+		"sap/hana/iops/writes",
+		"sap/hana/memory/utilization",
+		"sap/hana/query/state",
+		"sap/hana/service",
+	}
+
+	hanaMonitoringMetricsList = []string{
+		"sap/hanamonitoring/disk/readtime",
+		"sap/hanamonitoring/disk/writetime",
+		"sap/hanamonitoring/host/cpu/usage_time",
+		"sap/hanamonitoring/host/memory/total_used_size",
+		"sap/hanamonitoring/host/swap_space/total_size",
+		"sap/hanamonitoring/host/swap_space/total_used_size",
+	}
+)
 
 // Name implements the subcommand interface for collecting support bundle report collection for support team.
 func (*SupportBundle) Name() string {
@@ -202,7 +215,9 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-h] [-loglevel=<debug|info|warn|error>]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-process-metrics] [-hana-monitoring-metrics]
+	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
+	[-h] [-loglevel=<debug|info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
@@ -214,10 +229,10 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - required for collecting HANA traces")
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
-	fs.BoolVar(&s.ProcessMetrics, "process-metrics", false, "Indicate if process metrics are to be collected (experimental)")
-	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp(in system timezone) to be used for collecting process metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
-	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration(in seconds) to be used for collecting process metrics, default value is 3600 seconds (1 hour)")
-	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration(in seconds) to be used for collecting process metrics, default value is 1800 seconds (30 minutes)")
+	fs.BoolVar(&s.Metrics, "metrics", false, "Indicate if metrics(process and hana monitoring) are to be collected from cloud monitoring.")
+	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp(in system timezone) to be used for collecting metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
+	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration(in seconds) to be used for collecting metrics, default value is 3600 seconds (1 hour)")
+	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration(in seconds) to be used for collecting metrics, default value is 1800 seconds (30 minutes)")
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
@@ -347,8 +362,11 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 	}
 
-	if s.ProcessMetrics {
-		if errMsgs := s.collectProcessMetrics(ctx, processMetricsList, destFilesPath, cp, fs, exec); len(errMsgs) > 0 {
+	if s.Metrics {
+		if errMsgs := s.collectMetrics(ctx, processMetricsList, destFilesPath, "process_metrics", cp, fs, exec); len(errMsgs) > 0 {
+			failureMsgs = append(failureMsgs, errMsgs...)
+		}
+		if errMsgs := s.collectMetrics(ctx, hanaMonitoringMetricsList, destFilesPath, "hana_monitoring_metrics", cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 	}
@@ -1024,19 +1042,26 @@ func (s *SupportBundle) queryDiscovery(ctx context.Context, baseURL, filter, pro
 	return discovery, nil
 }
 
-// collectProcessMetrics collects and writes the process metrics from cloud monitoring for a given time interval.
-func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []string, destFilesPath string, cp *ipb.CloudProperties, fs filesystem.FileSystem, exec commandlineexecutor.Execute) []string {
-	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting process metrics...")
+// collectMetrics collects the metrics for the given metrics and metrics type.
+func (s *SupportBundle) collectMetrics(ctx context.Context, metrics []string, destFilesPath, metricsType string, cp *ipb.CloudProperties, fs filesystem.FileSystem, exec commandlineexecutor.Execute) []string {
+	message := "Collecting process metrics..."
+	prefix := "pm"
+	if metricsType == "hana_monitoring_metrics" {
+		message = "Collecting hana monitoring metrics..."
+		prefix = "hm"
+	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, message)
+
 	var errMsgs []string
-	cmr, mmc, err := s.getProcessMetricsClients(ctx)
-	if err != nil {
+	var err error
+	if err = s.getMetricsClients(ctx); err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create Cloud Monitoring clients: %v", err))
 		return errMsgs
 	}
 
-	pmFolderPath := path.Join(destFilesPath, "process_metrics")
-	if err := fs.MkdirAll(pmFolderPath, 0777); err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create process metrics folder: %v", err))
+	metricsFolderPath := path.Join(destFilesPath, metricsType)
+	if err := fs.MkdirAll(metricsFolderPath, 0777); err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("Failed to create %s metrics folder: %v", metricsType, err))
 		return errMsgs
 	}
 
@@ -1050,14 +1075,14 @@ func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []str
 		var timeSeries []TimeSeries
 		metricFileName := strings.ReplaceAll(metric, "/", "_")
 		metric = path.Join(metricPrefix, metric)
-		ts, err := s.fetchTimeSeriesData(ctx, cp, cmr, mmc, metric)
+		ts, err := s.fetchTimeSeriesData(ctx, cp, metric)
 		if err != nil {
 			errMsgs = append(errMsgs, fmt.Sprintf("Failed to fetch time series data for metric %s: %v", metric, err))
 			continue
 		}
 		timeSeries = append(timeSeries, ts...)
 
-		f, err := fs.Create(fmt.Sprintf("%s/%s.json", pmFolderPath, metricFileName))
+		f, err := fs.Create(fmt.Sprintf("%s/%s_%s.json", metricsFolderPath, prefix, metricFileName))
 		if err != nil {
 			errMsgs = append(errMsgs, fmt.Sprintf("Error while creating file: %v", err))
 			continue
@@ -1081,6 +1106,10 @@ func (s *SupportBundle) collectProcessMetrics(ctx context.Context, metrics []str
 
 // getEndingTimestamp returns the ending timestamp for the time interval for which the metrics are collected.
 func (s *SupportBundle) getEndingTimestamp(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
+	if s.endingTimestamp != "" {
+		return s.endingTimestamp, nil
+	}
+
 	timezone, err := getTimezone(ctx, exec)
 	if err != nil {
 		log.CtxLogger(ctx).Infof("Using UTC as timezone as failed to get timezone: %v", err)
@@ -1121,12 +1150,16 @@ func getTimezone(ctx context.Context, exec commandlineexecutor.Execute) (string,
 	return parts[1], nil
 }
 
-// getProcessMetricsClients returns the clients for reading process metrics.
-func (s *SupportBundle) getProcessMetricsClients(ctx context.Context) (*cloudmetricreader.CloudMetricReader, cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+// getMetricsClients returns the clients for reading process metrics and hana monitoring metrics.
+func (s *SupportBundle) getMetricsClients(ctx context.Context) error {
+	if s.cmr != nil && s.mmc != nil {
+		return nil
+	}
+
 	qc, err := s.createQueryClient(ctx)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
-		return nil, nil, err
+		return err
 	}
 	cmr := &cloudmetricreader.CloudMetricReader{
 		QueryClient: qc,
@@ -1136,15 +1169,17 @@ func (s *SupportBundle) getProcessMetricsClients(ctx context.Context) (*cloudmet
 	mmc, err := s.createMetricClient(ctx)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
-		return nil, nil, err
+		return err
 	}
 
-	return cmr, mmc, nil
+	s.cmr = cmr
+	s.mmc = mmc
+	return nil
 }
 
 // fetchTimeSeriesData fetches the time series data for a given metric.
-func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudProperties, cmr *cloudmetricreader.CloudMetricReader, mmc cloudmonitoring.TimeSeriesDescriptorQuerier, metric string) ([]TimeSeries, error) {
-	labelNames, err := s.fetchLabelDescriptors(ctx, cp, mmc, metric, "gce_instance")
+func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudProperties, metric string) ([]TimeSeries, error) {
+	labelNames, err := s.fetchLabelDescriptors(ctx, cp, metric, "gce_instance")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch label descriptors for metric %s: %v", metric, err)
 	}
@@ -1156,7 +1191,7 @@ func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudPr
 		Name:  fmt.Sprintf("projects/%s", cp.GetProjectId()),
 		Query: query,
 	}
-	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, cmr.QueryClient, req, cmr.BackOffs)
+	data, err := cloudmonitoring.QueryTimeSeriesWithRetry(ctx, s.cmr.QueryClient, req, s.cmr.BackOffs)
 	if err != nil {
 		return nil, err
 	}
@@ -1226,12 +1261,12 @@ func getPointValue(ctx context.Context, v *cpb.TypedValue) (string, error) {
 }
 
 // fetchLabelDescriptors fetches the label descriptors for the given metric and resource type.
-func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.CloudProperties, mmc cloudmonitoring.TimeSeriesDescriptorQuerier, metricType, resourceType string) ([]string, error) {
+func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.CloudProperties, metricType, resourceType string) ([]string, error) {
 	var labels []string
 	rdReq := &mpb.GetMonitoredResourceDescriptorRequest{
 		Name: fmt.Sprintf("projects/%s/monitoredResourceDescriptors/%s", cp.GetProjectId(), resourceType),
 	}
-	rd, err := mmc.GetMonitoredResourceDescriptor(ctx, rdReq)
+	rd, err := s.mmc.GetMonitoredResourceDescriptor(ctx, rdReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get monitored resource descriptor for %s: %v", resourceType, err)
 	}
@@ -1242,7 +1277,7 @@ func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.Cloud
 	mdReq := &mpb.GetMetricDescriptorRequest{
 		Name: fmt.Sprintf("projects/%s/metricDescriptors/%s", cp.GetProjectId(), metricType),
 	}
-	md, err := mmc.GetMetricDescriptor(ctx, mdReq)
+	md, err := s.mmc.GetMetricDescriptor(ctx, mdReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get metric descriptor for %s: %v", metricType, err)
 	}
@@ -1297,7 +1332,7 @@ func (s *SupportBundle) validateParams() []string {
 	if s.Hostname == "" {
 		errs = append(errs, "no value provided for hostname")
 	}
-	if s.ProcessMetrics && s.Timestamp == "" {
+	if s.Metrics && s.Timestamp == "" {
 		s.Timestamp = time.Now().Format("2006-01-02 15:04:05")
 	}
 
