@@ -103,27 +103,77 @@ type (
 		Do(req *http.Request) (*http.Response, error)
 	}
 
-	// EntriesResponse is the response for listEntries which mirrors the proto.
-	EntriesResponse struct {
-		Entries       []Entry `json:"entries"`
-		NextPageToken string  `json:"nextPageToken"`
+	// CloudLoggingRequest is the request for cloud logging.
+	CloudLoggingRequest struct {
+		ResourceNames []string `json:"resource_names"`
+		Filter        string   `json:"filter"`
+		OrderBy       string   `json:"orderBy"`
+		PageSize      int      `json:"pageSize"`
+		PageToken     string   `json:"pageToken"`
 	}
 
-	// Entry is the entry for listEntries which mirrors the proto.
-	Entry struct {
-		InsertID         string      `json:"insertId"`
-		JSONPayload      JSONPayload `json:"jsonPayload"`
-		Resource         any         `json:"resource"`
-		Timestamp        string      `json:"timestamp"`
-		Severity         string      `json:"severity"`
-		LogName          string      `json:"logName"`
-		ReceiveTimestamp string      `json:"receiveTimestamp"`
+	// DiscEntriesResponse is the response for listEntries for querying sapdiscovery details.
+	DiscEntriesResponse struct {
+		Entries       []DiscEntry `json:"entries"`
+		NextPageToken string      `json:"nextPageToken"`
 	}
 
-	// JSONPayload is the payload for the entry which mirrors the proto.
-	JSONPayload struct {
+	// DiscEntry is the entry for listEntries which mirrors the proto for sapdiscovery response.
+	DiscEntry struct {
+		InsertID         string          `json:"insertId"`
+		JSONPayload      DiscJSONPayload `json:"jsonPayload"`
+		Resource         any             `json:"resource"`
+		Timestamp        string          `json:"timestamp"`
+		Severity         string          `json:"severity"`
+		LogName          string          `json:"logName"`
+		ReceiveTimestamp string          `json:"receiveTimestamp"`
+	}
+
+	// DiscJSONPayload is the payload for the entry which mirrors the proto for sapdiscovery response.
+	DiscJSONPayload struct {
 		Type      string `json:"type"`
 		Discovery string `json:"discovery"`
+	}
+
+	// EventsEntriesResponse is the response for listEntries for querying sap events details.
+	EventsEntriesResponse struct {
+		Entries       []EventsEntry `json:"entries"`
+		NextPageToken string        `json:"nextPageToken"`
+	}
+
+	// EventsEntry is the entry for listEntries which mirrors the proto for sap events response.
+	EventsEntry struct {
+		InsertID         string            `json:"insertId"`
+		JSONPayload      EventsJSONPayload `json:"jsonPayload"`
+		Resource         any               `json:"resource"`
+		Timestamp        string            `json:"timestamp"`
+		Severity         string            `json:"severity"`
+		LogName          string            `json:"logName"`
+		ReceiveTimestamp string            `json:"receiveTimestamp"`
+	}
+
+	// EventsJSONPayload is the payload for the entry which mirrors the proto for sap events response.
+	EventsJSONPayload struct {
+		Caller         string `json:"caller"`
+		CurrentLabels  any    `json:"currentLabels"`
+		PreviousLabels any    `json:"previousLabels"`
+		CurrentValue   string `json:"currentValue"`
+		PreviousValue  string `json:"previousValue"`
+		Message        string `json:"message"`
+		Metric         string `json:"metric"`
+		MetricEvent    bool   `json:"metricEvent"`
+		Stack          string `json:"stack"`
+	}
+
+	// Event is the event data which mirrors the proto.
+	Event struct {
+		Message        string `json:"message"`
+		Metric         string `json:"metric"`
+		PreviousLabels any    `json:"previousLabels"`
+		CurrentLabels  any    `json:"currentLabels"`
+		CurrentValue   string `json:"currentValue"`
+		PreviousValue  string `json:"previousValue"`
+		Timestamp      string `json:"timestamp"`
 	}
 
 	// TimeSeries is the time series data which mirrors the proto.
@@ -175,6 +225,7 @@ const (
 	backintGCSPath        = `/opt/backint/backint-gcs`
 	sapDiscoveryFile      = `sapdiscovery.json`
 	metricPrefix          = "workload.googleapis.com"
+	cloudLoggingURL       = "https://logging.googleapis.com/v2/entries:list"
 )
 
 var (
@@ -215,7 +266,7 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-process-metrics] [-hana-monitoring-metrics]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-metrics] [-metrics]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<debug|info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
@@ -354,8 +405,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if !s.AgentLogsOnly {
-		baseURL := "https://logging.googleapis.com/v2/entries:list"
-		if err := s.collectSapDiscovery(ctx, baseURL, destFilesPath, cp, fs); err != nil {
+		if err := s.collectSapDiscovery(ctx, cloudLoggingURL, destFilesPath, cp, fs); err != nil {
 			errMessage := "Error while collecting GCP Agent for SAP's Discovery data"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
@@ -368,6 +418,9 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 		if errMsgs := s.collectMetrics(ctx, hanaMonitoringMetricsList, destFilesPath, "hana_monitoring_metrics", cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
+		}
+		if err := s.collectSapEvents(ctx, cloudLoggingURL, destFilesPath, cp, fs, exec); err != nil {
+			failureMsgs = append(failureMsgs, fmt.Sprintf("Error while collecting SAP events: %s", err.Error()))
 		}
 	}
 
@@ -969,18 +1022,38 @@ func (s *SupportBundle) fetchSystemDServices(ctx context.Context, destFilesPath,
 // collectSapDiscovery collects the SAP Discovery logs from cloud logging.
 func (s *SupportBundle) collectSapDiscovery(ctx context.Context, baseURL, destFilePathPrefix string, cp *ipb.CloudProperties, fs filesystem.FileSystem) (err error) {
 	// Read from cloud logging
-	logName := fmt.Sprintf("logName=\"projects/%s/logs/google-cloud-sap-agent\"", cp.GetProjectId())
-	resourceFilter := fmt.Sprintf("resource.type=\"gce_instance\" AND resource.labels.instance_id=\"%s\"", cp.GetInstanceId())
+	logName := "log_id(google-cloud-sap-agent)"
+	resourceTypeFilter := "(resource.type=generic_node OR resource.type=gce_instance OR resource.type=aws_ec2_instance OR resource.type=baremetalsolution.googleapis.com/Instance)"
+	resourceIDFilter := fmt.Sprintf("resource.labels.instance_id=\"%s\"", cp.GetInstanceId())
+	resourceFilter := fmt.Sprintf("%s AND %s", resourceTypeFilter, resourceIDFilter)
 	sapDiscoverFilter := "jsonPayload.type=\"SapDiscovery\""
 	timestampFilter := fmt.Sprintf("timestamp>=\"%s\"", time.Now().Add(-24*time.Hour).Format(time.RFC3339))
 
 	filter := fmt.Sprintf("%s AND %s AND %s AND %s", logName, resourceFilter, sapDiscoverFilter, timestampFilter)
-	log.CtxLogger(ctx).Infof("Filter: %s", filter)
 
-	discovery, err := s.queryDiscovery(ctx, baseURL, filter, cp.GetProjectId())
+	request := CloudLoggingRequest{
+		ResourceNames: []string{fmt.Sprintf("projects/%s", cp.GetProjectId())},
+		Filter:        filter,
+		OrderBy:       "timestamp desc",
+		PageSize:      1,
+	}
+	bodyBytes, err := s.queryCloudLogging(ctx, request, baseURL)
 	if err != nil {
 		return err
 	}
+	var entriesResponse DiscEntriesResponse
+	err = json.Unmarshal(bodyBytes, &entriesResponse)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+
+	var entry DiscEntry
+	if len(entriesResponse.Entries) == 0 {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "No entries found, could not discover SAP Landscape configuration")
+		return fmt.Errorf("no entries found, could not discover SAP Landscape configuration")
+	}
+	entry = entriesResponse.Entries[0]
+	discovery := entry.JSONPayload.Discovery
 
 	f, err := fs.Create(fmt.Sprintf("%s/%s", destFilePathPrefix, sapDiscoveryFile))
 	if err != nil {
@@ -997,49 +1070,112 @@ func (s *SupportBundle) collectSapDiscovery(ctx context.Context, baseURL, destFi
 	return nil
 }
 
-// queryDiscovery queries the discovery logs from cloud logging.
-func (s *SupportBundle) queryDiscovery(ctx context.Context, baseURL, filter, project string) (string, error) {
-	request := struct {
-		ResourceNames []string `json:"resourceNames"`
-		Filter        string   `json:"filter"`
-		OrderBy       string   `json:"orderBy"`
-		PageSize      int      `json:"pageSize"`
-	}{
-		ResourceNames: []string{fmt.Sprintf("projects/%s", project)},
-		Filter:        filter,
-		OrderBy:       "timestamp desc",
-		PageSize:      1,
-	}
-
+// queryCloudLogging queries the discovery logs from cloud logging using the given filter.
+func (s *SupportBundle) queryCloudLogging(ctx context.Context, request CloudLoggingRequest, baseURL string) ([]byte, error) {
 	jsonData, err := json.Marshal(request)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error while marshaling JSON", "err", err)
-		return "", err
+		return nil, fmt.Errorf("failed to query cloud logging: %v", err)
 	}
 	data := []byte(string(jsonData))
 
 	bodyBytes, err := s.rest.GetResponse(ctx, "POST", baseURL, data)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error while getting response", "err", err)
-		return "", err
+		return nil, fmt.Errorf("failed to query cloud logging: %v", err)
 	}
+	return bodyBytes, nil
+}
 
-	var entriesResponse EntriesResponse
-	err = json.Unmarshal(bodyBytes, &entriesResponse)
+// collectSapEvents collects the SAP events from cloud logging.
+func (s *SupportBundle) collectSapEvents(ctx context.Context, baseURL, destFilePathPrefix string, cp *ipb.CloudProperties, fs filesystem.FileSystem, exec commandlineexecutor.Execute) (err error) {
+	// Read from cloud logging
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting SAP events...")
+	logName := "log_id(google-cloud-sap-agent)"
+	resourceTypeFilter := "(resource.type=generic_node OR resource.type=gce_instance OR resource.type=aws_ec2_instance OR resource.type=baremetalsolution.googleapis.com/Instance)"
+	resourceIDFilter := fmt.Sprintf("resource.labels.instance_id=\"%s\"", cp.GetInstanceId())
+	resourceFilter := fmt.Sprintf("%s AND %s", resourceTypeFilter, resourceIDFilter)
+	sapEventFilter := "jsonPayload.metricEvent=true"
+
+	t, err := s.parseTimeInLocation(ctx, exec)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error while unmarshaling JSON", "err", err)
-		return "", err
+		return err
+	}
+	utcTime := t.UTC()
+	endingTime := utcTime.Add(time.Duration(s.AfterDuration) * time.Second)
+	startingTime := utcTime.Add(-time.Duration(s.BeforeDuration) * time.Second)
+	timestampFilter := fmt.Sprintf("timestamp>=\"%s\" AND timestamp<\"%s\"", startingTime.Format(time.RFC3339), endingTime.Format(time.RFC3339))
+
+	filter := fmt.Sprintf("%s AND %s AND %s AND %s", logName, resourceFilter, sapEventFilter, timestampFilter)
+
+	var bodyBytes []byte
+	request := CloudLoggingRequest{
+		ResourceNames: []string{fmt.Sprintf("projects/%s", cp.GetProjectId())},
+		Filter:        filter,
+	}
+	bodyBytes, err = s.queryCloudLogging(ctx, request, baseURL)
+	if err != nil {
+		return err
 	}
 
-	var entry Entry
-	if len(entriesResponse.Entries) == 0 {
-		s.oteLogger.LogMessageToFileAndConsole(ctx, "No entries found, could not discover SAP Landscape configuration")
-		return "", fmt.Errorf("no entries found, could not discover SAP Landscape configuration")
-	}
-	entry = entriesResponse.Entries[0]
-	discovery := entry.JSONPayload.Discovery
+	entriesMap := make(map[string][]Event)
+	for {
+		var entriesResponse EventsEntriesResponse
+		err = json.Unmarshal(bodyBytes, &entriesResponse)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal JSON: %v", err)
+		}
+		for _, entry := range entriesResponse.Entries {
+			var event Event
+			event.Message = entry.JSONPayload.Message
+			event.Metric = entry.JSONPayload.Metric
+			event.CurrentValue = entry.JSONPayload.CurrentValue
+			event.PreviousValue = entry.JSONPayload.PreviousValue
+			event.Timestamp = entry.Timestamp
+			event.PreviousLabels = entry.JSONPayload.PreviousLabels
+			event.CurrentLabels = entry.JSONPayload.CurrentLabels
 
-	return discovery, nil
+			message := strings.ReplaceAll(entry.JSONPayload.Message, " ", "_")
+			if _, ok := entriesMap[message]; !ok {
+				entriesMap[message] = []Event{}
+			}
+			entriesMap[message] = append(entriesMap[message], event)
+		}
+
+		nextPageToken := entriesResponse.NextPageToken
+		if nextPageToken == "" {
+			break
+		}
+
+		request.PageToken = nextPageToken
+		bodyBytes, err = s.queryCloudLogging(ctx, request, baseURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	eventsFolderPath := path.Join(destFilePathPrefix, "sap_events")
+	if err := fs.MkdirAll(eventsFolderPath, 0777); err != nil {
+		return fmt.Errorf("failed to create %s events folder: %v", eventsFolderPath, err)
+	}
+	for message, events := range entriesMap {
+		f, err := fs.Create(fmt.Sprintf("%s/se_%s.json", eventsFolderPath, message))
+		if err != nil {
+			return fmt.Errorf("failed to create %s file: %v", message, err)
+		}
+		defer f.Close()
+
+		for _, event := range events {
+			jsonData, err := json.MarshalIndent(event, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal JSON: %v", err)
+			}
+			_, err = f.Write(append(jsonData, []byte("\n")...))
+			if err != nil {
+				return fmt.Errorf("failed to write to file: %v", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // collectMetrics collects the metrics for the given metrics and metrics type.
@@ -1065,7 +1201,7 @@ func (s *SupportBundle) collectMetrics(ctx context.Context, metrics []string, de
 		return errMsgs
 	}
 
-	s.endingTimestamp, err = s.getEndingTimestamp(ctx, exec)
+	s.endingTimestamp, err = s.getEndingTimestampForMetrics(ctx, exec)
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("Failed to get ending timestamp: %v", err))
 		return errMsgs
@@ -1104,22 +1240,13 @@ func (s *SupportBundle) collectMetrics(ctx context.Context, metrics []string, de
 	return errMsgs
 }
 
-// getEndingTimestamp returns the ending timestamp for the time interval for which the metrics are collected.
-func (s *SupportBundle) getEndingTimestamp(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
+// getEndingTimestampForMetrics returns the ending timestamp for the time interval for which the metrics are collected.
+func (s *SupportBundle) getEndingTimestampForMetrics(ctx context.Context, exec commandlineexecutor.Execute) (string, error) {
 	if s.endingTimestamp != "" {
 		return s.endingTimestamp, nil
 	}
 
-	timezone, err := getTimezone(ctx, exec)
-	if err != nil {
-		log.CtxLogger(ctx).Infof("Using UTC as timezone as failed to get timezone: %v", err)
-		timezone = "UTC"
-	}
-	location, err := time.LoadLocation(timezone)
-	if err != nil {
-		return "", fmt.Errorf("failed to load location: %v", err)
-	}
-	t, err := time.ParseInLocation("2006-01-02 15:04:05", s.Timestamp, location)
+	t, err := s.parseTimeInLocation(ctx, exec)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse timestamp %s: %v", s.Timestamp, err)
 	}
@@ -1129,6 +1256,24 @@ func (s *SupportBundle) getEndingTimestamp(ctx context.Context, exec commandline
 	endingTimestamp := strings.ReplaceAll(endingTime.Format("2006-01-02 15:04"), "-", "/")
 
 	return endingTimestamp, nil
+}
+
+// parseTimeInLocation parses the time in the system location.
+func (s *SupportBundle) parseTimeInLocation(ctx context.Context, exec commandlineexecutor.Execute) (time.Time, error) {
+	timezone, err := getTimezone(ctx, exec)
+	if err != nil {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Using UTC as timezone as failed to get timezone: %v", err))
+		timezone = "UTC"
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to load location: %v", err)
+	}
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", s.Timestamp, location)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse timestamp %s: %v", s.Timestamp, err)
+	}
+	return t, nil
 }
 
 // getTimezone returns the timezone of the system.
@@ -1285,7 +1430,6 @@ func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.Cloud
 		labels = append(labels, l.GetKey())
 	}
 
-	log.CtxLogger(ctx).Infof("Labels for metric %s: %v", labels, metricType)
 	return labels, nil
 }
 

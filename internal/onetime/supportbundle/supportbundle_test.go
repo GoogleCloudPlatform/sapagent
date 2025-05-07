@@ -95,6 +95,13 @@ var (
 			StdErr:   "",
 		}
 	}
+	wrongTimezoneExec = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			ExitCode: 0,
+			StdOut:   "location=India/Los_Angeles\n",
+			StdErr:   "",
+		}
+	}
 	failedTimezoneExec = func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
 			ExitCode: 2,
@@ -587,9 +594,6 @@ func TestValidateParams(t *testing.T) {
 			got := test.sosrc.validateParams()
 			if len(got) != len(test.want) || !slices.Equal(got, test.want) {
 				t.Errorf("validateParams() = %v, want %v", got, test.want)
-				fmt.Println("len(got): ", len(got))
-				fmt.Println("len(test.want): ", len(test.want))
-				fmt.Println("slices.Equal(got, test.want): ", slices.Equal(got, test.want))
 			}
 		})
 	}
@@ -2171,6 +2175,18 @@ func TestCollectSapDiscoveryErrors(t *testing.T) {
 				return
 			}
 			conn.Close()
+		case "/test/empty_entries_1":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"nextPageToken": "eo8BCooBAfQucPiUM0WFCK4rapeQ61o35Yt3tvyb0ijSOsy2KD5jfiyCEK2A3ekvvpNJhKPP5HMnc0fQlBLPXxtwSRbu2g2rIMv7cBGVxRaNAtPgW4YSo6E1UTRzS-wNX7-wLaRw2EHeyRzVeHhMAahmcoFBDaprD453wWtjVsMbYCOelakVjDN7wZhqyQ4gEAA"}`)
+		case "/test/empty_entries_2":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{}`)
+		case "/test/empty_entries_3":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"entries": []"}`)
+		case "/test/query_cloud_logging_error":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error": {"code": 404, "message": "Project does not exist: core-connect-dev-a", "status": "NOT_FOUND"}}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -2187,7 +2203,7 @@ func TestCollectSapDiscoveryErrors(t *testing.T) {
 		wantErr            error
 	}{
 		{
-			name: "QueryDiscoveryError",
+			name: "QueryCloudLoggingError",
 			s: &SupportBundle{
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
@@ -2202,6 +2218,69 @@ func TestCollectSapDiscoveryErrors(t *testing.T) {
 				},
 			},
 			baseURL:            ts.URL + "/test/error",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntriesError1",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/empty_entries_1",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntriesError2",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/empty_entries_2",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "EmptyEntriesError3",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/empty_entries_3",
 			destFilePathPrefix: "test",
 			cp:                 defaultCloudProperties,
 			fs:                 mockedfilesystem{},
@@ -2255,6 +2334,7 @@ func TestCollectSapDiscoveryErrors(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			gotErr := tc.s.collectSapDiscovery(ctx, tc.baseURL, tc.destFilePathPrefix, tc.cp, tc.fs)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("collectSapDiscovery(%q, %v, %v) returned an unexpected error: %v", tc.destFilePathPrefix, tc.cp, tc.fs, diff)
@@ -2263,7 +2343,7 @@ func TestCollectSapDiscoveryErrors(t *testing.T) {
 	}
 }
 
-func TestQueryDiscovery(t *testing.T) {
+func TestQueryCloudLogging(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/test/success":
@@ -2280,15 +2360,6 @@ func TestQueryDiscovery(t *testing.T) {
 		case "/test/error_response":
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, `{"error": {"code": 404, "message": "Project does not exist: core-connect-dev-a", "status": "NOT_FOUND"}}`)
-		case "/test/empty_entries_1":
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{"nextPageToken": "eo8BCooBAfQucPiUM0WFCK4rapeQ61o35Yt3tvyb0ijSOsy2KD5jfiyCEK2A3ekvvpNJhKPP5HMnc0fQlBLPXxtwSRbu2g2rIMv7cBGVxRaNAtPgW4YSo6E1UTRzS-wNX7-wLaRw2EHeyRzVeHhMAahmcoFBDaprD453wWtjVsMbYCOelakVjDN7wZhqyQ4gEAA"}`)
-		case "/test/empty_entries_2":
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{}`)
-		case "/test/empty_entries_3":
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{"entries": []"}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -2296,16 +2367,16 @@ func TestQueryDiscovery(t *testing.T) {
 	defer ts.Close()
 
 	tests := []struct {
-		name          string
-		s             *SupportBundle
-		baseURL       string
-		filter        string
-		project       string
-		wantDiscovery string
-		wantError     error
+		name      string
+		s         *SupportBundle
+		baseURL   string
+		filter    string
+		project   string
+		wantBytes []byte
+		wantError error
 	}{
 		{
-			name: "GetResponseError1",
+			name: "GetResponseError",
 			s: &SupportBundle{
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
@@ -2319,95 +2390,11 @@ func TestQueryDiscovery(t *testing.T) {
 					},
 				},
 			},
-			baseURL:       ts.URL + "/test/error",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: "",
-			wantError:     cmpopts.AnyError,
-		},
-		{
-			name: "GetResponseError2",
-			s: &SupportBundle{
-				rest: &rest.Rest{
-					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
-					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-						return &mockToken{
-							token: &oauth2.Token{
-								AccessToken: "access-token",
-							},
-							err: nil,
-						}, nil
-					},
-				},
-			},
-			baseURL:       ts.URL + "/test/error_response",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: "",
-			wantError:     cmpopts.AnyError,
-		},
-		{
-			name: "EmptyEntries1",
-			s: &SupportBundle{
-				rest: &rest.Rest{
-					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
-					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-						return &mockToken{
-							token: &oauth2.Token{
-								AccessToken: "access-token",
-							},
-							err: nil,
-						}, nil
-					},
-				},
-			},
-			baseURL:       ts.URL + "/test/empty_entries_1",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: "",
-			wantError:     cmpopts.AnyError,
-		},
-		{
-			name: "EmptyEntries2",
-			s: &SupportBundle{
-				rest: &rest.Rest{
-					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
-					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-						return &mockToken{
-							token: &oauth2.Token{
-								AccessToken: "access-token",
-							},
-							err: nil,
-						}, nil
-					},
-				},
-			},
-			baseURL:       ts.URL + "/test/empty_entries_2",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: "",
-			wantError:     cmpopts.AnyError,
-		},
-		{
-			name: "EmptyEntries3",
-			s: &SupportBundle{
-				rest: &rest.Rest{
-					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
-					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-						return &mockToken{
-							token: &oauth2.Token{
-								AccessToken: "access-token",
-							},
-							err: nil,
-						}, nil
-					},
-				},
-			},
-			baseURL:       ts.URL + "/test/empty_entries_3",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: "",
-			wantError:     cmpopts.AnyError,
+			baseURL:   ts.URL + "/test/error",
+			filter:    "test",
+			project:   "test-project",
+			wantBytes: nil,
+			wantError: cmpopts.AnyError,
 		},
 		{
 			name: "Success",
@@ -2424,11 +2411,11 @@ func TestQueryDiscovery(t *testing.T) {
 					},
 				},
 			},
-			baseURL:       ts.URL + "/test/success",
-			filter:        "test",
-			project:       "test-project",
-			wantDiscovery: strings.TrimSpace(discoveryResponse),
-			wantError:     nil,
+			baseURL:   ts.URL + "/test/success",
+			filter:    "test",
+			project:   "test-project",
+			wantBytes: []byte(sampleDiscoveryResponse),
+			wantError: nil,
 		},
 	}
 
@@ -2437,12 +2424,178 @@ func TestQueryDiscovery(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.s.oteLogger = defaultOTELogger
-			got, err := tc.s.queryDiscovery(ctx, tc.baseURL, tc.filter, tc.project)
-			if diff := cmp.Diff(got, fmt.Sprintf("%s", tc.wantDiscovery)); diff != "" {
-				t.Errorf("queryDiscovery() returned diff (-want +got):\n%s", diff)
+			request := CloudLoggingRequest{
+				ResourceNames: []string{fmt.Sprintf("projects/%s", tc.project)},
+				Filter:        tc.filter,
+			}
+			got, err := tc.s.queryCloudLogging(ctx, request, tc.baseURL)
+			if diff := cmp.Diff(got, tc.wantBytes); diff != "" {
+				t.Errorf("queryCloudLogging() returned diff (-want +got):\n%s", diff)
 			}
 			if !cmp.Equal(err, tc.wantError, cmpopts.EquateErrors()) {
-				t.Errorf("queryDiscovery(%q) returned an unexpected error: %v", tc.filter, err)
+				t.Errorf("queryCloudLogging(%q) returned an unexpected error: %v", tc.filter, err)
+			}
+		})
+	}
+}
+
+func TestCollectSapEvents(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/test/success":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, sampleDiscoveryResponse)
+		case "/test/error":
+			hj, _ := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			conn.Close()
+		case "/test/unmarshalling_error":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "{value: invalid_json}")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+
+	tests := []struct {
+		name               string
+		s                  *SupportBundle
+		baseURL            string
+		destFilePathPrefix string
+		cp                 *ipb.CloudProperties
+		fs                 filesystem.FileSystem
+		exec               commandlineexecutor.Execute
+		wantErr            error
+	}{
+		{
+			name:               "ParseTimeInLocationError",
+			s:                  &SupportBundle{Timestamp: "2025-01-01 00:00:00"},
+			baseURL:            ts.URL + "/test/error",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			exec:               wrongTimezoneExec,
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "QueryCloudLoggingError",
+			s: &SupportBundle{
+				Timestamp:      "2025-01-01 00:00:00",
+				AfterDuration:  1800,
+				BeforeDuration: 3600,
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/error",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			exec:               successfulTimezoneExec,
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "JSONUnmarshallingError",
+			s: &SupportBundle{
+				Timestamp:      "2025-01-01 00:00:00",
+				AfterDuration:  1800,
+				BeforeDuration: 3600,
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/unmarshalling_error",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			exec:               successfulTimezoneExec,
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "MkDirError",
+			s: &SupportBundle{
+				Timestamp:      "2025-01-01 00:00:00",
+				AfterDuration:  1800,
+				BeforeDuration: 3600,
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/success",
+			destFilePathPrefix: "failure",
+			cp:                 defaultCloudProperties,
+			fs:                 mockedfilesystem{},
+			exec:               successfulTimezoneExec,
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "FileCreateError",
+			s: &SupportBundle{
+				Timestamp:      "2025-01-01 00:00:00",
+				AfterDuration:  1800,
+				BeforeDuration: 3600,
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			baseURL:            ts.URL + "/test/success",
+			destFilePathPrefix: "test",
+			cp:                 defaultCloudProperties,
+			fs: &fake.FileSystem{
+				MkDirErr:   []error{nil},
+				CreateResp: []*os.File{nil},
+				CreateErr:  []error{cmpopts.AnyError},
+			},
+			exec:    successfulTimezoneExec,
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			gotErr := tc.s.collectSapEvents(ctx, tc.baseURL, tc.destFilePathPrefix, tc.cp, tc.fs, tc.exec)
+			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("collectSapEvents() returned an unexpected error: %v", diff)
 			}
 		})
 	}
@@ -2994,7 +3147,7 @@ func TestFetchTimeSeriesData(t *testing.T) {
 	}
 }
 
-func TestGetEndingTimestamp(t *testing.T) {
+func TestGetEndingTimestampForMetrics(t *testing.T) {
 	tests := []struct {
 		name      string
 		s         *SupportBundle
@@ -3040,7 +3193,7 @@ func TestGetEndingTimestamp(t *testing.T) {
 			s: &SupportBundle{
 				Timestamp: "2025-01-01 25:00:00",
 			},
-			exec:      successfulTimezoneExec,
+			exec:      failedTimezoneExec,
 			wantEndTs: "",
 			wantErr:   cmpopts.AnyError,
 		},
@@ -3058,13 +3211,14 @@ func TestGetEndingTimestamp(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := tc.s.getEndingTimestamp(ctx, tc.exec)
+			tc.s.oteLogger = defaultOTELogger
+			got, err := tc.s.getEndingTimestampForMetrics(ctx, tc.exec)
+			fmt.Println("Got: ", got)
 			if diff := cmp.Diff(got, tc.wantEndTs); diff != "" {
-				t.Errorf("getEndingTimestamp(%v) returned an unexpected diff (-want +got): %v", tc.exec, diff)
+				t.Errorf("getEndingTimestampForMetrics(%v) returned an unexpected diff (-want +got): %v", tc.exec, diff)
 			}
-			fmt.Println("Err: ", err)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("getEndingTimestamp(%v) returned an unexpected error: %v", tc.exec, err)
+				t.Errorf("getEndingTimestampForMetrics(%v) returned an unexpected error: %v", tc.exec, err)
 			}
 		})
 	}

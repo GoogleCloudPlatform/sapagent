@@ -19,6 +19,5 @@
       "logName": "projects/sample-project/logs/google-cloud-sap-agent",
       "receiveTimestamp": "2025-04-14T03:41:49.400303152Z"
     }
-  ],
-  "nextPageToken": "next-token"
+  ]
 }
