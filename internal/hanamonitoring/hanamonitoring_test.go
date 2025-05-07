@@ -1179,7 +1179,7 @@ func TestMatchQyeryAndInstanceType(t *testing.T) {
 					HRC: fakeHRCSuccessForStandAlone,
 				},
 			},
-			want: true,
+			want: false,
 		},
 	}
 
