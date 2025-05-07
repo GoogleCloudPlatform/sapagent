@@ -25,6 +25,9 @@ import (
 
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
+
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
 var (
@@ -39,18 +42,31 @@ type HostDiscovery struct {
 	Execute commandlineexecutor.Execute
 }
 
+// HostData contains the data discovered by the host discovery.
+type HostData struct {
+	ClusterAddrs  []string
+	NFSAddrs      []string
+	KernelVersion *spb.KernelVersion
+}
+
 // DiscoverCurrentHost invokes the necessary commands to discover the resources visible only
 // on the current host.
-func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
-	fs := d.discoverFilestores(ctx)
+func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) HostData {
+	var hostData HostData
+	hostData.NFSAddrs = d.discoverFilestores(ctx)
 
 	addrs, err := d.discoverClusterAddresses(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Infow("Error discovering cluster", "error", err)
-		return fs
+	}
+	hostData.ClusterAddrs = addrs
+
+	hostData.KernelVersion, err = statushelper.KernelVersion(ctx, "linux", d.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Infow("Error discovering kernel version", "error", err)
 	}
 
-	return append(fs, addrs...)
+	return hostData
 }
 
 func (d *HostDiscovery) discoverClusterAddresses(ctx context.Context) ([]string, error) {

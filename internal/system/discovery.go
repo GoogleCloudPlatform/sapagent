@@ -34,6 +34,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -150,7 +151,7 @@ type CloudDiscoveryInterface interface {
 
 // HostDiscoveryInterface is exported to be used by the system discovery OTE.
 type HostDiscoveryInterface interface {
-	DiscoverCurrentHost(context.Context) []string
+	DiscoverCurrentHost(context.Context) hostdiscovery.HostData
 }
 
 // SapDiscoveryInterface is exported to be used by the system discovery OTE.
@@ -407,10 +408,14 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 	}
 
 	log.CtxLogger(ctx).Info("Starting host discovery")
-	hostResourceNames := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
-	log.CtxLogger(ctx).Debugw("Host Resource Names", "names", hostResourceNames)
+	hostData := d.HostDiscoveryInterface.DiscoverCurrentHost(ctx)
+	log.CtxLogger(ctx).Debugw("Host data", "names", hostData)
+	if hostData.KernelVersion != nil && instanceResource != nil {
+		log.CtxLogger(ctx).Debugw("Kernel version", "version", hostData.KernelVersion)
+		instanceResource.InstanceProperties.OsKernelVersion = hostData.KernelVersion
+	}
 	log.CtxLogger(ctx).Infow("Discovering other host resources")
-	hostResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceNetwork, hostResourceNames, cp)
+	hostResources := d.CloudDiscoveryInterface.DiscoverComputeResources(ctx, instanceResource, instanceNetwork, append(hostData.ClusterAddrs, hostData.NFSAddrs...), cp)
 	hostResources = removeDuplicates(append(hostResources, hostInstanceResources...))
 	log.CtxLogger(ctx).Debugw("Host Resources", "hostResources", hostResources)
 

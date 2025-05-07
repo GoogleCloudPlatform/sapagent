@@ -41,6 +41,7 @@ import (
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -144,10 +145,10 @@ func createTestIIOTESystemDiscovery(t *testing.T, configPath string) *SystemDisc
 	return &SystemDiscovery{
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
 		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
+			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
 		},
 		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
 		SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
@@ -197,7 +198,7 @@ func TestExecute(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-					DiscoverCurrentHostResp: [][]string{{}},
+					DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 				},
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
@@ -222,7 +223,7 @@ func TestExecute(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-					DiscoverCurrentHostResp: [][]string{{}},
+					DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 				},
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
@@ -285,7 +286,7 @@ func TestSystemDiscoveryHandler(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-					DiscoverCurrentHostResp: [][]string{{}},
+					DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 				},
 			},
 			wantDiscoveryObject: true,
@@ -340,7 +341,7 @@ func TestInitDefaults(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-					DiscoverCurrentHostResp: [][]string{{}},
+					DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 				},
 				AppsDiscovery: func(context.Context, system.SapSystemDiscoveryInterface) *sappb.SAPInstances {
 					return &sappb.SAPInstances{}
@@ -376,7 +377,7 @@ func TestInitDefaults(t *testing.T) {
 					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
 				},
 				HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-					DiscoverCurrentHostResp: [][]string{{}},
+					DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 				},
 				SapDiscoveryInterface: &appsdiscoveryfake.SapDiscovery{
 					DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},

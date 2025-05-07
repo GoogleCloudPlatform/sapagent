@@ -39,6 +39,7 @@ import (
 	appsdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery/fake"
 	clouddiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery/fake"
 	hostdiscoveryfake "github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery/fake"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -47,7 +48,8 @@ import (
 	logfake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
-	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
+	statpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
+	syspb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 const (
@@ -110,16 +112,16 @@ var (
 	}
 	resourceListDiffOpts = []cmp.Option{
 		protocmp.Transform(),
-		protocmp.IgnoreFields(&spb.SapDiscovery_Resource{}, "update_time"),
-		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource{}, "related_resources"),
-		protocmp.SortRepeatedFields(&spb.SapDiscovery_Component{}, "resources"),
+		protocmp.IgnoreFields(&syspb.SapDiscovery_Resource{}, "update_time"),
+		protocmp.SortRepeatedFields(&syspb.SapDiscovery_Resource{}, "related_resources"),
+		protocmp.SortRepeatedFields(&syspb.SapDiscovery_Component{}, "resources"),
 		cmpopts.SortSlices(resourceLess),
-		protocmp.SortRepeatedFields(&spb.SapDiscovery_Resource_InstanceProperties{}, "app_instances", "disk_device_names", "disk_mounts"),
+		protocmp.SortRepeatedFields(&syspb.SapDiscovery_Resource_InstanceProperties{}, "app_instances", "disk_device_names", "disk_mounts"),
 		cmpopts.SortSlices(appInstanceLess),
 	}
-	defaultInstanceResource = &spb.SapDiscovery_Resource{
-		ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-		ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+	defaultInstanceResource = &syspb.SapDiscovery_Resource{
+		ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+		ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 		ResourceUri:  defaultInstanceURI,
 	}
 )
@@ -129,11 +131,11 @@ func TestMain(t *testing.M) {
 	os.Exit(t.Run())
 }
 
-func resourceLess(a, b *spb.SapDiscovery_Resource) bool {
+func resourceLess(a, b *syspb.SapDiscovery_Resource) bool {
 	return a.String() < b.String()
 }
 
-func appInstanceLess(a, b *spb.SapDiscovery_Resource_InstanceProperties_AppInstance) bool {
+func appInstanceLess(a, b *syspb.SapDiscovery_Resource_InstanceProperties_AppInstance) bool {
 	return a.Name < b.Name
 }
 
@@ -166,10 +168,10 @@ func TestStartSAPSystemDiscovery(t *testing.T) {
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
 		CloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{}, {}},
 		},
 		HostDiscoveryInterface: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
 		AppsDiscovery:     func(context.Context, SapSystemDiscoveryInterface) *sappb.SAPInstances { return &sappb.SAPInstances{} },
 		CloudLogInterface: &logfake.TestCloudLogging{FlushErr: []error{nil}},
@@ -193,7 +195,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
 		testOSStatReader   workloadmanager.OSStatReader
 		testFileReader     workloadmanager.ConfigFileReader
-		want               []*spb.SapDiscovery
+		want               []*syspb.SapDiscovery
 	}{{
 		name:   "noDiscovery",
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
@@ -201,51 +203,51 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{}, {}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{},
+		want: []*syspb.SapDiscovery{},
 	}, {
 		name:   "justHANA",
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri:   "some-shared-nfs-uri",
 							InstanceNumber: "00",
 						},
 					},
 				},
 				DBHosts: []string{"some-db-host"},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					VirtualHostname: "some-db-host",
 				}},
 				DBOnHost: true,
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {},
 				{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -254,7 +256,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -271,28 +273,28 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri:   "some-shared-nfs-uri",
 						InstanceNumber: "00",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						VirtualHostname: "some-db-host",
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
@@ -304,18 +306,18 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri:   "some-shared-nfs-uri",
 							InstanceNumber: "00",
 						},
 					},
 				},
 				DBHosts: []string{"some-db-host"},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					VirtualHostname: "some-db-host",
 				}},
 				DBOnHost:  true,
@@ -323,17 +325,17 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-					DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
-						&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+					DiskDeviceNames: []*syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+						&syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
 							DeviceName: "hana-data",
 							Source:     "hana-data-source",
 						},
-						&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+						&syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
 							DeviceName: "hana-log",
 							Source:     "hana-log-source",
 						},
@@ -341,16 +343,16 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				},
 			}}, {},
 				{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -359,7 +361,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: []string{"some-cluster-host", "some-shared-nfs-uri"},
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -376,48 +378,85 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-cluster-host"},
+				NFSAddrs:     []string{"some-shared-nfs-uri"},
+				KernelVersion: &statpb.KernelVersion{
+					RawString: "kernel-version",
+					OsKernel: &statpb.KernelVersion_Version{
+						Major:     1,
+						Minor:     2,
+						Build:     3,
+						Patch:     4,
+						Remainder: "5",
+					},
+					DistroKernel: &statpb.KernelVersion_Version{
+						Major:     6,
+						Minor:     7,
+						Build:     8,
+						Patch:     9,
+						Remainder: "10",
+					},
+				},
+			}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri:   "some-shared-nfs-uri",
 						InstanceNumber: "00",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						VirtualHostname: "some-db-host",
-						DiskDeviceNames: []*spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
-							&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+						DiskDeviceNames: []*syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+							&syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
 								DeviceName: "hana-data",
 								Source:     "hana-data-source",
 							},
-							&spb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
+							&syspb.SapDiscovery_Resource_InstanceProperties_DiskDeviceName{
 								DeviceName: "hana-log",
 								Source:     "hana-log-source",
 							},
 						},
-						DiskMounts: []*spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-								DiskNames:      []string{"hana-log-source"},
+						DiskMounts: []*syspb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+							&syspb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+								DiskNames:  []string{"hana-log-source"},
 								MountPoint: "/hana/log",
 							},
-							&spb.SapDiscovery_Resource_InstanceProperties_DiskMount{
-								DiskNames:      []string{"hana-data-source"},
+							&syspb.SapDiscovery_Resource_InstanceProperties_DiskMount{
+								DiskNames:  []string{"hana-data-source"},
 								MountPoint: "/hana/data",
+							},
+						},
+						OsKernelVersion: &statpb.KernelVersion{
+							RawString: "kernel-version",
+							OsKernel: &statpb.KernelVersion_Version{
+								Major:     1,
+								Minor:     2,
+								Build:     3,
+								Patch:     4,
+								Remainder: "5",
+							},
+							DistroKernel: &statpb.KernelVersion_Version{
+								Major:     6,
+								Minor:     7,
+								Build:     8,
+								Patch:     9,
+								Remainder: "10",
 							},
 						},
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
@@ -429,25 +468,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 							NfsUri:  "some-nfs-host",
 							AscsUri: "some-ascs-host",
 						},
 					},
 				},
 				AppHosts: []string{"some-app-host"},
-				WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-					ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-						&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+				WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+					ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+						&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 							Name:    "some-product-name",
 							Version: "some-product-version",
 						},
 					},
-					SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-						&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 							Name:       "some-software-component-name",
 							Version:    "some-software-component-version",
 							ExtVersion: "some-software-component-ext-version",
@@ -455,10 +494,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						},
 					},
 				},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "some-app-host",
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-app-instance-name",
 						Number: "99",
 					}},
@@ -466,25 +505,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-nfs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "some-ascs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -493,7 +532,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -514,50 +553,50 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+				Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri: "some-ascs-uri",
 						NfsUri:  "some-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 						VirtualHostname: "some-app-host",
-						AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+						AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 							Name:   "some-app-instance-name",
 							Number: "99",
 						}},
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-nfs-uri",
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+			WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+					&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 						Name:    "some-product-name",
 						Version: "some-product-version",
 					},
 				},
-				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+				SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 						Name:       "some-software-component-name",
 						Version:    "some-software-component-version",
 						ExtVersion: "some-software-component-ext-version",
@@ -571,10 +610,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 							NfsUri:  "some-nfs-uri",
 							AscsUri: "some-ascs-uri",
 						},
@@ -584,17 +623,17 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-nfs-uri",
 			}}, {}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -603,7 +642,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -620,24 +659,24 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+				Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri: "some-ascs-uri",
 						NfsUri:  "some-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-nfs-uri",
 				}},
 				HostProject: "12345",
@@ -649,10 +688,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 							NfsUri:  "some-nfs-uri",
 							AscsUri: "some-ascs-uri",
 						},
@@ -662,18 +701,18 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{
 				{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -681,7 +720,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -698,24 +737,24 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+				Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri: "some-ascs-uri",
 						NfsUri:  "some-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}},
 				HostProject: "12345",
@@ -727,26 +766,26 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "DEF",
 				},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {}},
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "ABC",
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
 			},
@@ -757,7 +796,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				AppOnHost: true,
@@ -765,23 +804,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-host-resource"},
+			}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				ResourceUri:      defaultInstanceURI,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
 			}}, {{
 				ResourceUri:      "some-host-resource",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {{
 				ResourceUri:  "some-app-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
@@ -797,22 +838,22 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
 				}, {
 					ResourceUri:  "some-app-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
@@ -824,7 +865,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "DEF",
 				},
 				DBOnHost: true,
@@ -832,23 +873,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-host-resource"},
+			}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				ResourceUri:      defaultInstanceURI,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
 			}}, {{
 				ResourceUri:      "some-host-resource",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {{
 				ResourceUri:  "some-db-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
@@ -864,25 +907,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "DEF",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
 					ResourceUri:  "some-db-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
@@ -894,12 +937,12 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				AppOnHost: true,
 				AppHosts:  []string{"some-app-resource"},
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "DEF",
 				},
 				DBOnHost: true,
@@ -907,27 +950,29 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-host-resource"},
+			}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				ResourceUri:      defaultInstanceURI,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
 			}}, {{
 				ResourceUri:      "some-host-resource",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {{
 				ResourceUri:  "some-app-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}, {{
 				ResourceUri:  "some-db-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
@@ -947,47 +992,47 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
 					ResourceUri:  "some-app-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "DEF",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
 					ResourceUri:  "some-db-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
@@ -999,12 +1044,12 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				AppOnHost: true,
 				AppHosts:  []string{"some-app-resource"},
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "DEF",
 				},
 				DBOnHost: false,
@@ -1012,27 +1057,29 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-host-resource"},
+			}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				ResourceUri:      defaultInstanceURI,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
 			}}, {{
 				ResourceUri:      "some-host-resource",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {{
 				ResourceUri:  "some-app-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}, {{
 				ResourceUri:  "some-db-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
@@ -1052,32 +1099,32 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
 				}, {
 					ResourceUri:  "some-app-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "DEF",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:  "some-db-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}},
 				HostProject: "12345",
 			},
@@ -1088,12 +1135,12 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				AppOnHost: false,
 				AppHosts:  []string{"some-app-resource"},
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "DEF",
 				},
 				DBOnHost: true,
@@ -1101,27 +1148,29 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"some-host-resource"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				ClusterAddrs: []string{"some-host-resource"},
+			}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				ResourceUri:      defaultInstanceURI,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{"some-host-resource"},
 			}}, {{
 				ResourceUri:      "some-host-resource",
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {{
 				ResourceUri:  "some-app-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}, {{
 				ResourceUri:  "some-db-resource",
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
 				Parent:   nil,
@@ -1141,34 +1190,34 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:  "some-app-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}},
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "DEF",
-				Resources: []*spb.SapDiscovery_Resource{{
+				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceUri:      defaultInstanceURI,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{"some-host-resource"},
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
 					ResourceUri:  "some-db-resource",
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_ADDRESS,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				}, {
 					ResourceUri:      "some-host-resource",
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					RelatedResources: []string{defaultInstanceURI},
 				}},
 				HostProject: "12345",
@@ -1180,37 +1229,37 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri: "some-shared-nfs-uri",
 						},
 					},
 				},
 				DBHosts: []string{"some-db-host"},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					VirtualHostname: "some-other-db-host",
 				}},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "some/other/instance",
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -1219,7 +1268,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1236,34 +1285,34 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri: "some-shared-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some/other/instance",
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						VirtualHostname: "some-other-db-host",
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
@@ -1275,46 +1324,46 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri: "some-shared-nfs-uri",
 						},
 					},
 				},
 				DBHosts:  []string{"some-db-host"},
 				DBOnHost: true,
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					VirtualHostname: "some-db-host",
 				}},
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "old-db-host",
 				},
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}, {
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 				ResourceUri:  "some/disk/uri",
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -1323,7 +1372,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1340,31 +1389,31 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri: "some-shared-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER | spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER | syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 						VirtualHostname: "some-db-host",
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
 					ResourceUri:  "some/disk/uri",
 				}},
 				HostProject: "12345",
@@ -1376,25 +1425,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 							NfsUri:  "some-nfs-host",
 							AscsUri: "some-ascs-host",
 						},
 					},
 				},
 				AppHosts: []string{"some-app-host"},
-				WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-					ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-						&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+				WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+					ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+						&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 							Name:    "some-product-name",
 							Version: "some-product-version",
 						},
 					},
-					SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-						&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 							Name:       "some-software-component-name",
 							Version:    "some-software-component-version",
 							ExtVersion: "some-software-component-ext-version",
@@ -1402,10 +1451,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						},
 					},
 				},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "some-other-app-host",
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-app-instance-name",
 						Number: "99",
 					}},
@@ -1413,30 +1462,30 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-nfs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "some-ascs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "some/other/instance",
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "some-other-app-instance-name",
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-app-instance-name",
 						Number: "99",
 					}},
@@ -1448,7 +1497,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1469,37 +1518,37 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+				Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri: "some-ascs-uri",
 						NfsUri:  "some-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-nfs-uri",
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some/other/instance",
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 						VirtualHostname: "some-other-app-host",
-						AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+						AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 							Name:   "some-app-instance-name",
 							Number: "99",
 						}},
@@ -1508,15 +1557,15 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+			WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+					&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 						Name:    "some-product-name",
 						Version: "some-product-version",
 					},
 				},
-				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+				SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 						Name:       "some-software-component-name",
 						Version:    "some-software-component-version",
 						ExtVersion: "some-software-component-ext-version",
@@ -1530,25 +1579,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				AppComponent: &spb.SapDiscovery_Component{
+				AppComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-						ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+					Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+						ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 							NfsUri:  "some-nfs-host",
 							AscsUri: "some-ascs-host",
 						},
 					},
 				},
 				AppHosts: []string{"some-app-host"},
-				WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-					ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-						&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+				WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+					ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+						&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 							Name:    "some-product-name",
 							Version: "some-product-version",
 						},
 					},
-					SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-						&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+						&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 							Name:       "some-software-component-name",
 							Version:    "some-software-component-version",
 							ExtVersion: "some-software-component-ext-version",
@@ -1556,9 +1605,9 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						},
 					},
 				},
-				InstanceProperties: []*spb.SapDiscovery_Resource_InstanceProperties{{
-					InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+				InstanceProperties: []*syspb.SapDiscovery_Resource_InstanceProperties{{
+					InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-ers-instance-name",
 						Number: "88",
 					}, {
@@ -1575,38 +1624,38 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "some-app-host",
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-app-instance-name",
 						Number: "11",
 					}},
 				},
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-nfs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  "some-ascs-uri",
 			}}, {{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-					InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+					InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 					VirtualHostname: "",
-					AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+					AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 						Name:   "some-ers-instance-name",
 						Number: "99",
 					}},
@@ -1618,7 +1667,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1639,25 +1688,25 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_ApplicationProperties_{
-					ApplicationProperties: &spb.SapDiscovery_Component_ApplicationProperties{
+				Properties: &syspb.SapDiscovery_Component_ApplicationProperties_{
+					ApplicationProperties: &syspb.SapDiscovery_Component_ApplicationProperties{
 						AscsUri: "some-ascs-uri",
 						NfsUri:  "some-nfs-uri",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER | spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER | syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 						VirtualHostname: "some-app-host",
-						AppInstances: []*spb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
+						AppInstances: []*syspb.SapDiscovery_Resource_InstanceProperties_AppInstance{{
 							Name:   "some-ers-instance-name",
 							Number: "99",
 						}, {
@@ -1669,26 +1718,26 @@ func TestDiscoverSAPSystems(t *testing.T) {
 						}},
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-nfs-uri",
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-ascs-uri",
 				}},
 				HostProject: "12345",
 			},
 			ProjectNumber: "12345",
-			WorkloadProperties: &spb.SapDiscovery_WorkloadProperties{
-				ProductVersions: []*spb.SapDiscovery_WorkloadProperties_ProductVersion{
-					&spb.SapDiscovery_WorkloadProperties_ProductVersion{
+			WorkloadProperties: &syspb.SapDiscovery_WorkloadProperties{
+				ProductVersions: []*syspb.SapDiscovery_WorkloadProperties_ProductVersion{
+					&syspb.SapDiscovery_WorkloadProperties_ProductVersion{
 						Name:    "some-product-name",
 						Version: "some-product-version",
 					},
 				},
-				SoftwareComponentVersions: []*spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
-					&spb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+				SoftwareComponentVersions: []*syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
+					&syspb.SapDiscovery_WorkloadProperties_SoftwareComponentProperties{
 						Name:       "some-software-component-name",
 						Version:    "some-software-component-version",
 						ExtVersion: "some-software-component-ext-version",
@@ -1700,9 +1749,9 @@ func TestDiscoverSAPSystems(t *testing.T) {
 	}, {
 		name: "usesOverrideFile",
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -1712,7 +1761,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
 		testOSStatReader: func(string) (os.FileInfo, error) {
 			return MockFileInfo{}, nil
@@ -1732,12 +1781,12 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				}`,
 			}, nil
 		},
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "ABC",
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
 			},
@@ -1748,7 +1797,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				DBOnHost: true,
@@ -1766,46 +1815,46 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				// Host instance
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Host instance resources
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}, {
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}, {
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 				ResourceUri:      "some-backend-service-uri",
 				RelatedResources: []string{"primary-instance-group"},
 			}, {
-				ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+				ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 				ResourceUri:      "primary-instance-group",
 				RelatedResources: []string{defaultInstanceURI},
 			}}, {
 				// Database resources
 				{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				},
 			}, {{
 				// Primary site
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Secondary site
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  secondaryInstanceURI,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -1835,44 +1884,46 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"1.2.3.4"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				NFSAddrs: []string{"1.2.3.4"},
+			}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 					ResourceUri:      "some-backend-service-uri",
 					RelatedResources: []string{"primary-instance-group"},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "primary-instance-group",
 					RelatedResources: []string{defaultInstanceURI},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid: "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  secondaryInstanceURI,
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
 					}},
@@ -1885,10 +1936,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri:   "some-shared-nfs-uri",
 							InstanceNumber: "00",
 						},
@@ -1914,37 +1965,37 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				// Host instance
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Host resources
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {
 				// Database resources
 			}, {{
 				// NFS resources
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}}, {{
 				// Primary site
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Secondary site
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  "secondary/site/resource",
 			}}, {{
 				// Tertiary site
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  "tertiary/site/resource",
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -1953,7 +2004,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -1978,53 +2029,53 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri:   "some-shared-nfs-uri",
 						InstanceNumber: "00",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid: "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  "secondary/site/resource",
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
 					},
 				}, {
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid: "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  "tertiary/site/resource",
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
 					},
@@ -2037,10 +2088,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri:   "some-shared-nfs-uri",
 							InstanceNumber: "00",
 						},
@@ -2065,30 +2116,30 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}},
 				{}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}}, {{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}}, {{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  "secondary/site/resource",
 				}}, {{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  "tertiary/site/resource",
 				}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -2097,7 +2148,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
-				HostList: []string{},
+				HostList: nil,
 				CP:       defaultCloudProperties,
 			}, {
 				Parent:   defaultInstanceResource,
@@ -2122,52 +2173,52 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri:   "some-shared-nfs-uri",
 						InstanceNumber: "00",
 					},
 				},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid: "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  "secondary/site/resource",
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
-						ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+						ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 							SourceSite: "secondary-site",
-							Component: &spb.SapDiscovery_Component{
+							Component: &syspb.SapDiscovery_Component{
 								Sid: "ABC",
-								Resources: []*spb.SapDiscovery_Resource{{
-									ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-									ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+								Resources: []*syspb.SapDiscovery_Resource{{
+									ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+									ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 									ResourceUri:  "tertiary/site/resource",
-									InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-										InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+									InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+										InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 									},
 								}},
 							}},
@@ -2182,10 +2233,10 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
-					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+					Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 							SharedNfsUri:   "some-shared-nfs-uri",
 							InstanceNumber: "00",
 						},
@@ -2207,56 +2258,56 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				// Host instance
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Host resources
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {
 				// Database resources
 				{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 					ResourceUri:      "some-backend-service-uri",
 					RelatedResources: []string{"primary-instance-group", "secondary-instance-group"},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "primary-instance-group",
 					RelatedResources: []string{defaultInstanceURI},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "secondary-instance-group",
 					RelatedResources: []string{secondaryInstanceURI},
 				}, {
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  secondaryInstanceURI,
 				},
 			}, {{
 				// Database NFS
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}}, {{
 				// Primary site
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Secondary site
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  secondaryInstanceURI,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -2292,50 +2343,52 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"1.2.3.4"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				NFSAddrs: []string{"1.2.3.4"},
+			}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
-					DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+				Properties: &syspb.SapDiscovery_Component_DatabaseProperties_{
+					DatabaseProperties: &syspb.SapDiscovery_Component_DatabaseProperties{
 						SharedNfsUri:   "some-shared-nfs-uri",
 						InstanceNumber: "00",
 					},
 				},
 				HaHosts: []string{defaultInstanceURI, secondaryInstanceURI},
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  secondaryInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 					ResourceUri:      "some-backend-service-uri",
 					RelatedResources: []string{"primary-instance-group", "secondary-instance-group"},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "primary-instance-group",
 					RelatedResources: []string{defaultInstanceURI},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "secondary-instance-group",
 					RelatedResources: []string{secondaryInstanceURI},
 				}, {
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 					ResourceUri:  "some-shared-nfs-uri",
 				}},
 				HostProject: "12345",
@@ -2347,7 +2400,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		config: &cpb.Configuration{CloudProperties: defaultCloudProperties},
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-				DBComponent: &spb.SapDiscovery_Component{
+				DBComponent: &syspb.SapDiscovery_Component{
 					Sid: "ABC",
 				},
 				DBOnHost: true,
@@ -2365,46 +2418,46 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}}},
 		},
 		testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
 				// Host instance
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}}, {{
 				// Host instance resources
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  defaultInstanceURI,
 			}, {
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 				ResourceUri:  "some-shared-nfs-uri",
 			}}, {
 				// Database resources
 				{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  defaultInstanceURI,
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 					ResourceUri:      "some-backend-service-uri",
 					RelatedResources: []string{"primary-instance-group"},
 				}, {
-					ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+					ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 					ResourceUri:      "primary-instance-group",
 					RelatedResources: []string{defaultInstanceURI},
 				},
 			}, {{
 				// Primary site
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 				ResourceUri:  secondaryInstanceURI,
 			}}, {{
 				// Secondary site
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
 			}}},
 			DiscoverComputeResourcesArgs: []clouddiscoveryfake.DiscoverComputeResourcesArgs{{
@@ -2434,44 +2487,46 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			}},
 		},
 		testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-			DiscoverCurrentHostResp: [][]string{{"1.2.3.4"}},
+			DiscoverCurrentHostResp: []hostdiscovery.HostData{{
+				NFSAddrs: []string{"1.2.3.4"},
+			}},
 		},
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  secondaryInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-						InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+						InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
 				HostProject: "12345",
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid: "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  defaultInstanceURI,
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole: spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole: syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}, {
-							ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-							ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
+							ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_BACKEND_SERVICE,
 							ResourceUri:      "some-backend-service-uri",
 							RelatedResources: []string{"primary-instance-group"},
 						}, {
-							ResourceType:     spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-							ResourceKind:     spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
+							ResourceType:     syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+							ResourceKind:     syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE_GROUP,
 							ResourceUri:      "primary-instance-group",
 							RelatedResources: []string{defaultInstanceURI},
 						}, {
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_STORAGE,
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_FILESTORE,
 							ResourceUri:  "some-shared-nfs-uri",
 						}},
 					}},
@@ -2499,7 +2554,7 @@ func TestDiscoverSAPSystems(t *testing.T) {
 			got := d.discoverSAPSystems(context.Background(), defaultCloudProperties, test.config)
 			t.Logf("Got systems: %+v ", got)
 			t.Logf("Want systems: %+v ", test.want)
-			if diff := cmp.Diff(test.want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&spb.SapDiscovery{}, "update_time"))...); diff != "" {
+			if diff := cmp.Diff(test.want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&syspb.SapDiscovery{}, "update_time"))...); diff != "" {
 				t.Errorf("discoverSAPSystems() mismatch (-want, +got):\n%s", diff)
 			}
 			if len(test.testCloudDiscovery.DiscoverComputeResourcesArgsDiffs) != 0 {
@@ -2514,11 +2569,11 @@ func TestDiscoverSAPSystems(t *testing.T) {
 func TestWriteToCloudLogging(t *testing.T) {
 	tests := []struct {
 		name         string
-		system       *spb.SapDiscovery
+		system       *syspb.SapDiscovery
 		logInterface *logfake.TestCloudLogging
 	}{{
 		name:   "writeEmptySystem",
-		system: &spb.SapDiscovery{},
+		system: &syspb.SapDiscovery{},
 		logInterface: &logfake.TestCloudLogging{
 			ExpectedLogEntries: []logging.Entry{{
 				Severity: logging.Info,
@@ -2527,16 +2582,16 @@ func TestWriteToCloudLogging(t *testing.T) {
 		},
 	}, {
 		name: "writeFullSystem",
-		system: &spb.SapDiscovery{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		system: &syspb.SapDiscovery{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "APP",
 				HostProject: "test/project",
-				Resources: []*spb.SapDiscovery_Resource{
-					{ResourceUri: "some/compute/instance", ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE, ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE},
+				Resources: []*syspb.SapDiscovery_Resource{
+					{ResourceUri: "some/compute/instance", ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE, ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE},
 				},
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{Sid: "DAT", HostProject: "test/project", Resources: []*spb.SapDiscovery_Resource{
-				{ResourceUri: "some/compute/instance", ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE, ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE},
+			DatabaseLayer: &syspb.SapDiscovery_Component{Sid: "DAT", HostProject: "test/project", Resources: []*syspb.SapDiscovery_Resource{
+				{ResourceUri: "some/compute/instance", ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE, ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE},
 			},
 			},
 		},
@@ -2639,7 +2694,7 @@ func TestRunDiscovery(t *testing.T) {
 		testCloudDiscovery *clouddiscoveryfake.CloudDiscovery
 		testHostDiscovery  *hostdiscoveryfake.HostDiscovery
 		testWLM            *wlmfake.TestWLM
-		wantSystems        [][]*spb.SapDiscovery
+		wantSystems        [][]*syspb.SapDiscovery
 	}{
 		{
 			name: "disableWrite",
@@ -2652,15 +2707,15 @@ func TestRunDiscovery(t *testing.T) {
 			},
 			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
-					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+					AppComponent: &syspb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &syspb.SapDiscovery_Component{Sid: "DEF"},
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-				DiscoverCurrentHostResp: [][]string{{}},
+				DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 			},
 			testLog: &logfake.TestCloudLogging{
 				ExpectedLogEntries: []logging.Entry{},
@@ -2669,12 +2724,12 @@ func TestRunDiscovery(t *testing.T) {
 				WriteInsightArgs: []wlmfake.WriteInsightArgs{},
 				WriteInsightErrs: []error{nil},
 			},
-			wantSystems: [][]*spb.SapDiscovery{{{
-				ApplicationLayer: &spb.SapDiscovery_Component{
+			wantSystems: [][]*syspb.SapDiscovery{{{
+				ApplicationLayer: &syspb.SapDiscovery_Component{
 					Sid:         "ABC",
 					HostProject: "12345",
 				},
-				DatabaseLayer: &spb.SapDiscovery_Component{
+				DatabaseLayer: &syspb.SapDiscovery_Component{
 					Sid:         "DEF",
 					HostProject: "12345",
 				},
@@ -2692,15 +2747,15 @@ func TestRunDiscovery(t *testing.T) {
 			},
 			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
-					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+					AppComponent: &syspb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &syspb.SapDiscovery_Component{Sid: "DEF"},
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-				DiscoverCurrentHostResp: [][]string{{}},
+				DiscoverCurrentHostResp: []hostdiscovery.HostData{{}},
 			},
 			testLog: &logfake.TestCloudLogging{
 				ExpectedLogEntries: []logging.Entry{{
@@ -2714,12 +2769,12 @@ func TestRunDiscovery(t *testing.T) {
 					Location: "test-zone",
 					Req: &dwpb.WriteInsightRequest{
 						Insight: &dwpb.Insight{
-							SapDiscovery: &spb.SapDiscovery{
-								ApplicationLayer: &spb.SapDiscovery_Component{
+							SapDiscovery: &syspb.SapDiscovery{
+								ApplicationLayer: &syspb.SapDiscovery_Component{
 									Sid:         "ABC",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &spb.SapDiscovery_Component{
+								DatabaseLayer: &syspb.SapDiscovery_Component{
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
@@ -2731,12 +2786,12 @@ func TestRunDiscovery(t *testing.T) {
 				}},
 				WriteInsightErrs: []error{nil},
 			},
-			wantSystems: [][]*spb.SapDiscovery{{{
-				ApplicationLayer: &spb.SapDiscovery_Component{
+			wantSystems: [][]*syspb.SapDiscovery{{{
+				ApplicationLayer: &syspb.SapDiscovery_Component{
 					Sid:         "ABC",
 					HostProject: "12345",
 				},
-				DatabaseLayer: &spb.SapDiscovery_Component{
+				DatabaseLayer: &syspb.SapDiscovery_Component{
 					Sid:         "DEF",
 					HostProject: "12345",
 				},
@@ -2754,18 +2809,18 @@ func TestRunDiscovery(t *testing.T) {
 			},
 			testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 				DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
-					AppComponent: &spb.SapDiscovery_Component{Sid: "ABC"},
-					DBComponent:  &spb.SapDiscovery_Component{Sid: "DEF"},
+					AppComponent: &syspb.SapDiscovery_Component{Sid: "ABC"},
+					DBComponent:  &syspb.SapDiscovery_Component{Sid: "DEF"},
 				}}, {{
-					AppComponent: &spb.SapDiscovery_Component{Sid: "GHI"},
-					DBComponent:  &spb.SapDiscovery_Component{Sid: "JKL"},
+					AppComponent: &syspb.SapDiscovery_Component{Sid: "GHI"},
+					DBComponent:  &syspb.SapDiscovery_Component{Sid: "JKL"},
 				}}},
 			},
 			testCloudDiscovery: &clouddiscoveryfake.CloudDiscovery{
-				DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {defaultInstanceResource}, {}, {}, {}},
+				DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{defaultInstanceResource}, {}, {}, {}, {defaultInstanceResource}, {}, {}, {}},
 			},
 			testHostDiscovery: &hostdiscoveryfake.HostDiscovery{
-				DiscoverCurrentHostResp: [][]string{{}, {}},
+				DiscoverCurrentHostResp: []hostdiscovery.HostData{{}, {}},
 			},
 			testLog: &logfake.TestCloudLogging{
 				ExpectedLogEntries: []logging.Entry{{
@@ -2782,12 +2837,12 @@ func TestRunDiscovery(t *testing.T) {
 					Location: "test-zone",
 					Req: &dwpb.WriteInsightRequest{
 						Insight: &dwpb.Insight{
-							SapDiscovery: &spb.SapDiscovery{
-								ApplicationLayer: &spb.SapDiscovery_Component{
+							SapDiscovery: &syspb.SapDiscovery{
+								ApplicationLayer: &syspb.SapDiscovery_Component{
 									Sid:         "ABC",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &spb.SapDiscovery_Component{
+								DatabaseLayer: &syspb.SapDiscovery_Component{
 									Sid:         "DEF",
 									HostProject: "12345",
 								},
@@ -2801,12 +2856,12 @@ func TestRunDiscovery(t *testing.T) {
 					Location: "test-zone",
 					Req: &dwpb.WriteInsightRequest{
 						Insight: &dwpb.Insight{
-							SapDiscovery: &spb.SapDiscovery{
-								ApplicationLayer: &spb.SapDiscovery_Component{
+							SapDiscovery: &syspb.SapDiscovery{
+								ApplicationLayer: &syspb.SapDiscovery_Component{
 									Sid:         "GHI",
 									HostProject: "12345",
 								},
-								DatabaseLayer: &spb.SapDiscovery_Component{
+								DatabaseLayer: &syspb.SapDiscovery_Component{
 									Sid:         "JKL",
 									HostProject: "12345",
 								},
@@ -2818,22 +2873,22 @@ func TestRunDiscovery(t *testing.T) {
 				}},
 				WriteInsightErrs: []error{nil, nil},
 			},
-			wantSystems: [][]*spb.SapDiscovery{{{
-				ApplicationLayer: &spb.SapDiscovery_Component{
+			wantSystems: [][]*syspb.SapDiscovery{{{
+				ApplicationLayer: &syspb.SapDiscovery_Component{
 					Sid:         "ABC",
 					HostProject: "12345",
 				},
-				DatabaseLayer: &spb.SapDiscovery_Component{
+				DatabaseLayer: &syspb.SapDiscovery_Component{
 					Sid:         "DEF",
 					HostProject: "12345",
 				},
 				ProjectNumber: "12345",
 			}}, {{
-				ApplicationLayer: &spb.SapDiscovery_Component{
+				ApplicationLayer: &syspb.SapDiscovery_Component{
 					Sid:         "GHI",
 					HostProject: "12345",
 				},
-				DatabaseLayer: &spb.SapDiscovery_Component{
+				DatabaseLayer: &syspb.SapDiscovery_Component{
 					Sid:         "JKL",
 					HostProject: "12345",
 				},
@@ -2858,10 +2913,10 @@ func TestRunDiscovery(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			go runDiscovery(ctx, runDiscoveryArgs{config: test.config, d: d})
 
-			var oldSystems []*spb.SapDiscovery
+			var oldSystems []*syspb.SapDiscovery
 			for _, want := range test.wantSystems {
 				log.CtxLogger(ctx).Info("Checking updated instances")
-				var got []*spb.SapDiscovery
+				var got []*syspb.SapDiscovery
 				for {
 					got = d.GetSAPSystems()
 					if got != nil && (oldSystems == nil || got[0].GetUpdateTime() != oldSystems[0].GetUpdateTime()) {
@@ -2872,7 +2927,7 @@ func TestRunDiscovery(t *testing.T) {
 					// Wait half the refresh interval and check for an update again
 					time.Sleep(test.config.GetDiscoveryConfiguration().GetSystemDiscoveryUpdateFrequency().AsDuration() / 2)
 				}
-				if diff := cmp.Diff(want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&spb.SapDiscovery{}, "update_time"))...); diff != "" {
+				if diff := cmp.Diff(want, got, append(resourceListDiffOpts, protocmp.IgnoreFields(&syspb.SapDiscovery{}, "update_time"))...); diff != "" {
 					t.Errorf("runDiscovery() mismatch (-want, +got):\n%s", diff)
 				}
 			}
@@ -2915,8 +2970,8 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 		fileContents  string
 		fileOpenErr   error
 		fileReadError error
-		instance      *spb.SapDiscovery_Resource
-		want          []*spb.SapDiscovery
+		instance      *syspb.SapDiscovery_Resource
+		want          []*syspb.SapDiscovery
 	}{{
 		name: "success",
 		fileContents: `{
@@ -2930,12 +2985,12 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 			},
 			"projectNumber": "12345"
 		}`,
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "ABC",
 				HostProject: "12345",
 			},
-			DatabaseLayer: &spb.SapDiscovery_Component{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
 			},
@@ -2978,11 +3033,11 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 			"projectNumber": "12345"
 		}`,
 		instance: defaultInstanceResource,
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
-				Resources:   []*spb.SapDiscovery_Resource{defaultInstanceResource},
+				Resources:   []*syspb.SapDiscovery_Resource{defaultInstanceResource},
 			},
 			ProjectNumber: "12345",
 		}},
@@ -3000,11 +3055,11 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 			"projectNumber": "12345"
 		}`,
 		instance: defaultInstanceResource,
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
-				Resources:   []*spb.SapDiscovery_Resource{defaultInstanceResource},
+				Resources:   []*syspb.SapDiscovery_Resource{defaultInstanceResource},
 			},
 			ProjectNumber: "12345",
 		}},
@@ -3023,13 +3078,13 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 			"projectNumber": "12345"
 		}`,
 		instance: defaultInstanceResource,
-		want: []*spb.SapDiscovery{{
-			DatabaseLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			DatabaseLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-uri",
 				}},
 			},
@@ -3050,13 +3105,13 @@ func TestDiscoverOverrideSystem(t *testing.T) {
 			"projectNumber": "12345"
 		}`,
 		instance: defaultInstanceResource,
-		want: []*spb.SapDiscovery{{
-			ApplicationLayer: &spb.SapDiscovery_Component{
+		want: []*syspb.SapDiscovery{{
+			ApplicationLayer: &syspb.SapDiscovery_Component{
 				Sid:         "DEF",
 				HostProject: "12345",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceUri:  "some-uri",
 				}},
 			},
@@ -3087,7 +3142,7 @@ func TestDiscoverReplicationSite(t *testing.T) {
 		site           *sappb.HANAReplicaSite
 		lbGroups       []loadBalancerGroup
 		cloudDiscovery *clouddiscoveryfake.CloudDiscovery
-		want           *spb.SapDiscovery_Component_ReplicationSite
+		want           *syspb.SapDiscovery_Component_ReplicationSite
 	}{{
 		name: "success",
 		site: &sappb.HANAReplicaSite{
@@ -3108,46 +3163,46 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"secondary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "primary-site",
 				},
 			}}, {{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  makeZonalURI(defaultProjectID, "replication-region-a", "instances", "secondary-instance"),
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "secondary-site",
 				},
 			}}},
 		},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Region: "test-zone",
 				Sid:    "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "primary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Region: "replication-region",
 						Sid:    "ABC",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  makeZonalURI(defaultProjectID, "replication-region-a", "instances", "secondary-instance"),
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
-								InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
+								InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 								VirtualHostname: "secondary-site",
 							},
 						}},
@@ -3167,18 +3222,18 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"primary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  makeZonalURI(defaultProjectID, "replication-region-a", "disks", "primary-disk"),
 			}}},
 		},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_DISK,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  makeZonalURI(defaultProjectID, "replication-region-a", "disks", "primary-disk"),
 				}},
 			},
@@ -3195,25 +3250,25 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"primary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "other-hostname",
 				},
 			}}},
 		},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid: "ABC",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "other-hostname",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
 			},
@@ -3230,41 +3285,41 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"primary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  makeZonalURI(defaultProjectID, "other-region-a", "instances", "other-instance"),
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "other-hostname",
 				},
 			}, {
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "primary-site",
 				},
 			}}},
 		},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid:    "ABC",
 				Region: "test-zone",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  makeZonalURI(defaultProjectID, "other-region-a", "instances", "other-instance"),
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "other-hostname",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "primary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
 			},
@@ -3289,18 +3344,18 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"secondary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "primary-site",
 				},
 			}}, {{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  secondaryInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "secondary-site",
 				},
 			}}},
@@ -3308,25 +3363,25 @@ func TestDiscoverReplicationSite(t *testing.T) {
 		lbGroups: []loadBalancerGroup{{
 			instanceURIs: []string{defaultInstanceURI, secondaryInstanceURI},
 		}},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid:    "ABC",
 				Region: "test-zone",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "primary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}, {
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  secondaryInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "secondary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
 				HaHosts: []string{defaultInstanceURI, secondaryInstanceURI},
@@ -3352,18 +3407,18 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"secondary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "primary-site",
 				},
 			}}, {{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  secondaryInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "secondary-site",
 				},
 			}}},
@@ -3373,31 +3428,31 @@ func TestDiscoverReplicationSite(t *testing.T) {
 		}, {
 			instanceURIs: []string{secondaryInstanceURI},
 		}},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid:    "ABC",
 				Region: "test-zone",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "primary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid:    "ABC",
 						Region: "test-zone",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  secondaryInstanceURI,
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 								VirtualHostname: "secondary-site",
-								InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+								InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
 					},
@@ -3424,18 +3479,18 @@ func TestDiscoverReplicationSite(t *testing.T) {
 				HostList:   []string{"secondary-site"},
 				CP:         defaultCloudProperties,
 			}},
-			DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+			DiscoverComputeResourcesResp: [][]*syspb.SapDiscovery_Resource{{{
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  defaultInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "primary-site",
 				},
 			}}, {{
-				ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-				ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+				ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 				ResourceUri:  secondaryInstanceURI,
-				InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+				InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 					VirtualHostname: "secondary-site",
 				},
 			}}},
@@ -3445,31 +3500,31 @@ func TestDiscoverReplicationSite(t *testing.T) {
 		}, {
 			instanceURIs: []string{secondaryInstanceURI},
 		}},
-		want: &spb.SapDiscovery_Component_ReplicationSite{
-			Component: &spb.SapDiscovery_Component{
+		want: &syspb.SapDiscovery_Component_ReplicationSite{
+			Component: &syspb.SapDiscovery_Component{
 				Sid:    "ABC",
 				Region: "test-zone",
-				Resources: []*spb.SapDiscovery_Resource{{
-					ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-					ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+				Resources: []*syspb.SapDiscovery_Resource{{
+					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					ResourceUri:  defaultInstanceURI,
-					InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+					InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 						VirtualHostname: "primary-site",
-						InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+						InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 				}},
-				ReplicationSites: []*spb.SapDiscovery_Component_ReplicationSite{{
+				ReplicationSites: []*syspb.SapDiscovery_Component_ReplicationSite{{
 					SourceSite: "primary-site",
-					Component: &spb.SapDiscovery_Component{
+					Component: &syspb.SapDiscovery_Component{
 						Sid:    "ABC",
 						Region: "test-zone",
-						Resources: []*spb.SapDiscovery_Resource{{
-							ResourceKind: spb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
-							ResourceType: spb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+						Resources: []*syspb.SapDiscovery_Resource{{
+							ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
+							ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 							ResourceUri:  secondaryInstanceURI,
-							InstanceProperties: &spb.SapDiscovery_Resource_InstanceProperties{
+							InstanceProperties: &syspb.SapDiscovery_Resource_InstanceProperties{
 								VirtualHostname: "secondary-site",
-								InstanceRole:    spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
+								InstanceRole:    syspb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 							},
 						}},
 					},

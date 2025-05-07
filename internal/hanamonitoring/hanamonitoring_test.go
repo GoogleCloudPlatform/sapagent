@@ -66,7 +66,8 @@ var (
 			GetSecretResp: []string{"fakePassword"},
 			GetSecretErr:  []error{nil},
 		},
-		BackOffs: cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+		BackOffs:                cloudmonitoring.NewBackOffIntervals(time.Millisecond, time.Millisecond),
+		ConnectionRetryInterval: 1 * time.Second,
 	}
 	defaultParamsWithExpMetrics = Parameters{
 		Config: &configpb.Configuration{
@@ -85,6 +86,7 @@ var (
 				},
 			},
 		},
+		ConnectionRetryInterval: 1 * time.Second,
 	}
 	defaultTimestamp = &tspb.Timestamp{Seconds: 123}
 	defaultDb        = &database{
@@ -186,7 +188,8 @@ func TestStart(t *testing.T) {
 		{
 			name: "FailsWithEmptyConfig",
 			params: Parameters{
-				Config: &configpb.Configuration{},
+				Config:                  &configpb.Configuration{},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: false,
 		},
@@ -198,6 +201,7 @@ func TestStart(t *testing.T) {
 						Enabled: false,
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: false,
 		},
@@ -209,6 +213,7 @@ func TestStart(t *testing.T) {
 						Enabled: true,
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: false,
 		},
@@ -223,6 +228,7 @@ func TestStart(t *testing.T) {
 						},
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: false,
 		},
@@ -240,6 +246,7 @@ func TestStart(t *testing.T) {
 						},
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: true,
 		},
@@ -257,7 +264,9 @@ func TestStart(t *testing.T) {
 						},
 					},
 				},
-			}, want: true,
+				ConnectionRetryInterval: 1 * time.Second,
+			},
+			want: true,
 		},
 		{
 			name: "SucceedsWithQueriesToRunDefined_WithRunAllTrue",
@@ -279,6 +288,7 @@ func TestStart(t *testing.T) {
 						},
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: true,
 		},
@@ -304,6 +314,7 @@ func TestStart(t *testing.T) {
 						},
 					},
 				},
+				ConnectionRetryInterval: 1 * time.Second,
 			},
 			want: true,
 		},

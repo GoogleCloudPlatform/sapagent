@@ -19,16 +19,18 @@ package fake
 
 import (
 	"context"
+
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 )
 
 // HostDiscovery provides a fake implementation of the public HostDiscovery interface.
 type HostDiscovery struct {
-	DiscoverCurrentHostResp      [][]string
+	DiscoverCurrentHostResp      []hostdiscovery.HostData
 	discoverCurrentHostCallCount int
 }
 
 // DiscoverCurrentHost is a fake implementation of the HostDiscovery DiscoverCurrentHost method.
-func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) []string {
+func (d *HostDiscovery) DiscoverCurrentHost(ctx context.Context) hostdiscovery.HostData {
 	defer func() {
 		d.discoverCurrentHostCallCount++
 	}()

@@ -24,8 +24,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+
+	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
 func TestMain(t *testing.M) {
@@ -393,7 +396,7 @@ func TestDiscoverCurrentHost(t *testing.T) {
 	tests := []struct {
 		name    string
 		execute commandlineexecutor.Execute
-		want    []string
+		want    HostData
 	}{{
 		name: "Success",
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -408,13 +411,34 @@ func TestDiscoverCurrentHost(t *testing.T) {
 					StdOut: defaultFilestoreOutput,
 					StdErr: "",
 				}
+			case "uname":
+				return commandlineexecutor.Result{
+					StdOut: "5.14.21-150500.55.73-default",
+				}
 			default:
 				return commandlineexecutor.Result{
 					StdErr: "Unexpected command", Error: errors.New("Unexpected command"),
 				}
 			}
 		},
-		want: []string{"127.0.0.1", "1.2.3.4"},
+		want: HostData{
+			ClusterAddrs: []string{"127.0.0.1"},
+			NFSAddrs:     []string{"1.2.3.4"},
+			KernelVersion: &spb.KernelVersion{
+				RawString: "5.14.21-150500.55.73-default",
+				OsKernel: &spb.KernelVersion_Version{
+					Major: 5,
+					Minor: 14,
+					Build: 21,
+				},
+				DistroKernel: &spb.KernelVersion_Version{
+					Major:     150500,
+					Minor:     55,
+					Build:     73,
+					Remainder: "default",
+				},
+			},
+		},
 	}, {
 		name: "clusterError",
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -429,13 +453,34 @@ func TestDiscoverCurrentHost(t *testing.T) {
 					StdOut: defaultFilestoreOutput,
 					StdErr: "",
 				}
+			case "uname":
+				return commandlineexecutor.Result{
+					StdOut: "5.14.21-150500.55.73-default",
+				}
 			default:
 				return commandlineexecutor.Result{
 					StdErr: "Unexpected command", Error: errors.New("Unexpected command"),
 				}
 			}
 		},
-		want: []string{"1.2.3.4"},
+		// want: []string{"1.2.3.4"},
+		want: HostData{
+			NFSAddrs: []string{"1.2.3.4"},
+			KernelVersion: &spb.KernelVersion{
+				RawString: "5.14.21-150500.55.73-default",
+				OsKernel: &spb.KernelVersion_Version{
+					Major: 5,
+					Minor: 14,
+					Build: 21,
+				},
+				DistroKernel: &spb.KernelVersion_Version{
+					Major:     150500,
+					Minor:     55,
+					Build:     73,
+					Remainder: "default",
+				},
+			},
+		},
 	}, {
 		name: "filestoreError",
 		execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -450,13 +495,34 @@ func TestDiscoverCurrentHost(t *testing.T) {
 					StdErr: "Some error",
 					Error:  errors.New("Some Error"),
 				}
+			case "uname":
+				return commandlineexecutor.Result{
+					StdOut: "5.14.21-150500.55.73-default",
+				}
 			default:
 				return commandlineexecutor.Result{
 					StdErr: "Unexpected command", Error: errors.New("Unexpected command"),
 				}
 			}
 		},
-		want: []string{"127.0.0.1"},
+		// want: []string{"127.0.0.1"},
+		want: HostData{
+			ClusterAddrs: []string{"127.0.0.1"},
+			KernelVersion: &spb.KernelVersion{
+				RawString: "5.14.21-150500.55.73-default",
+				OsKernel: &spb.KernelVersion_Version{
+					Major: 5,
+					Minor: 14,
+					Build: 21,
+				},
+				DistroKernel: &spb.KernelVersion_Version{
+					Major:     150500,
+					Minor:     55,
+					Build:     73,
+					Remainder: "default",
+				},
+			},
+		},
 	}}
 
 	ctx := context.Background()
@@ -468,7 +534,7 @@ func TestDiscoverCurrentHost(t *testing.T) {
 				Execute: tc.execute,
 			}
 			got := d.DiscoverCurrentHost(ctx)
-			if diff := cmp.Diff(tc.want, got, cmpopts.SortSlices(func(a, b string) bool { return a > b })); diff != "" {
+			if diff := cmp.Diff(tc.want, got, cmpopts.SortSlices(func(a, b string) bool { return a > b }), protocmp.Transform()); diff != "" {
 				t.Errorf("discoverCurrentHost() returned an unexpected diff (-want +got): %v", diff)
 			}
 		})

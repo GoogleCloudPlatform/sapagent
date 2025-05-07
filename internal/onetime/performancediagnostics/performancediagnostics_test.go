@@ -1744,7 +1744,7 @@ func TestPerformDiagnosticsOps(t *testing.T) {
 				cp:            defaultCloudProperties,
 				appsDiscovery: defaultAppsDiscovery,
 				cloudDiscoveryInterface: &clouddiscoveryfake.CloudDiscovery{
-					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}},
+					DiscoverComputeResourcesResp: [][]*spb.SapDiscovery_Resource{{}, {}, {}},
 				},
 				collectProcesses: func(_ context.Context, p computeresources.Parameters) []*computeresources.ProcessInfo {
 					return []*computeresources.ProcessInfo{
