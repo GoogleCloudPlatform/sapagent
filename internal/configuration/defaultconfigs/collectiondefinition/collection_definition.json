@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 32,
+    "version": 33,
     "validation_system": {
       "system_metrics": [
         {
@@ -315,6 +315,55 @@
             },
             "if_false": {
               "value_from_literal": "inactive"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "selinux_config_configured"
+          },
+          "os_vendor": "ALL",
+          "command": "grep",
+          "args": ["^SELINUX=", "/etc/selinux/config"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              },
+              {
+                "output_source": "STDOUT",
+                "output_starts_with": "SELINUX="
+              }
+            ],
+            "if_true": {
+              "value_from_regex": "SELINUX=(\\w+)"
+            },
+            "if_false": {
+              "value_from_literal": "unknown"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/system",
+            "label": "selinux_config_active"
+          },
+          "os_vendor": "ALL",
+          "command": "getenforce",
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "STDOUT",
+                "output_not_equals": ""
+              }
+            ],
+            "if_true": {
+              "value_from_output": true
+            },
+            "if_false": {
+              "value_from_literal": "unknown"
             }
           }
         }

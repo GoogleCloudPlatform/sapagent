@@ -67,7 +67,7 @@ var (
 		AgentProperties: &cnfpb.AgentProperties{Name: "sapagent", Version: "1.0"},
 	}
 
-	collectionConfigVersion = "32"
+	collectionConfigVersion = "33"
 )
 
 func wantSystemMetrics(ts *timestamppb.Timestamp, labels map[string]string) WorkloadMetrics {
@@ -227,6 +227,16 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdOut: "5.14.21-150500.55.73-default",
 						}
 					}
+					if params.Executable == "grep" && params.Args[0] == "^SELINUX=" {
+						return commandlineexecutor.Result{
+							StdOut: "SELINUX=disabled",
+						}
+					}
+					if params.Executable == "getenforce" {
+						return commandlineexecutor.Result{
+							StdOut: "disabled",
+						}
+					}
 					return commandlineexecutor.Result{}
 				},
 			},
@@ -250,6 +260,8 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"has_ascs":                    "false",
 				"has_ers":                     "false",
 				"tuned":                       "active",
+				"selinux_config_configured":   "disabled",
+				"selinux_config_active":       "disabled",
 				"kernel_version": marshal(&statuspb.KernelVersion{
 					RawString: "5.14.21-150500.55.73-default",
 					OsKernel: &statuspb.KernelVersion_Version{
