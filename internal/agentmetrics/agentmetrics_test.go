@@ -128,10 +128,9 @@ var (
 	}
 
 	bareMetalLabels = map[string]string{
-		"project_id": "test-project",
-		"location":   "test-region",
-		"namespace":  "test-instance-name",
-		"node_id":    "test-instance-name",
+		"resource_container": "test-project",
+		"location":           "test-region",
+		"instance_id":        "test-instance",
 	}
 	vmLabels = map[string]string{
 		"instance_id": "test-instance",
@@ -262,7 +261,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
 					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
+						Type:   "baremetalsolution.googleapis.com/Instance",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
@@ -325,7 +324,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
 					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
+						Type:   "baremetalsolution.googleapis.com/Instance",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
@@ -412,7 +411,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
 					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
+						Type:   "baremetalsolution.googleapis.com/Instance",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
@@ -432,7 +431,7 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 				},
 				&mrpb.TimeSeries{
 					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
+						Type:   "baremetalsolution.googleapis.com/Instance",
 						Labels: bareMetalLabels,
 					},
 					Metric: &metricpb.Metric{
