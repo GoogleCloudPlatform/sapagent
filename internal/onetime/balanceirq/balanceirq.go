@@ -92,7 +92,7 @@ func (*BalanceIRQ) Usage() string {
 
 // SetFlags implements the subcommand interface for balanceirq.
 func (b *BalanceIRQ) SetFlags(fs *flag.FlagSet) {
-	// TODO: Move common flags to global struct.
+	// TODO: Use cobra instead of subcommands for onetime executions.
 	fs.StringVar(&b.pinToSocket, "pin-to-socket", "", "Pins all interrupts to a specific socket")
 	fs.BoolVar(&b.install, "install", false, "Installs balanceirq as a systemd service")
 	fs.StringVar(&b.logPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/balanceirq.log")
