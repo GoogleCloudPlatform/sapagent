@@ -145,13 +145,13 @@ func TestParseRemoteJSON(t *testing.T) {
 		},
 		{
 			name:        "succeedsWithEmpty",
-			want:        []*mrpb.TimeSeries{},
+			want:        nil,
 			output:      "",
 			expectError: false,
 		},
 		{
 			name:        "failsWithBadInput",
-			want:        []*mrpb.TimeSeries{},
+			want:        nil,
 			output:      "somebadstuff",
 			expectError: true,
 		},
@@ -159,7 +159,7 @@ func TestParseRemoteJSON(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := []*mrpb.TimeSeries{}
+			var got []*mrpb.TimeSeries
 			err := parseRemoteJSON(test.output, &got)
 			if !test.expectError && err != nil {
 				t.Errorf("parseRemoteJSON returned an error: %s", err)
@@ -185,7 +185,7 @@ func TestAppendCommonGcloudArgs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{}
+			var args []string
 			rc := &cfgpb.WorkloadValidationRemoteCollection{
 				RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{
 					UseInternalIp:    true,
@@ -225,7 +225,7 @@ func TestAppendSSHArgs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{}
+			var args []string
 			rc := &cfgpb.WorkloadValidationRemoteCollection{
 				RemoteCollectionSsh: &cfgpb.RemoteCollectionSsh{
 					SshUsername:       "username",

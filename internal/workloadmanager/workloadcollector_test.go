@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -37,6 +38,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredresourcepb "google.golang.org/genproto/googleapis/api/monitoredres"
@@ -57,6 +59,7 @@ var (
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
 			InstanceId:   "test-instance-id",
+			Region:       "test-region",
 			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
 			MachineType:  "test-machine-type",
@@ -85,6 +88,7 @@ var (
 		CloudProperties: &iipb.CloudProperties{
 			InstanceName: "test-instance-name",
 			InstanceId:   "test-instance-id",
+			Region:       "test-region",
 			Zone:         "test-region-zone",
 			ProjectId:    "test-project-id",
 		},
@@ -97,6 +101,17 @@ var (
 				Hostname:       "test-hostname",
 				Port:           "30015",
 			},
+		},
+	}
+	fakeWriteInsightActivationCheck = wlmfake.WriteInsightArgs{
+		Project:  "test-project-id",
+		Location: "test-region",
+		Req: &dwpb.WriteInsightRequest{
+			Insight: &dwpb.Insight{
+				InstanceId:    "test-instance-id",
+				SapValidation: &dwpb.SapValidation{},
+			},
+			AgentVersion: configuration.AgentVersion,
 		},
 	}
 	//go:embed test_data/metricoverride.yaml
@@ -637,6 +652,110 @@ func TestStartMetricsCollection(t *testing.T) {
 	}
 }
 
+func TestWaitForDataWarehouseActivation(t *testing.T) {
+	tests := []struct {
+		name                  string
+		beatInterval          time.Duration
+		timeout               time.Duration
+		writeInsightArgs      []wlmfake.WriteInsightArgs
+		writeInsightResponses []*wlm.WriteInsightResponse
+		writeInsightErrs      []error
+		want                  bool
+		wantCallCount         int
+	}{
+		{
+			name:             "success",
+			beatInterval:     time.Millisecond * 50,
+			timeout:          time.Millisecond * 250,
+			writeInsightArgs: []wlmfake.WriteInsightArgs{fakeWriteInsightActivationCheck},
+			writeInsightResponses: []*wlm.WriteInsightResponse{
+				{
+					ServerResponse: googleapi.ServerResponse{
+						HTTPStatusCode: 201,
+					},
+				},
+			},
+			writeInsightErrs: []error{nil},
+			want:             true,
+			wantCallCount:    1,
+		},
+		{
+			name:         "nonSuccessResponses",
+			beatInterval: time.Millisecond * 50,
+			timeout:      time.Millisecond * 140,
+			writeInsightArgs: []wlmfake.WriteInsightArgs{
+				fakeWriteInsightActivationCheck,
+				fakeWriteInsightActivationCheck,
+				fakeWriteInsightActivationCheck,
+			},
+			writeInsightResponses: []*wlm.WriteInsightResponse{
+				nil,
+				nil,
+				{
+					ServerResponse: googleapi.ServerResponse{
+						HTTPStatusCode: 400,
+					},
+				},
+			},
+			writeInsightErrs: []error{
+				errors.New("Request error"),
+				nil,
+				nil,
+			},
+			want:          false,
+			wantCallCount: 3,
+		},
+		{
+			name:         "errorThenSuccess",
+			beatInterval: time.Millisecond * 50,
+			timeout:      time.Millisecond * 250,
+			writeInsightArgs: []wlmfake.WriteInsightArgs{
+				fakeWriteInsightActivationCheck,
+				fakeWriteInsightActivationCheck,
+			},
+			writeInsightResponses: []*wlm.WriteInsightResponse{
+				nil,
+				{
+					ServerResponse: googleapi.ServerResponse{
+						HTTPStatusCode: 201,
+					},
+				},
+			},
+			writeInsightErrs: []error{
+				errors.New("Request error"),
+				nil,
+			},
+			want:          true,
+			wantCallCount: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), test.timeout)
+			defer cancel()
+			params := Parameters{
+				Config: defaultConfiguration,
+				WLMService: &wlmfake.TestWLM{
+					T:                     t,
+					WriteInsightArgs:      test.writeInsightArgs,
+					WriteInsightResponses: test.writeInsightResponses,
+					WriteInsightErrs:      test.writeInsightErrs,
+				},
+			}
+
+			got := waitForDataWarehouseActivation(ctx, params, test.beatInterval)
+			gotCount := params.WLMService.(*wlmfake.TestWLM).WriteInsightCallCount
+			if got != test.want {
+				t.Errorf("waitForDataWarehouseActivation() got: %t, want: %t", got, test.want)
+			}
+			if gotCount != test.wantCallCount {
+				t.Errorf("waitForDataWarehouseActivation() call count mismatch got %d, want %d", gotCount, test.wantCallCount)
+			}
+		})
+	}
+}
+
 func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 	testData := []struct {
 		name         string
@@ -686,9 +805,10 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 						StdErr: "",
 					}
 				},
-				Exists:           func(string) bool { return true },
-				ConfigFileReader: DefaultTestReader,
-				OSStatReader:     func(data string) (os.FileInfo, error) { return nil, nil },
+				Exists:             func(string) bool { return true },
+				ConfigFileReader:   DefaultTestReader,
+				InstanceInfoReader: *instanceinfo.New(&fakeDiskMapper{}, defaultGCEService),
+				OSStatReader:       func(data string) (os.FileInfo, error) { return nil, nil },
 				Discovery: &fakeDiscoveryInterface{
 					instances: &sapb.SAPInstances{Instances: []*sapb.SAPInstance{}},
 				},
@@ -698,52 +818,68 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				BackOffs:          defaultBackOffIntervals,
 				WLMService: &wlmfake.TestWLM{
 					T:                t,
-					WriteInsightErrs: []error{nil},
-					WriteInsightArgs: []wlmfake.WriteInsightArgs{{
-						Project:  "test-project-id",
-						Location: "test-region",
-						Req: &dwpb.WriteInsightRequest{
-							Insight: &dwpb.Insight{
-								InstanceId: "test-instance-id",
-								SapValidation: &dwpb.SapValidation{
-									ProjectId: "test-project-id",
-									Zone:      "test-region-zone",
-									ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
-										{
-											SapValidationType: dwpb.SapValidation_SYSTEM,
-											IsPresent:         true,
-											Details:           map[string]string{},
-										},
-										{
-											SapValidationType: dwpb.SapValidation_NETWEAVER,
-											IsPresent:         false,
-											Details:           map[string]string{},
-										},
-										{
-											SapValidationType: dwpb.SapValidation_HANA,
-											IsPresent:         false,
-											Details:           map[string]string{},
-										},
-										{
-											SapValidationType: dwpb.SapValidation_PACEMAKER,
-											IsPresent:         false,
-											Details:           map[string]string{},
-										},
-										{
-											SapValidationType: dwpb.SapValidation_COROSYNC,
-											IsPresent:         false,
-											Details:           map[string]string{},
-										},
-										{
-											SapValidationType: dwpb.SapValidation_CUSTOM,
-											IsPresent:         true,
-											Details:           map[string]string{},
+					WriteInsightErrs: []error{nil, nil},
+					WriteInsightArgs: []wlmfake.WriteInsightArgs{
+						fakeWriteInsightActivationCheck,
+						{
+							Project:  "test-project-id",
+							Location: "test-region",
+							Req: &dwpb.WriteInsightRequest{
+								Insight: &dwpb.Insight{
+									InstanceId: "test-instance-id",
+									SapValidation: &dwpb.SapValidation{
+										ProjectId: "test-project-id",
+										Zone:      "test-region-zone",
+										ValidationDetails: []*dwpb.SapValidation_ValidationDetail{
+											{
+												SapValidationType: dwpb.SapValidation_SYSTEM,
+												IsPresent:         true,
+												Details:           map[string]string{},
+											},
+											{
+												SapValidationType: dwpb.SapValidation_NETWEAVER,
+												IsPresent:         false,
+												Details:           map[string]string{},
+											},
+											{
+												SapValidationType: dwpb.SapValidation_HANA,
+												IsPresent:         false,
+												Details:           map[string]string{},
+											},
+											{
+												SapValidationType: dwpb.SapValidation_PACEMAKER,
+												IsPresent:         false,
+												Details:           map[string]string{},
+											},
+											{
+												SapValidationType: dwpb.SapValidation_COROSYNC,
+												IsPresent:         false,
+												Details:           map[string]string{},
+											},
+											{
+												SapValidationType: dwpb.SapValidation_CUSTOM,
+												IsPresent:         true,
+												Details:           map[string]string{},
+											},
 										},
 									},
-								}},
-							AgentVersion: configuration.AgentVersion,
+								},
+								AgentVersion: configuration.AgentVersion,
+							},
 						},
-					}},
+					},
+					WriteInsightResponses: []*wlm.WriteInsightResponse{
+						{
+							ServerResponse: googleapi.ServerResponse{
+								HTTPStatusCode: 201,
+							},
+						},
+						{
+							ServerResponse: googleapi.ServerResponse{
+								HTTPStatusCode: 201,
+							},
+						},
+					},
 				},
 				HeartbeatSpec: &heartbeat.Spec{
 					BeatFunc: func() {

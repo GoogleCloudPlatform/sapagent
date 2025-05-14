@@ -132,6 +132,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 			remoteCp := &ipb.CloudProperties{
 				ProjectId:    inst.GetProjectId(),
 				InstanceId:   inst.GetInstanceId(),
+				Region:       regionFromZone(inst.GetZone()),
 				Zone:         inst.GetZone(),
 				InstanceName: inst.GetInstanceName(),
 			}
@@ -148,6 +149,14 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 	}
 	wp.StopWait()
 	return metricsSent
+}
+
+func regionFromZone(zone string) string {
+	regionParts := strings.Split(zone, "-")
+	if len(regionParts) < 2 {
+		return ""
+	}
+	return strings.Join(regionParts[:2], "-")
 }
 
 // createWorkloadValidationFile stores a workload validation definition in a

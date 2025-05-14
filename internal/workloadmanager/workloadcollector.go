@@ -40,6 +40,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cnfpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
@@ -70,6 +71,7 @@ type metricEmitter struct {
 
 type wlmInterface interface {
 	WriteInsight(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) error
+	WriteInsightAndGetResponse(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) (*wlm.WriteInsightResponse, error)
 }
 
 // sendMetricsParams defines the set of parameters required to call sendMetrics
@@ -98,40 +100,41 @@ func currentTime() int64 {
 
 func start(ctx context.Context, a any) {
 	var params Parameters
-	if v, ok := a.(Parameters); ok {
-		params = v
-	} else {
+	var ok bool
+	if params, ok = a.(Parameters); !ok {
 		log.CtxLogger(ctx).Error("Cannot collect Workload Manager metrics, no collection configuration detected")
 		return
 	}
+
 	// Log usagemetric if hdbuserstore key is configured.
 	if params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHdbuserstoreKey() != "" {
 		usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
 	}
-	log.CtxLogger(ctx).Infow("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
 	cmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationMetricsFrequency()) * time.Second
 	if cmf <= 0 {
-		// default it to 5 minutes
 		cmf = time.Duration(5) * time.Minute
 	}
-	configurableMetricsTicker := time.NewTicker(cmf)
-	defer configurableMetricsTicker.Stop()
-
 	dbmf := time.Duration(params.Config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsFrequency()) * time.Second
 	if dbmf <= 0 {
-		// default it to 1 hour
 		dbmf = time.Duration(3600) * time.Second
 	}
+	if ok = waitForDataWarehouseActivation(ctx, params, cmf); !ok {
+		log.CtxLogger(ctx).Debug("Workload Manager metrics collection cancellation requested")
+		return
+	}
+	log.CtxLogger(ctx).Infow("Starting collection of Workload Manager metrics", "definitionVersion", params.WorkloadConfig.GetVersion())
+
+	configurableMetricsTicker := time.NewTicker(cmf)
+	defer configurableMetricsTicker.Stop()
 	databaseMetricTicker := time.NewTicker(dbmf)
 	defer databaseMetricTicker.Stop()
-
 	heartbeatTicker := params.HeartbeatSpec.CreateTicker()
 	defer heartbeatTicker.Stop()
 
 	// Do not wait for the first tick and start metric collection immediately.
 	select {
 	case <-ctx.Done():
-		log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
+		log.CtxLogger(ctx).Debug("Workload Manager metrics collection cancellation requested")
 		return
 	default:
 		collectWorkloadMetricsOnce(ctx, params)
@@ -143,7 +146,7 @@ func start(ctx context.Context, a any) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.CtxLogger(ctx).Debug("Workload metrics cancellation requested")
+			log.CtxLogger(ctx).Debug("Workload Manager metrics collection cancellation requested")
 			return
 		case cd := <-params.WorkloadConfigCh:
 			params.WorkloadConfig = cd.GetWorkloadValidation()
@@ -156,6 +159,47 @@ func start(ctx context.Context, a any) {
 			if err := collectDBMetricsOnce(ctx, params); err != nil {
 				log.CtxLogger(ctx).Warn(err)
 			}
+		}
+	}
+}
+
+// waitForDataWarehouseActivation periodically issues a request to the
+// Data Warehouse WriteInsight API to check if validation data is accepted.
+//
+// This function returns true once the API returns a successful response,
+// or false if the context has been cancelled. In order to prevent the agent
+// from performing unnecessary work, do not proceed with metric collection
+// until the API returns a successful response.
+func waitForDataWarehouseActivation(ctx context.Context, params Parameters, frequency time.Duration) bool {
+	ticker := time.NewTicker(frequency)
+	defer ticker.Stop()
+	for {
+		log.CtxLogger(ctx).Info("Checking if WLM Data Warehouse is accepting metric data")
+		req := &dwpb.WriteInsightRequest{
+			Insight: &dwpb.Insight{
+				InstanceId:    params.Config.GetCloudProperties().GetInstanceId(),
+				SapValidation: &dwpb.SapValidation{},
+			},
+			AgentVersion: configuration.AgentVersion,
+		}
+		res, err := params.WLMService.WriteInsightAndGetResponse(params.Config.GetCloudProperties().GetProjectId(), params.Config.GetCloudProperties().GetRegion(), req)
+		switch {
+		case err != nil:
+			log.CtxLogger(ctx).Errorw("Failed to check the status of WLM Data Warehouse", "error", err)
+		case res == nil:
+			log.CtxLogger(ctx).Error("Failed to check the status of WLM Data Warehouse, response is nil")
+		case res.HTTPStatusCode != 201:
+			log.CtxLogger(ctx).Infow("WLM Data Warehouse is not accepting metric data. Please confirm that this instance appears in the evaluation scope for at least one Workload Manager evaluation.", "statusCode", res.HTTPStatusCode)
+		default:
+			log.CtxLogger(ctx).Info("WLM Data Warehouse is accepting metric data")
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			continue
 		}
 	}
 }
@@ -466,14 +510,8 @@ func sendMetricsToDataWarehouse(ctx context.Context, params sendMetricsParams) i
 	sentMetrics := len(params.wm.Metrics)
 	log.CtxLogger(ctx).Infow("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
 	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
-	location := params.cp.GetZone()
-	if params.bareMetal {
-		location = params.cp.GetRegion()
-	}
-	locationParts := strings.Split(location, "-")
-	location = strings.Join([]string{locationParts[0], locationParts[1]}, "-")
 	req := createWriteInsightRequest(params.wm, params.cp)
-	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), location, req); err != nil {
+	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), params.cp.GetRegion(), req); err != nil {
 		log.CtxLogger(ctx).Errorw("Failed to send metrics to Data Warehouse", "error", err)
 		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 		sentMetrics = 0

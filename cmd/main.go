@@ -143,6 +143,7 @@ func main() {
 		cloudProps = &iipb.CloudProperties{
 			ProjectId:        cp.ProjectID,
 			InstanceId:       cp.InstanceID,
+			Region:           cp.Region,
 			Zone:             cp.Zone,
 			InstanceName:     cp.InstanceName,
 			Image:            cp.Image,

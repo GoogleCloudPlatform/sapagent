@@ -224,6 +224,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 		"projectid", d.cloudProps.GetProjectId(),
 		"projectnumber", d.cloudProps.GetNumericProjectId(),
 		"instanceid", d.cloudProps.GetInstanceId(),
+		"region", d.cloudProps.GetRegion(),
 		"zone", d.cloudProps.GetZone(),
 		"instancename", d.cloudProps.GetInstanceName(),
 		"image", d.cloudProps.GetImage())
@@ -232,6 +233,7 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 		"projectid", d.config.CloudProperties.GetProjectId(),
 		"projectnumber", d.config.CloudProperties.GetNumericProjectId(),
 		"instanceid", d.config.CloudProperties.GetInstanceId(),
+		"region", d.config.CloudProperties.GetRegion(),
 		"zone", d.config.CloudProperties.GetZone(),
 		"instancename", d.config.CloudProperties.GetInstanceName(),
 		"image", d.config.CloudProperties.GetImage())
