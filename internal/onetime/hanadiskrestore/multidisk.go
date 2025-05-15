@@ -58,11 +58,11 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 				}
 			}
 		}
-		hanabackup.RescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 		return err
 	}
 
-	hanabackup.RescanVolumeGroups(ctx)
+	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 	log.CtxLogger(ctx).Info("HANA restore from group snapshot succeeded.")
 	return nil
 }
