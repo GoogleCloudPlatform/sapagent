@@ -25,7 +25,6 @@ import (
 	"time"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
-	mrespb "google.golang.org/genproto/googleapis/api/monitoredres"
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -94,17 +93,11 @@ var (
 		return valueEqual && startTimeEqual && endTimeEqual
 	})
 
-	resourceComparer = cmp.Comparer(func(a, b *mrespb.MonitoredResource) bool {
-		typeEqual := cmp.Equal(a.GetType(), b.GetType())
-		labelsEqual := cmp.Equal(a.GetLabels(), b.GetLabels())
-		return typeEqual && labelsEqual
-	})
 	timeSeriesComparer = cmp.Comparer(func(a, b *mrpb.TimeSeries) bool {
 		points := cmp.Equal(a.GetPoints(), b.GetPoints(), pointComparer)
 		metricType := cmp.Equal(a.GetMetric().GetType(), b.GetMetric().GetType())
 		metricLabel := cmp.Equal(a.GetMetric().GetLabels(), b.GetMetric().GetLabels())
-		resourcesEqual := cmp.Equal(a.GetResource(), b.GetResource(), resourceComparer)
-		return points && metricType && metricLabel && resourcesEqual
+		return points && metricType && metricLabel
 	})
 	fakeTimestamp = &tspb.Timestamp{
 		Seconds: 42,
@@ -128,10 +121,9 @@ var (
 	}
 
 	bareMetalLabels = map[string]string{
-		"project_id": "test-project",
-		"location":   "test-region",
-		"namespace":  "test-instance-name",
-		"node_id":    "test-instance-name",
+		"resource_container": "test-project",
+		"location":           "test-region",
+		"instance_id":        "test-instance",
 	}
 	vmLabels = map[string]string{
 		"instance_id": "test-instance",
@@ -261,10 +253,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
-						Labels: bareMetalLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
@@ -292,10 +280,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "gce_instance",
-						Labels: vmLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
@@ -324,10 +308,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
-						Labels: bareMetalLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
@@ -355,10 +335,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForHealth(t *testing.T
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "gce_instance",
-						Labels: vmLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/health",
 					},
@@ -411,10 +387,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
-						Labels: bareMetalLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
@@ -431,10 +403,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					},
 				},
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "generic_node",
-						Labels: bareMetalLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
@@ -463,10 +431,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 			}(),
 			want: []*mrpb.TimeSeries{
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "gce_instance",
-						Labels: vmLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/cpu/utilization",
 					},
@@ -483,10 +447,6 @@ func TestDefaultTimeSeriesFactory_createsCorrectTimeSeriesForUsage(t *testing.T)
 					},
 				},
 				&mrpb.TimeSeries{
-					Resource: &mrespb.MonitoredResource{
-						Type:   "gce_instance",
-						Labels: vmLabels,
-					},
 					Metric: &metricpb.Metric{
 						Type: "workload.googleapis.com/sap/agent/memory/utilization",
 					},
