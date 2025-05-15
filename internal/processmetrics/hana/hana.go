@@ -29,6 +29,8 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics/sapcontrol"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -57,6 +59,8 @@ type (
 		HANAQueryFailCount int64
 		SkippedMetrics     map[string]bool
 		PMBackoffPolicy    backoff.BackOffContext
+		ReplicationConfig  sapdiscovery.ReplicationConfig
+		SapSystemInterface system.SapSystemDiscoveryInterface
 	}
 )
 
@@ -104,6 +108,7 @@ const (
 	queryStatePath       = "/sap/hana/query/state"
 	queryOverallTimePath = "/sap/hana/query/overalltime"
 	queryServerTimePath  = "/sap/hana/query/servertime"
+	logUtilisationKbPath = "/sap/hana/log/utilisationkb"
 	hanaQuery            = "select * from dummy"
 )
 
@@ -134,6 +139,12 @@ func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, e
 		if queryMetrics != nil {
 			metrics = append(metrics, queryMetrics...)
 		}
+	}
+
+	hanaLogUtilisationKbMetrics, err := collectHANALogUtilisationKb(ctx, p, commandlineexecutor.ExecuteCommand)
+	metrics = append(metrics, hanaLogUtilisationKbMetrics...)
+	if err != nil {
+		metricsCollectionErr = err
 	}
 
 	return metrics, metricsCollectionErr
@@ -233,7 +244,7 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 		// Return a non-zero state in case of query failure.
 		// Not following the convention of process metrics here because if we return the error here
 		// query state metric will never get collected in an error state which can mask failures.
-		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, 1)}, nil
+		return []*mrpb.TimeSeries{createMetrics(p, queryStatePath, nil, now, int64(1))}, nil
 	}
 
 	log.CtxLogger(ctx).Debugw("HANA query metrics for instance", "instanceid", p.SAPInstance.GetInstanceId(), "querystate", queryState)
@@ -248,6 +259,86 @@ func collectHANAQueryMetrics(ctx context.Context, p *InstanceProperties, exec co
 		createMetrics(p, queryOverallTimePath, nil, now, queryState.overallTime),
 		createMetrics(p, queryServerTimePath, nil, now, queryState.serverTime),
 	}, nil
+}
+
+// collectHANALogUtilisationKb collects the HANA log utilisation in Kbytes.
+func collectHANALogUtilisationKb(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) ([]*mrpb.TimeSeries, error) {
+	if p.SkippedMetrics[logUtilisationKbPath] {
+		return nil, nil
+	}
+	site, err := fetchHANAReplicationSite(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	if site == sapb.InstanceSite_HANA_STANDALONE {
+		log.CtxLogger(ctx).Debugw("Skipping HANA log utilisation metric collection for standalone instance", "instanceid", p.SAPInstance.GetInstanceId())
+		return nil, nil
+	}
+	args := fmt.Sprintf("-sk /hana/log/%s", p.SAPInstance.GetSapsid())
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "du",
+		ArgsToSplit: args,
+	})
+	if result.Error != nil {
+		log.CtxLogger(ctx).Debugw("Error while executing command du", "args", args, "error", result.Error)
+		return nil, result.Error
+	}
+	values := strings.Fields(result.StdOut)
+	if len(values) < 1 {
+		log.CtxLogger(ctx).Debugw("Command du returned no values. Skipping HANA log utilisation metric collection")
+		return nil, nil
+	}
+	logUtilisationKb, err := strconv.ParseInt(values[0], 10, 64)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Error while converting stdout value to int64", "value", values[0], "error", err)
+		return nil, err
+	}
+
+	var labels map[string]string
+	args = "-k /hana/log"
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable:  "df",
+		ArgsToSplit: args,
+	})
+	if result.Error != nil {
+		log.CtxLogger(ctx).Debugw("Error while executing command df. Skipping HANA log_disk_size label collection", "args", args, "error", result.Error)
+		return []*mrpb.TimeSeries{
+			createMetrics(p, logUtilisationKbPath, nil, tspb.Now(), logUtilisationKb),
+		}, nil
+	}
+	outputLines := strings.Split(result.StdOut, "\n")
+	if len(outputLines) < 2 {
+		log.CtxLogger(ctx).Debugw("Command df returned less than expected rows. Skipping HANA log_disk_size label collection", "stdout", result.StdOut)
+		return []*mrpb.TimeSeries{
+			createMetrics(p, logUtilisationKbPath, nil, tspb.Now(), logUtilisationKb),
+		}, nil
+	}
+	values = strings.Fields(outputLines[1])
+	if len(values) >= 2 {
+		labels = map[string]string{"hana_log_disk_size_kb": values[1]}
+	} else {
+		log.CtxLogger(ctx).Debugw("Command df returned less than expected values. Skipping HANA log_disk_size label collection", "stdout", result.StdOut)
+	}
+
+	return []*mrpb.TimeSeries{
+		createMetrics(p, logUtilisationKbPath, labels, tspb.Now(), logUtilisationKb),
+	}, nil
+}
+
+// fetchHANAReplicationSite fetches the HANA site using replication config.
+func fetchHANAReplicationSite(ctx context.Context, p *InstanceProperties) (sapb.InstanceSite, error) {
+	mode, _, _, err := p.ReplicationConfig(
+		ctx,
+		p.SAPInstance.GetUser(),
+		p.SAPInstance.GetSapsid(),
+		p.SAPInstance.GetInstanceId(),
+		p.SapSystemInterface)
+
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Failed to refresh HANA HA Replication config for instance", "instanceid", p.SAPInstance.GetInstanceId(), "error", err)
+		return 0, err
+	}
+	return sapdiscovery.HANASite(mode), nil
 }
 
 // runHANAQuery runs the hana query and returns the state and time taken in a struct.
@@ -304,18 +395,28 @@ func parseQueryOutput(str string, regex *regexp.Regexp) (int64, error) {
 }
 
 // createMetrics - create mrpb.TimeSeries object for the given metric.
-func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val int64) *mrpb.TimeSeries {
+func createMetrics(p *InstanceProperties, mPath string, extraLabels map[string]string, now *tspb.Timestamp, val any) *mrpb.TimeSeries {
 	mLabels := appendLabels(p, extraLabels)
 	params := timeseries.Params{
 		CloudProp:    protostruct.ConvertCloudPropertiesToStruct(p.Config.CloudProperties),
 		MetricType:   metricURL + mPath,
 		MetricLabels: mLabels,
 		Timestamp:    now,
-		Int64Value:   val,
 		BareMetal:    p.Config.BareMetal,
 	}
-	log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val, "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
-	return timeseries.BuildInt(params)
+	switch val.(type) {
+	case bool:
+		params.BoolValue = val.(bool)
+		log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val.(bool), "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
+		return timeseries.BuildBool(params)
+	case int64:
+		params.Int64Value = val.(int64)
+		log.Logger.Debugw("Create metric for instance", "key", mPath, "value", val.(int64), "instanceid", p.SAPInstance.GetInstanceId(), "labels", mLabels)
+		return timeseries.BuildInt(params)
+	default:
+		log.Logger.Debugw("Invalid value type for metric", "metric", mPath, "value", val)
+		return nil
+	}
 }
 
 // appendLabels appends the default SAP Instance labels and extra labels

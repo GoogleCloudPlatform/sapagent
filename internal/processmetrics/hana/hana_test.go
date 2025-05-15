@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapcontrolclient/test/sapcontrolclienttest"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
@@ -75,6 +76,36 @@ var (
 	defaultAPIInstanceProperties = &InstanceProperties{
 		Config:      defaultConfig,
 		SAPInstance: defaultSAPInstance,
+	}
+
+	instancePropertiesWithReplication = &InstanceProperties{
+		Config:            defaultConfig,
+		SAPInstance:       defaultSAPInstance,
+		ReplicationConfig: defaultReplicationConfig,
+	}
+
+	instancePropertiesWithReplicationDisabled = &InstanceProperties{
+		Config:            defaultConfig,
+		SAPInstance:       defaultSAPInstance,
+		ReplicationConfig: replicationConfigForStandaloneInstance,
+	}
+
+	instancePropertiesWithReplicationRefreshFailure = &InstanceProperties{
+		Config:            defaultConfig,
+		SAPInstance:       defaultSAPInstance,
+		ReplicationConfig: replicationConfigForRefreshFailure,
+	}
+
+	defaultReplicationConfig = func(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
+		return 1, 1, nil, nil
+	}
+
+	replicationConfigForStandaloneInstance = func(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
+		return 0, 1, nil, nil
+	}
+
+	replicationConfigForRefreshFailure = func(ctx context.Context, user, sid, instID string, sapSystemInterface system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error) {
+		return 0, 1, nil, cmpopts.AnyError
 	}
 
 	defaultSapControlOutput = `OK
@@ -343,7 +374,7 @@ func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
 		switch i {
 		case 0, 1:
 			ts := got[0].GetPoints()[0].GetInterval().GetEndTime()
-			want := []*mrpb.TimeSeries{createMetrics(ip, queryStatePath, nil, ts, 1)}
+			want := []*mrpb.TimeSeries{createMetrics(ip, queryStatePath, nil, ts, int64(1))}
 			if cmp.Diff(got[0], want[0], protocmp.Transform()) != "" {
 				t.Errorf("collectHANAQueryMetrics(), got: %v want: %v.", got, want)
 			}
@@ -352,6 +383,168 @@ func TestCollectHANAQueryMetricsWithMaxFailCounts(t *testing.T) {
 				t.Errorf("collectHANAQueryMetrics(), got: %v want: nil.", got)
 			}
 		}
+	}
+}
+
+func TestCollectHANALogUtilisationKb(t *testing.T) {
+	tests := []struct {
+		name                  string
+		wantMetricCount       int
+		wantErr               error
+		instanceProperties    *InstanceProperties
+		exec                  commandlineexecutor.Execute
+		checkLabels           bool
+		expectedDiskSizeValue string
+	}{
+		{
+			name: "SuccessfulCollection",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value\n 888 999",
+				}
+			},
+			wantMetricCount:       1,
+			instanceProperties:    instancePropertiesWithReplication,
+			checkLabels:           true,
+			expectedDiskSizeValue: "999",
+		},
+		{
+			name: "FailedCollectionOnStandaloneInstance",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value/n 888 999",
+				}
+			},
+			wantMetricCount:    0,
+			instanceProperties: instancePropertiesWithReplicationDisabled,
+		},
+		{
+			name: "FailedCollectionWhenUnableToFetchReplicationSite",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value/n 888 999",
+				}
+			},
+			wantMetricCount:    0,
+			wantErr:            cmpopts.AnyError,
+			instanceProperties: instancePropertiesWithReplicationRefreshFailure,
+		},
+		{
+			name: "FailedCollectionWhenDuCommandFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						Error: cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value/n 888 999",
+				}
+			},
+			wantMetricCount:    0,
+			wantErr:            cmpopts.AnyError,
+			instanceProperties: instancePropertiesWithReplication,
+		},
+		{
+			name: "FailedCollectionWhenDuCommandReturnsInvalidOutput",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value/n 888 999",
+				}
+			},
+			wantMetricCount:    0,
+			wantErr:            nil,
+			instanceProperties: instancePropertiesWithReplication,
+		},
+		{
+			name: "SuccessfulCollectionWithoutLabelWhenCommandFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					Error: cmpopts.AnyError,
+				}
+			},
+			wantMetricCount:       1,
+			instanceProperties:    instancePropertiesWithReplication,
+			checkLabels:           true,
+			expectedDiskSizeValue: "",
+		},
+		{
+			name: "SuccessfulCollectionWithoutLabelWhenCommandReturnsInvalidOutput1",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value",
+				}
+			},
+			wantMetricCount:       1,
+			instanceProperties:    instancePropertiesWithReplication,
+			checkLabels:           true,
+			expectedDiskSizeValue: "",
+		},
+		{
+			name: "SuccessfulCollectionWithoutLabelWhenCommandReturnsInvalidOutput2",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "du" {
+					return commandlineexecutor.Result{
+						StdOut: "1234",
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "test_value\n 888",
+				}
+			},
+			wantMetricCount:       1,
+			instanceProperties:    instancePropertiesWithReplication,
+			checkLabels:           true,
+			expectedDiskSizeValue: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			metrics, err := collectHANALogUtilisationKb(context.Background(), test.instanceProperties, test.exec)
+			if len(metrics) != test.wantMetricCount {
+				t.Errorf("collectHANALogUtilisationKb() metric count mismatch, got: %v want: %v.", len(metrics), test.wantMetricCount)
+			}
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("collectHANALogUtilisationKb() gotErr: %v wantErr: %v.", err, test.wantErr)
+			}
+			if test.checkLabels && len(metrics) > 0 {
+				labels := metrics[0].GetMetric().GetLabels()
+				if labels["hana_log_disk_size_kb"] != test.expectedDiskSizeValue {
+					t.Errorf("collectHANALogUtilisationKb() hana_log_disk_size_kb label mismatch, got: %v want: %v.", labels["hana_log_disk_size_kb"], test.expectedDiskSizeValue)
+				}
+			}
+		})
 	}
 }
 
@@ -373,7 +566,8 @@ func TestCollect(t *testing.T) {
 					HanaDbPassword: "test-pass",
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 1, // Without HANA setup in unit test ENV, only query/state metric is generated.
@@ -389,7 +583,8 @@ func TestCollect(t *testing.T) {
 					HdbuserstoreKey: "test-key",
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 1, // Without HANA setup in unit test ENV, only query/state metric is generated.
@@ -404,7 +599,8 @@ func TestCollect(t *testing.T) {
 					InstanceNumber: "00",
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
@@ -419,7 +615,8 @@ func TestCollect(t *testing.T) {
 					HanaDbPassword: "test-pass",
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
@@ -434,7 +631,8 @@ func TestCollect(t *testing.T) {
 					HanaDbUser:     "test-user",
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated without credentials.
@@ -451,7 +649,8 @@ func TestCollect(t *testing.T) {
 					Site:           sapb.InstanceSite_HANA_SECONDARY,
 				},
 				SkippedMetrics: map[string]bool{
-					servicePath: true,
+					servicePath:          true,
+					logUtilisationKbPath: true,
 				},
 			},
 			wantCount: 0, // Query state metric not generated for HANA secondary.
