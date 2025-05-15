@@ -26,11 +26,14 @@ import (
 
 	"flag"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
+	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
@@ -70,6 +73,7 @@ func TestExecute(t *testing.T) {
 		name        string
 		remote      *RemoteValidation
 		loadOptions collectiondefinition.LoadOptions
+		fakeNewGCE  onetime.GCEServiceFunc
 		want        subcommands.ExitStatus
 	}{
 		{
@@ -79,6 +83,15 @@ func TestExecute(t *testing.T) {
 			},
 			loadOptions: defaultLoadOptions,
 			want:        subcommands.ExitSuccess,
+		},
+		{
+			name: "GCEServiceCreationFailure",
+			remote: &RemoteValidation{
+				help: false,
+			},
+			loadOptions: defaultLoadOptions,
+			fakeNewGCE:  func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
+			want:        subcommands.ExitFailure,
 		},
 	}
 
