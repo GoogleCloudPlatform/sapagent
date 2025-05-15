@@ -383,7 +383,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "HANAStandaloneInstance",
 			sapInstances:           fakeSAPInstances("HANA"),
-			wantCollectorCount:     9,
+			wantCollectorCount:     10,
 			wantFastCollectorCount: 1,
 			params: Parameters{
 				Config: defaultConfig,
@@ -392,7 +392,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "HANAClusterInstance",
 			sapInstances:           fakeSAPInstances("HANACluster"),
-			wantCollectorCount:     9,
+			wantCollectorCount:     10,
 			wantFastCollectorCount: 1,
 			params: Parameters{
 				Config: defaultConfig,
@@ -401,7 +401,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "NetweaverClusterInstance",
 			sapInstances:           fakeSAPInstances("NetweaverCluster"),
-			wantCollectorCount:     9,
+			wantCollectorCount:     10,
 			wantFastCollectorCount: 1,
 			params: Parameters{
 				Config: defaultConfig,
@@ -410,7 +410,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "TwoNetweaverInstancesOnSameMachine",
 			sapInstances:           fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
-			wantCollectorCount:     11,
+			wantCollectorCount:     13,
 			wantFastCollectorCount: 2,
 			params: Parameters{
 				Config: defaultConfig,
@@ -419,7 +419,7 @@ func TestCreateProcessCollectors(t *testing.T) {
 		{
 			name:                   "NonNilWorkloadConfig",
 			sapInstances:           fakeSAPInstances("TwoNetweaverInstancesOnSameMachine"),
-			wantCollectorCount:     12,
+			wantCollectorCount:     14,
 			wantFastCollectorCount: 2,
 			params: Parameters{
 				Config: defaultConfig,

@@ -371,6 +371,16 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 			p.Collectors = append(p.Collectors, clusterCollector)
 			clusterCollectorCreated = true
 		}
+		log.CtxLogger(ctx).Info("Creating Linux OS metrics collector.")
+		linuxOsMetricsCollector := &computeresources.LinuxOsMetricsInstanceProperties{
+			Config:          p.Config,
+			Client:          p.Client,
+			Executor:        commandlineexecutor.ExecuteCommand,
+			SAPInstance:     instance,
+			SkippedMetrics:  skippedMetrics,
+			PMBackoffPolicy: cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
+		}
+		p.Collectors = append(p.Collectors, linuxOsMetricsCollector)
 		if instance.GetType() == sapb.InstanceType_HANA {
 			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
 			hanaComputeresourcesCollector := &computeresources.HANAInstanceProperties{
