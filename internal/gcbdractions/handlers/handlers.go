@@ -32,12 +32,9 @@ import (
 // "obj" is expected to be a pointer to a Command struct.
 func ParseAgentCommandParameters(ctx context.Context, command *gpb.AgentCommand, obj subcommands.Command) {
 	params := command.GetParameters()
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "error", err)
-		return
-	}
-	if err = json.Unmarshal(paramsJSON, obj); err != nil {
+	// Ignoring the error here as Json Marshal of map[string]string never returns an error.
+	paramsJSON, _ := json.Marshal(params)
+	if err := json.Unmarshal(paramsJSON, obj); err != nil {
 		log.CtxLogger(ctx).Debugw("Failed to unmarshal all command parameters into struct", "error", err)
 	}
 }
