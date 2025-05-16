@@ -21,6 +21,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -100,6 +101,419 @@ func TestParseBasePath(t *testing.T) {
 	}
 }
 
+func TestRescanVolumeGroups(t *testing.T) {
+	tests := []struct {
+		name          string
+		mockResults   []commandlineexecutor.Result
+		wantErr       error
+		wantExecCalls int
+	}{
+		{
+			name: "Success",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{ /* lvscan */ },
+				{ /* mount -av */ },
+			},
+			wantErr:       nil,
+			wantExecCalls: 5,
+		},
+		{
+			name: "DmsetupRemoveAllFails",
+			mockResults: []commandlineexecutor.Result{
+				{Error: errors.New("dmsetup failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 1,
+		},
+		{
+			name: "VgscanFails",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */ },
+				{Error: errors.New("vgscan failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 2,
+		},
+		{
+			name: "VgchangeFails",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{Error: errors.New("vgchange failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 3,
+		},
+		{
+			name: "LvscanFails",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{Error: errors.New("lvscan failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 4,
+		},
+		{
+			name: "MountAvFails",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{ /* lvscan */ },
+				{Error: errors.New("mount failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 5,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			callCount := 0
+			mockExec := func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				if callCount >= len(tc.mockResults) {
+					t.Fatalf("Execute called more times than expected. Call: %d, Expected max: %d", callCount+1, len(tc.mockResults))
+				}
+				res := tc.mockResults[callCount]
+				callCount++
+				return res
+			}
+
+			err := RescanVolumeGroups(ctx, mockExec)
+
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("RescanVolumeGroups() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			if callCount != tc.wantExecCalls {
+				t.Errorf("RescanVolumeGroups() mockExec was called %d times, want %d", callCount, tc.wantExecCalls)
+			}
+		})
+	}
+}
+
+func TestWaitForIndexServerToStopWithRetry(t *testing.T) {
+	tests := []struct {
+		name                string
+		sid                 string
+		maxRetries          int
+		execResultExitCodes []int
+		wantErr             error
+		wantExecCalls       int
+	}{
+		{
+			name:                "SuccessOnFirstAttempt",
+			sid:                 "TST",
+			execResultExitCodes: []int{1},
+			wantErr:             nil,
+			wantExecCalls:       1,
+		},
+		{
+			name:                "SuccessOnThirdAttempt",
+			sid:                 "TST",
+			execResultExitCodes: []int{0, 0, 1},
+			wantErr:             nil,
+			wantExecCalls:       3,
+		},
+		{
+			name:                "MaxRetriesIsOne_Success",
+			sid:                 "TST",
+			execResultExitCodes: []int{1},
+			wantErr:             nil,
+			wantExecCalls:       1,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			callCount := 0
+			mockExec := func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				if callCount >= len(tc.execResultExitCodes) {
+					t.Fatalf("Execute called more times than specified in execResultExitCodes. Call: %d, Expected max: %d", callCount+1, len(tc.execResultExitCodes))
+				}
+				currentExitCode := tc.execResultExitCodes[callCount]
+				callCount++
+
+				var cmdErr error
+				if currentExitCode == 1 {
+					cmdErr = &exec.ExitError{}
+				} else if currentExitCode == 0 {
+					cmdErr = nil
+				}
+				return commandlineexecutor.Result{
+					Error:    cmdErr,
+					ExitCode: currentExitCode,
+				}
+			}
+			err := WaitForIndexServerToStopWithRetry(ctx, tc.sid, mockExec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("WaitForIndexServerToStopWithRetry() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if callCount != tc.wantExecCalls {
+				t.Errorf("WaitForIndexServerToStopWithRetry() mockExec was called %d times, want %d", callCount, tc.wantExecCalls)
+			}
+		})
+	}
+}
+
+func TestFreezeXFS(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		wantErr error
+	}{
+		{
+			name: "Success",
+			exec: fakeCommandExecute("", "", nil),
+		},
+		{
+			name:    "Failure",
+			exec:    fakeCommandExecute("", "error freezing", &exec.ExitError{}),
+			wantErr: cmpopts.AnyError,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := FreezeXFS(context.Background(), "/hana/data", tc.exec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("FreezeXFS() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestUnFreezeXFS(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		wantErr error
+	}{
+		{
+			name: "Success",
+			exec: fakeCommandExecute("", "", nil),
+		},
+		{
+			name:    "Failure",
+			exec:    fakeCommandExecute("", "error unfreezing", &exec.ExitError{}),
+			wantErr: cmpopts.AnyError,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := UnFreezeXFS(context.Background(), "/hana/data", tc.exec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("UnFreezeXFS() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestCheckDataDir(t *testing.T) {
+	tests := []struct {
+		name                 string
+		exec                 commandlineexecutor.Execute
+		wantDataPath         string
+		wantLogicalDataPath  string
+		wantPhysicalDataPath string
+		wantErr              error
+	}{
+		{
+			name: "ParseBasePathFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{Error: errors.New("grep failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ParseLogicalPathFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{Error: errors.New("df failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath: "/hana/data/SID",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "NotLVM",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/sda1"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath: "/hana/data/SID",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "ParsePhysicalPathFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath:        "/hana/data/SID",
+			wantLogicalDataPath: "/dev/mapper/vg-lv",
+			wantErr:             cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+					return commandlineexecutor.Result{StdOut: "/dev/sdb"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath:         "/hana/data/SID",
+			wantLogicalDataPath:  "/dev/mapper/vg-lv",
+			wantPhysicalDataPath: "/dev/sdb",
+			wantErr:              nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dp, ldp, pdp, err := CheckDataDir(context.Background(), tc.exec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("CheckDataDir() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if dp != tc.wantDataPath {
+				t.Errorf("CheckDataDir() dataPath = %s, want %s", dp, tc.wantDataPath)
+			}
+			if ldp != tc.wantLogicalDataPath {
+				t.Errorf("CheckDataDir() logicalDataPath = %s, want %s", ldp, tc.wantLogicalDataPath)
+			}
+			if pdp != tc.wantPhysicalDataPath {
+				t.Errorf("CheckDataDir() physicalDataPath = %s, want %s", pdp, tc.wantPhysicalDataPath)
+			}
+		})
+	}
+}
+
+func TestCheckLogDir(t *testing.T) {
+	tests := []struct {
+		name                string
+		exec                commandlineexecutor.Execute
+		wantBasePath        string
+		wantLogicalLogPath  string
+		wantPhysicalLogPath string
+		wantErr             error
+		parseBasePathExec   commandlineexecutor.Execute
+	}{
+		{
+			name: "ParseBasePathFails",
+			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: errors.New("grep failed"), ExitCode: 1}
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{}
+			},
+			wantBasePath:        "",
+			wantLogicalLogPath:  "",
+			wantPhysicalLogPath: "",
+			wantErr:             cmpopts.AnyError,
+		},
+		{
+			name: "ParseLogicalPathFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{Error: errors.New("df failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+			},
+			wantBasePath: "/hana/log/SID",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "ParsePhysicalPathFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-loglv"}
+				}
+				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+			},
+			wantBasePath:       "/hana/log/SID",
+			wantLogicalLogPath: "/dev/mapper/vg-loglv",
+			wantErr:            cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-loglv"}
+				}
+				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+					return commandlineexecutor.Result{StdOut: "/dev/sdc"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+			},
+			wantBasePath:        "/hana/log/SID",
+			wantLogicalLogPath:  "/dev/mapper/vg-loglv",
+			wantPhysicalLogPath: "/dev/sdc",
+			wantErr:             nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, llp, plp, err := CheckLogDir(context.Background(), tc.exec)
+			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("CheckLogDir() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if llp != tc.wantLogicalLogPath {
+				t.Errorf("CheckLogDir() logicalLogPath = %s, want %s", llp, tc.wantLogicalLogPath)
+			}
+			if plp != tc.wantPhysicalLogPath {
+				t.Errorf("CheckLogDir() physicalLogPath = %s, want %s", plp, tc.wantPhysicalLogPath)
+			}
+		})
+	}
+}
+
 func TestParsePhysicalPath(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -116,6 +530,12 @@ func TestParsePhysicalPath(t *testing.T) {
 			name:     "Success",
 			fakeExec: fakeCommandExecute("/dev/sdb", "", nil),
 			want:     "/dev/sdb",
+		},
+		{
+			name:     "EmptyPhysicalDevice",
+			fakeExec: fakeCommandExecute("", "", nil),
+			want:     "",
+			wantErr:  cmpopts.AnyError,
 		},
 	}
 
@@ -389,6 +809,28 @@ func TestCheckTopology(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "SapcontrolCommandError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "sapcontrol failed",
+					Error:    errors.New("sapcontrol execution error"),
+					ExitCode: 1,
+				}
+			},
+			SID:     "SID",
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "NoSAPInstancesFound",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "grep" {
@@ -401,8 +843,7 @@ func TestCheckTopology(t *testing.T) {
 				}
 				return commandlineexecutor.Result{
 					StdOut: `
-					17.11.2024 07:57:08
-					GetSystemInstanceList
+					17.11.2024 07:57:08 GetSystemInstanceList
 					OK
 					hostname, instanceNr, httpPort, httpsPort, startPriority, features, dispstatus`,
 					StdErr:   "",

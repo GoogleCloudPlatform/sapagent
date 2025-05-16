@@ -49,6 +49,7 @@ func ParseBasePath(ctx context.Context, pattern string, exec commandlineexecutor
 	if result.Error != nil {
 		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+
 	log.CtxLogger(ctx).Debugf("ParseBasePath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	basePath := strings.TrimSuffix(result.StdOut, "\n")
@@ -211,8 +212,8 @@ func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec command
 }
 
 // RescanVolumeGroups rescans all volume groups and mounts them.
-func RescanVolumeGroups(ctx context.Context) error {
-	result := commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) error {
+	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/dmsetup",
 		ArgsToSplit: "remove_all",
 	})
@@ -221,7 +222,7 @@ func RescanVolumeGroups(ctx context.Context) error {
 	}
 	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgscan",
 		ArgsToSplit: "-v --mknodes",
 	})
@@ -230,7 +231,7 @@ func RescanVolumeGroups(ctx context.Context) error {
 	}
 	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgchange",
 		ArgsToSplit: "-ay",
 	})
@@ -239,7 +240,7 @@ func RescanVolumeGroups(ctx context.Context) error {
 	}
 	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+	result = exec(ctx, commandlineexecutor.Params{
 		Executable: "/sbin/lvscan",
 	})
 	if result.Error != nil {
@@ -248,7 +249,7 @@ func RescanVolumeGroups(ctx context.Context) error {
 	log.CtxLogger(ctx).Debugf("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	time.Sleep(5 * time.Second)
-	result = commandlineexecutor.ExecuteCommand(ctx, commandlineexecutor.Params{
+	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  "mount",
 		ArgsToSplit: "-av",
 	})
