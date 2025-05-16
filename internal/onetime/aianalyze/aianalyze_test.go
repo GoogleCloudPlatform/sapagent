@@ -107,6 +107,93 @@ func (m *mockRestService) GetResponse(ctx context.Context, method string, baseUR
 	return m.getResponseResp, m.getResponseErr
 }
 
+func TestRun(t *testing.T) {
+	tests := []struct {
+		name       string
+		a          *AiAnalyzer
+		runOptions *onetime.RunOptions
+		wantResult string
+		wantStatus subcommands.ExitStatus
+	}{
+		{
+			name: "ValidateParametersError",
+			a: &AiAnalyzer{
+				// Intentionally missing required parameters for EventOverview
+				EventOverview: true,
+			},
+			runOptions: &onetime.RunOptions{CloudProperties: defaultCloudProps},
+			wantResult: "Error while validating parameters",
+			wantStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "SetDefaultsError",
+			a: &AiAnalyzer{
+				EventOverview:     true,
+				SupportBundlePath: "/test-support-bundle-path",
+			},
+			runOptions: &onetime.RunOptions{CloudProperties: &ipb.CloudProperties{Zone: "invalid"}},
+			wantResult: "Error while setting defaults",
+			wantStatus: subcommands.ExitFailure,
+		},
+		{
+			name: "SupportAnalyzerHandlerOverviewError",
+			a: &AiAnalyzer{
+				EventOverview:     true,
+				SupportBundlePath: "/test-support-bundle-path",
+				fs: &fake.FileSystem{
+					StatResp: []os.FileInfo{nil},
+					StatErr:  []error{cmpopts.AnyError}, // Cause getOverview to fail
+				},
+			},
+			runOptions: &onetime.RunOptions{CloudProperties: defaultCloudProps},
+			wantResult: "Error while getting overview",
+			wantStatus: subcommands.ExitFailure,
+		},
+		{
+			name: "SupportAnalyzerHandlerAnalysisError",
+			a: &AiAnalyzer{
+				EventAnalysis:     true,
+				Sid:               "test-sid",
+				InstanceNumber:    "00",
+				SupportBundlePath: "/test-support-bundle-path",
+				Timestamp:         "2024-07-18 20:42:38",
+				fs: &fake.FileSystem{
+					ReadFileResp: [][]byte{nil}, // Cause getAnalysis to fail (fetchPacemakerLogs)
+					ReadFileErr:  []error{cmpopts.AnyError},
+				},
+			},
+			runOptions: &onetime.RunOptions{CloudProperties: defaultCloudProps},
+			wantResult: "Error while getting analysis",
+			wantStatus: subcommands.ExitFailure,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Default exec and httpGet if not set, to avoid nil pointer dereference in setDefaults
+			if tc.a.exec == nil {
+				tc.a.exec = func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
+				}
+			}
+			if tc.a.httpGet == nil {
+				tc.a.httpGet = func(string) (*http.Response, error) {
+					return &http.Response{}, nil
+				}
+			}
+
+			gotResult, gotStatus := tc.a.Run(ctx, tc.runOptions)
+			if gotResult != tc.wantResult {
+				t.Errorf("Run() result got: %v, want: %v", gotResult, tc.wantResult)
+			}
+			if gotStatus != tc.wantStatus {
+				t.Errorf("Run() status got: %v, want: %v", gotStatus, tc.wantStatus)
+			}
+		})
+	}
+}
+
 func TestSupportAnalyzerHandler(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -148,6 +235,68 @@ func TestSupportAnalyzerHandler(t *testing.T) {
 			},
 			wantResult: "Error while getting analysis",
 			wantStatus: subcommands.ExitFailure,
+		},
+		{
+			name: "SuccessOverview",
+			a: &AiAnalyzer{
+				EventOverview:     true,
+				SupportBundlePath: "/test-support-bundle-path",
+				project:           "test-project",
+				region:            "test-region",
+				InstanceName:      "test-instance",
+				fs: &fake.FileSystem{
+					StatResp:     []os.FileInfo{nil},
+					StatErr:      []error{nil},
+					OpenFileResp: []*os.File{nil, nil},
+					OpenFileErr:  []error{nil, nil},
+					CopyResp:     []int64{0, 0},
+					CopyErr:      []error{nil, nil},
+					ReadFileResp: [][]byte{[]byte("Test output")},
+					ReadFileErr:  []error{nil},
+					RemoveAllErr: []error{nil},
+				},
+				httpGet: successHTTPGet,
+				exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{ExitCode: 0, StdOut: "Test output"}
+				},
+				rest: &mockRestService{
+					getResponseResp: []byte(`[{"candidates": [{"content": {"role": "user", "parts": [{"text": "Test prompt answer"}]}}]}]`),
+					getResponseErr:  nil,
+				},
+			},
+			wantResult: "Support Analyzer Report collected successfully",
+			wantStatus: subcommands.ExitSuccess,
+		},
+		{
+			name: "SuccessAnalysis",
+			a: &AiAnalyzer{
+				EventAnalysis:     true,
+				Sid:               "test-sid",
+				InstanceNumber:    "00",
+				SupportBundlePath: "/test-support-bundle-path",
+				Timestamp:         "2024-07-18 20:42:31",
+				BeforeEventWindow: 4500,
+				AfterEventWindow:  1800,
+				project:           "test-project",
+				region:            "test-region",
+				InstanceName:      "test-instance",
+				fs: &fake.FileSystem{ // Mock fs for successful getAnalysis
+					ReadFileResp: [][]byte{[]byte(samplePacemakerData), []byte(sampleNameserverData)},
+					ReadFileErr:  []error{nil, nil},
+					ReadDirResp:  [][]fs.FileInfo{[]os.FileInfo{fake.FileInfo{FakeName: "nameserver_check-vm.30001.001.trc", FakeIsDir: false}}},
+					ReadDirErr:   []error{nil},
+					OpenFileResp: []*os.File{nil}, // For savePromptResponse
+					OpenFileErr:  []error{nil},
+					CopyResp:     []int64{0}, // For savePromptResponse
+					CopyErr:      []error{nil},
+				},
+				rest: &mockRestService{
+					getResponseResp: []byte(`[{"candidates": [{"content": {"role": "user", "parts": [{"text": "Test prompt answer"}]}}]}]`),
+					getResponseErr:  nil,
+				},
+			},
+			wantResult: "Support Analyzer Report collected successfully",
+			wantStatus: subcommands.ExitSuccess,
 		},
 	}
 
