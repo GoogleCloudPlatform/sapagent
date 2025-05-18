@@ -48,7 +48,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
 		}
-		hanabackup.RescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx, exec)
 		return err
 	}
 
@@ -67,7 +67,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		}
 	}
 
-	hanabackup.RescanVolumeGroups(ctx)
+	hanabackup.RescanVolumeGroups(ctx, exec)
 	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
 	return nil
 }

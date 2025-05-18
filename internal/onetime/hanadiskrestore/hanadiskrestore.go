@@ -291,7 +291,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	}
 	// Rescanning to prevent any volume group naming conflicts
 	// with restored disk's volume group.
-	hanabackup.RescanVolumeGroups(ctx)
+	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 
 	workflowStartTime = time.Now()
 	if !r.isGroupSnapshot {
@@ -384,7 +384,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
-			hanabackup.RescanVolumeGroups(ctx)
+			hanabackup.RescanVolumeGroups(ctx, exec)
 			return fmt.Errorf("failed to detach old data disk: %v", err)
 		}
 	} else {
@@ -403,7 +403,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 				}
 
 				// If detach fails, rescan the volume groups to ensure the directories are mounted.
-				hanabackup.RescanVolumeGroups(ctx)
+				hanabackup.RescanVolumeGroups(ctx, exec)
 
 				errMessage := "failed to detach old data disks"
 				if r.isScaleout {
@@ -434,7 +434,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	}
 	if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
-		hanabackup.RescanVolumeGroups(ctx)
+		hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
 	log.CtxLogger(ctx).Info("HANA restore prepareForHANAChangeDiskType succeeded.")
