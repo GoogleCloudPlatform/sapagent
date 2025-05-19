@@ -21,8 +21,11 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 
 	metricpb "google.golang.org/genproto/googleapis/api/metric"
@@ -31,6 +34,8 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	cgpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
@@ -58,7 +63,107 @@ var (
 		CloudProperties: defaultCloudProperties,
 		BareMetal:       false,
 	}
+
+	defaultBOPolicy = func(ctx context.Context) backoff.BackOffContext {
+		return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
+	}
 )
+
+func TestCollect(t *testing.T) {
+	tests := []struct {
+		name      string
+		p         *Properties
+		cmdOutput string
+		cmdError  error
+		wantErr   bool
+	}{
+		{
+			name: "Success",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: `Filesystem            Size  Used Avail Use% Mounted on
+						/dev/hda1             378G     0  378G   0% /
+						/dev/hda3             378G     0  378G   0% /hana/log
+						tmpfs                 378G     0  378G   0% /dev/shm`,
+					}
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "CommandExecutionFailure",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						Error: cmpopts.AnyError,
+					}
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.p.Collect(ctx)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Collect() returned an unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	tests := []struct {
+		name      string
+		p         *Properties
+		wantError bool
+	}{
+		{
+			name: "Success",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						StdOut: `Filesystem            Size  Used Avail Use% Mounted on
+				/dev/hda1             378G     0  378G   0% /
+				/dev/hda3             378G     0  378G   0% /hana/log
+				tmpfs                 378G     0  378G   0% /dev/shm`,
+					}
+				},
+				PMBackoffPolicy: defaultBOPolicy(context.Background()),
+			},
+			wantError: false,
+		},
+		{
+			name: "CollectFailure",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{
+						Error: cmpopts.AnyError,
+					}
+				},
+				PMBackoffPolicy: defaultBOPolicy(context.Background()),
+			},
+			wantError: true,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.p.CollectWithRetry(ctx)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("CollectWithRetry() returned an unexpected error: %v", err)
+			}
+		})
+	}
+}
 
 func TestCreateTSList(t *testing.T) {
 	tests := []struct {
@@ -79,7 +184,7 @@ func TestCreateTSList(t *testing.T) {
 				Config: defaultConfig,
 			},
 			cmdOutput: `Filesystem            Size  Used Avail Use% Mounted on
-			/dev/hda1                  0  378G    /
+			/dev/hda1                  0  378G    /hana/log
 			/dev/hda3             378G     0    0% /export/hda3
 			/dev/hda3             378G     0  378G   0%
 			`,
