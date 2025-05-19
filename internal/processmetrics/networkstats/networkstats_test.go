@@ -23,10 +23,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
@@ -66,6 +69,10 @@ var (
 
 	fakeTimestamp = &tspb.Timestamp{
 		Seconds: 42,
+	}
+
+	defaultBOPolicy = func(ctx context.Context) backoff.BackOffContext {
+		return cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(1)*time.Second, 3, 5*time.Minute, 2*time.Minute)
 	}
 )
 
@@ -118,6 +125,27 @@ func TestFetchHDBSocket(t *testing.T) {
 			},
 			wantOut: "*:30013",
 		},
+		{
+			name: "SuccessFetchUsingSsCommand",
+			p: &Properties{
+				Config: defaultConfig,
+				Executor: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					if params.Executable == "bash" && params.ArgsToSplit == "-c 'sudo ss -lp | grep $(pidof hdbnameserver) | grep -v 127.0.0.1 | grep -Eo `((([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*))\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "*:30013",
+							StdErr: "",
+							Error:  nil,
+						}
+					}
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "sudo: ss: command not found",
+						Error:  cmpopts.AnyError,
+					}
+				},
+			},
+			wantOut: "*:30013",
+		},
 	}
 
 	ctx := context.Background()
@@ -130,6 +158,230 @@ func TestFetchHDBSocket(t *testing.T) {
 			}
 			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("fetchHDBSocket() error: got %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestCollect(t *testing.T) {
+	tests := []struct {
+		name             string
+		exec             commandlineexecutor.Execute
+		config           *cgpb.Configuration
+		wantErr          bool
+		wantMetricsCount int
+		skippedMetrics   map[string]bool
+	}{
+		{
+			name:             "SuccessSkipAllMetrics",
+			config:           &cgpb.Configuration{},
+			skippedMetrics:   map[string]bool{"/sap/networkstats/rtt": true, "/sap/networkstats/rcv_rtt": true, "/sap/networkstats/rto": true, "/sap/networkstats/bytes_acked": true, "/sap/networkstats/bytes_received": true, "/sap/networkstats/lastsnd": true, "/sap/networkstats/lastrcv": true},
+			wantErr:          false,
+			wantMetricsCount: 0,
+		},
+		{
+			name: "CouldNotFetchPID",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "pidof: hdbnameserver: no such process",
+					Error:  errors.New("pidof: hdbnameserver: no such process"),
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+		{
+			name: "CouldNotFetchHDBSocket",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "lsof: command not found",
+						Error:  errors.New("lsof: command not found"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+		{
+			name: "CouldNotFetchSSOutput",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					if params.ArgsToSplit == "-c 'sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "0.0.0.0:30015",
+						}
+					}
+					return commandlineexecutor.Result{
+						StdOut: "",
+						StdErr: "ss: command not found",
+						Error:  errors.New("ss: command not found"),
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+		{
+			name: "CouldNotParseSSOutput",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					if params.ArgsToSplit == "-c 'sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "0.0.0.0:30015",
+						}
+					}
+					if params.ArgsToSplit == "-c 'echo ss -tin src 0.0.0.0:30015 | sh'" {
+						return commandlineexecutor.Result{
+							StdOut: "State\tRecv-Q\tSend-Q\tLocal Address:Port\tPeer Address:Port\nESTAB\t0\t0\t100.87.112.22:30015\t100.87.112.10:60432\n\t cubic wscale:7,7 rto:204",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+		{
+			name: "CouldNotFindRequiredMetrics",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					if params.ArgsToSplit == "-c 'sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "0.0.0.0:30015",
+						}
+					}
+					if params.ArgsToSplit == "-c 'echo ss -tin src 0.0.0.0:30015 | sh'" {
+						return commandlineexecutor.Result{
+							StdOut: "State\tRecv-Q\tSend-Q\tLocal Address:Port\tPeer Address:Port\nESTAB\t0\t0\t100.87.112.22:30015\t100.87.112.10:60432\n\t cubic wscale:7,7 rtt:0.017/0.008 rto:204 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+		{
+			name: "Success",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					if params.ArgsToSplit == "-c 'sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "0.0.0.0:30015",
+						}
+					}
+					if params.ArgsToSplit == "-c 'echo ss -tin src *:30015 | sh'" {
+						return commandlineexecutor.Result{
+							StdOut: ssOutput(
+								"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+								"ESTAB    0         0                127.0.0.1:30013          127.0.0.1:55494",
+								"\t cubic wscale:7,7 rto:204 rtt:0.017/0.008 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
+							),
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:           &cgpb.Configuration{},
+			wantErr:          false,
+			wantMetricsCount: 4,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{
+				Executor:       test.exec,
+				Config:         test.config,
+				SkippedMetrics: test.skippedMetrics,
+			}
+
+			gotMetrics, gotErr := p.Collect(context.Background())
+			if (gotErr != nil) != test.wantErr {
+				t.Errorf("Collect() got error: %v, want error: %v", gotErr, test.wantErr)
+			}
+			fmt.Println("err: ", gotErr)
+			if len(gotMetrics) != test.wantMetricsCount {
+				t.Errorf("Collect() got %d metrics, want %d metrics", len(gotMetrics), test.wantMetricsCount)
+			}
+		})
+	}
+}
+
+func TestCollectWithRetry(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		config  *cgpb.Configuration
+		wantErr bool
+	}{
+		{
+			name: "Success",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" {
+					if params.ArgsToSplit == "-c 'sudo lsof -nP -p $(pidof hdbnameserver) | grep LISTEN | grep -v 127.0.0.1 | grep -Eo `(([0-9]{1,3}\\.){1,3}[0-9]{1,3})|(\\*)\\:[0-9]{3,5}`'" {
+						return commandlineexecutor.Result{
+							StdOut: "0.0.0.0:30015",
+						}
+					}
+					if params.ArgsToSplit == "-c 'echo ss -tin src *:30015 | sh'" {
+						return commandlineexecutor.Result{
+							StdOut: ssOutput(
+								"State    Recv-Q    Send-Q       Local Address:Port        Peer Address:Port      ",
+								"ESTAB    0         0                127.0.0.1:30013          127.0.0.1:55494",
+								"\t cubic wscale:7,7 rto:204 rtt:0.017/0.008 send 154202352941bps lastsnd:28 lastrcv:28 lastack:28 pacing_rate 306153576640bps delivered:3 app_limited rcv_space:65483 minrtt:0.015",
+							),
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "28464",
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: false,
+		},
+		{
+			name: "CollectFailure",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "",
+					StdErr: "pidof: hdbnameserver: no such process",
+					Error:  errors.New("pidof: hdbnameserver: no such process"),
+				}
+			},
+			config:  &cgpb.Configuration{},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := Properties{
+				Executor:        test.exec,
+				Config:          test.config,
+				PMBackoffPolicy: defaultBOPolicy(context.Background()),
+				SkippedMetrics:  map[string]bool{},
+			}
+
+			_, err := p.CollectWithRetry(context.Background())
+			if (err != nil) != test.wantErr {
+				t.Errorf("CollectWithRetry() returned an unexpected error: %v", err)
 			}
 		})
 	}
