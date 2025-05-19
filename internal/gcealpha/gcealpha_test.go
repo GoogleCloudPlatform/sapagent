@@ -45,7 +45,7 @@ var cmpCodeOnly = cmpopts.IgnoreFields(
 	"err",
 )
 
-// newService initializes a GCE client and plumbs it into a fake HTTP server.
+// newTestService initializes a GCE client and plumbs it into a fake HTTP server.
 // Remember to close the *httptest.Server after use.
 func newTestService(ctx context.Context, responses []fakehttp.HardCodedResponse) (*GCEAlpha, *httptest.Server, error) {
 	c, err := compute.New(&http.Client{})
@@ -127,6 +127,77 @@ func TestGetInstance(t *testing.T) {
 		if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreTypes(googleapi.ServerResponse{})); diff != "" {
 			t.Errorf("GetInstance(%s, %s, %s) returned an unexpected diff (-want +got): %v", tc.project, tc.zone, tc.instance, diff)
 		}
+	}
+}
+
+func TestInitialized(t *testing.T) {
+	tests := []struct {
+		name    string
+		gce     *GCEAlpha
+		setup   func(context.Context) (*GCEAlpha, func(), error)
+		want    bool
+		wantErr bool
+	}{
+		{
+			name: "ServiceNotInitialized",
+			gce:  &GCEAlpha{service: nil},
+			want: false,
+		},
+		{
+			name: "ServiceInitialized",
+			setup: func(ctx context.Context) (*GCEAlpha, func(), error) {
+				g, s, err := newTestService(ctx, []fakehttp.HardCodedResponse{})
+				if err != nil {
+					return nil, nil, err
+				}
+				return g, func() { s.Close() }, nil
+			},
+			want: true,
+		},
+		{
+			name: "NewGCEClientError",
+			setup: func(ctx context.Context) (*GCEAlpha, func(), error) {
+				g, err := NewGCEClient(context.TODO())
+				return g, func() {}, err
+			},
+			want:    false,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var g *GCEAlpha
+			var err error
+			if tc.setup != nil {
+				var cleanup func()
+				g, cleanup, err = tc.setup(context.Background())
+				if cleanup != nil {
+					defer cleanup()
+				}
+				if tc.wantErr {
+					if err == nil {
+						t.Errorf("NewGCEClient() did not return an error as expected.")
+					}
+					if g != nil && g.Initialized() != tc.want {
+						t.Errorf("Initialized() got = %v, want = %v for a client that failed to initialize", g.Initialized(), tc.want)
+					} else if g == nil && tc.want {
+						t.Errorf("Initialized() expected %v for nil client, but this scenario implies false", tc.want)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("setup() failed: %v", err)
+				}
+			} else {
+				g = tc.gce
+			}
+
+			got := g.Initialized()
+			if got != tc.want {
+				t.Errorf("Initialized() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
