@@ -239,12 +239,16 @@ func (d *Discovery) Run(ctx context.Context, opts *onetime.RunOptions, exec comm
 		d.oteLogger.LogUsageError(usagemetrics.GCBDRDiscoveryFailure)
 		return nil, cmdResult
 	}
+	if apps == nil {
+		log.CtxLogger(ctx).Debug("Applications struct is nil after discoveryHandler, returning nil proto.")
+		return nil, cmdResult
+	}
 	result := constructApplicationsProto(apps)
 	return result, cmdResult
 }
 
 func constructApplicationsProto(apps *Applications) *hdpb.ApplicationsList {
-	if len(apps.Application) == 0 {
+	if apps == nil || len(apps.Application) == 0 {
 		return nil
 	}
 	result := &hdpb.ApplicationsList{}

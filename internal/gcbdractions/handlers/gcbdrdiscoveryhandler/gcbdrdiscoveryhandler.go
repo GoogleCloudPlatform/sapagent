@@ -35,17 +35,24 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
 )
 
-// GCBDRDiscoveryHandler is the handler for gcbdr-discovery command.
+var (
+	gcbdrDiscoveryHandlerExec = func() commandlineexecutor.Execute {
+		return commandlineexecutor.ExecuteCommand
+	}
+	anyNew = apb.New
+)
+
+// GCBDRDiscoveryHandler is the handler for the gcbdr-discovery command.
 func GCBDRDiscoveryHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	usagemetrics.Action(usagemetrics.UAPGCBDRDiscoveryCommand)
 	log.CtxLogger(ctx).Debugw("gcbdr-discovery handler called.", "command", prototext.Format(command))
 	d := &discovery.Discovery{}
-	applications, result := d.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), commandlineexecutor.ExecuteCommand, filesystem.Helper{})
+	applications, result := d.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true), gcbdrDiscoveryHandlerExec(), filesystem.Helper{})
 	result.Command = command
 	if result.GetExitCode() != 0 {
 		return result
 	}
-	anyApplications, err := apb.New(applications)
+	anyApplications, err := anyNew(applications)
 	if err != nil {
 		failureMessage := fmt.Sprintf("Failed to marshal response to any. Error: %v", err)
 		log.CtxLogger(ctx).Debug(failureMessage)
