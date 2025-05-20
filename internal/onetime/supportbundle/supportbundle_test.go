@@ -1213,7 +1213,7 @@ func TestNameservertraceAndBackupLog(t *testing.T) {
 				mockedFileInfo{name: "file1", isDir: true},
 			},
 			},
-			want: []string{},
+			want: nil,
 		},
 		{
 			name:     "Success",
@@ -1263,7 +1263,7 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 				mockedFileInfo{name: "file1", isDir: true},
 			},
 			},
-			want: []string{},
+			want: nil,
 		},
 		{
 			name:     "Success",
@@ -1282,6 +1282,69 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 			got := sosr.tenantDBNameServerTracesAndBackupLogs(context.Background(), test.hanaPath, test.sid, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("nameServerTracesAndBackupLog(%q, %q, %q)=%q, want %q", test.hanaPath, test.sid, test.fu, got, test.want)
+			}
+		})
+	}
+}
+
+func TestDotFiles(t *testing.T) {
+	tests := []struct {
+		name      string
+		s         *SupportBundle
+		hanaPaths []string
+		fs        filesystem.FileSystem
+		want      []string
+	}{
+		{
+			name: "ReadDirError",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			hanaPaths: []string{"hanapath"},
+			fs: &fake.FileSystem{
+				ReadDirResp: [][]fs.FileInfo{[]fs.FileInfo{}},
+				ReadDirErr:  []error{os.ErrPermission},
+			},
+			want: nil,
+		},
+		{
+			name: "Success",
+			s: &SupportBundle{
+				oteLogger: defaultOTELogger,
+			},
+			hanaPaths: []string{"hanapath"},
+			fs: &fake.FileSystem{
+				ReadDirResp: [][]fs.FileInfo{[]fs.FileInfo{
+					&fake.MockedFileInfo{
+						FileName:  "DB_DEH",
+						FileIsDir: true,
+					},
+					&fake.MockedFileInfo{
+						FileName:  "pacemaker.log",
+						FileIsDir: false,
+					},
+					&fake.MockedFileInfo{
+						FileName:  "file1.dot",
+						FileIsDir: false,
+					},
+					&fake.MockedFileInfo{
+						FileName:  "file2.dot",
+						FileIsDir: false,
+					},
+				}},
+				ReadDirErr: []error{nil},
+			},
+			want: []string{"hanapath/trace/file1.dot", "hanapath/trace/file2.dot"},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.dotFiles(ctx, tc.hanaPaths, tc.fs)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("dotFiles() returned an unexpected diff (-want +got): %v", diff)
 			}
 		})
 	}
@@ -2799,7 +2862,7 @@ func TestCollectProcessMetrics(t *testing.T) {
 			exec:              successfulTimezoneExec,
 			metrics:           []string{"workload.googleapis.com/failure/cpu/utilization"},
 			destFilesPath:     "/tmp",
-			metricsType:       "process_metrics",
+			metricsType:       "compute_metrics",
 			cp:                defaultCloudProperties,
 			fs:                mockedfilesystem{},
 			wantNonZeroLength: true,
@@ -2876,6 +2939,7 @@ func TestGetProcessMetricsClients(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			err := tc.s.getMetricsClients(ctx)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("getProcessMetricsClients() returned an unexpected error: %v", err)
@@ -3123,7 +3187,12 @@ func TestFetchTimeSeriesData(t *testing.T) {
 				TimeSeries{
 					Metric: "workload.googleapiscom/test/cpu/utilization",
 					Labels: map[string]string{"project_id": "sample-project", "instance_id": "sample-instance-id", "zone": "sample-zone", "process": "sample-process"},
-					Values: []string{"123.456000"},
+					Values: []Value{
+						Value{
+							Timestamp: "2025-01-01 00:00:00",
+							Values:    []string{"123.456000"},
+						},
+					},
 				},
 			},
 			wantErr: nil,
@@ -3135,7 +3204,7 @@ func TestFetchTimeSeriesData(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.s.fetchTimeSeriesData(ctx, tc.cp, tc.metric)
 			cmpOpts := []cmp.Option{
-				cmpopts.IgnoreFields(TimeSeries{}, "Timestamp"),
+				cmpopts.IgnoreFields(Value{}, "Timestamp"),
 			}
 			if diff := cmp.Diff(got, tc.wantTS, cmpOpts...); diff != "" {
 				t.Errorf("fetchTimeSeriesData() returned an unexpected diff (-want +got): %v", diff)
@@ -3512,7 +3581,10 @@ func TestNewQueryClient(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := newQueryClient(ctx)
+			var s = &SupportBundle{
+				oteLogger: defaultOTELogger,
+			}
+			_, err := s.newQueryClient(ctx)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("NewQueryClient() returned an unexpected error: %v", diff)
 			}
@@ -3534,7 +3606,10 @@ func TestNewMetricClient(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := newMetricClient(ctx)
+			s := &SupportBundle{
+				oteLogger: defaultOTELogger,
+			}
+			_, err := s.newMetricClient(ctx)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("NewMetricClient() returned an unexpected error: %v", diff)
 			}
