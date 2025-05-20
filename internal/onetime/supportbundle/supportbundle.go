@@ -178,10 +178,15 @@ type (
 
 	// TimeSeries is the time series data which mirrors the proto.
 	TimeSeries struct {
-		Metric    string            `json:"metric"`
-		Labels    map[string]string `json:"labels"`
-		Values    []string          `json:"value"`
-		Timestamp string            `json:"timestamp"`
+		Metric string            `json:"metric"`
+		Labels map[string]string `json:"labels"`
+		Values []Value           `json:"value"`
+	}
+
+	// Value is the value data which mirrors the proto.
+	Value struct {
+		Values    []string `json:"value"`
+		Timestamp string   `json:"timestamp"`
 	}
 
 	// createQueryClient is an abstracted function to create a query client.
@@ -224,32 +229,121 @@ const (
 	globalINIFile         = `/custom/config/global.ini`
 	backintGCSPath        = `/opt/backint/backint-gcs`
 	sapDiscoveryFile      = `sapdiscovery.json`
-	metricPrefix          = "workload.googleapis.com"
+	workloadMetricPrefix  = "workload.googleapis.com"
+	computeMetricPrefix   = "compute.googleapis.com"
 	cloudLoggingURL       = "https://logging.googleapis.com/v2/entries:list"
 )
 
 var (
+	computeMetricsList = []string{
+		"instance/cpu/utilization",
+	}
+
 	processMetricsList = []string{
-		"sap/control/cpu/utilization",
-		"sap/control/memory/utilization",
-		"sap/hana/availability",
-		"sap/hana/cpu/utilization",
-		"sap/hana/ha/availability",
+		"sap/hana/service",
 		"sap/hana/ha/replication",
+		"sap/hana/availability",
+		"sap/hana/ha/availability",
+		"sap/hana/query/state",
+		"sap/hana/query/overalltime",
+		"sap/hana/query/servertime",
+		"sap/cluster/failcounts",
+		"sap/cluster/nodes",
+		"sap/cluster/resources",
+		"sap/nw/availability",
+		"sap/nw/service",
+		"sap/nw/icm/rcode",
+		"sap/nw/icm/rtime",
+		"sap/nw/ms/rcode",
+		"sap/nw/ms/rtime",
+		"sap/nw/ms/wp",
+		"sap/nw/abap/proc/busy",
+		"sap/nw/abap/proc/count",
+		"sap/nw/abap/queue/current",
+		"sap/nw/abap/queue/peak",
+		"sap/nw/abap/sessions",
+		"sap/nw/abap/rfc",
+		"sap/nw/enq/locks/usercountowner",
+		"sap/mntmode",
+		"sap/service/is-failed",
+		"sap/service/is-disabled",
+		"sap/hana/cpu/utilization",
+		"sap/nw/cpu/utilization",
+		"sap/control/cpu/utilization",
+		"sap/hana/memory/utilization",
+		"sap/nw/memory/utilization",
+		"sap/control/memory/utilization",
 		"sap/hana/iops/reads",
 		"sap/hana/iops/writes",
-		"sap/hana/memory/utilization",
-		"sap/hana/query/state",
-		"sap/hana/service",
+		"sap/nw/iops/reads",
+		"sap/nw/iops/writes",
+		"sap/infra/migration",
+		"sap/pacemaker",
+		"sap/hana/volumes",
+		"sap/networkstats/rtt",
+		"sap/networkstats/rcv_rtt",
+		"sap/networkstats/rto",
+		"sap/networkstats/bytes_acked",
+		"sap/networkstats/bytes_received",
+		"sap/networkstats/lastsnd",
+		"sap/networkstats/lastrcv",
 	}
 
 	hanaMonitoringMetricsList = []string{
-		"sap/hanamonitoring/disk/readtime",
-		"sap/hanamonitoring/disk/writetime",
+		"sap/hanamonitoring/column/memory/total_size",
+		"sap/hanamonitoring/component/memory/total_used_size",
+		"sap/hanamonitoring/system/connection/total",
 		"sap/hanamonitoring/host/cpu/usage_time",
+		"sap/hanamonitoring/system/alert/total",
+		"sap/hanamonitoring/host/memory/total_size",
 		"sap/hanamonitoring/host/memory/total_used_size",
 		"sap/hanamonitoring/host/swap_space/total_size",
 		"sap/hanamonitoring/host/swap_space/total_used_size",
+		"sap/hanamonitoring/host/instance_memory/total_used_size",
+		"sap/hanamonitoring/host/instance_memory/total_peak_used_size",
+		"sap/hanamonitoring/host/instance_memory/total_allocated_size",
+		"sap/hanamonitoring/host/instance_code/total_size",
+		"sap/hanamonitoring/host/instance_shared_memory/total_allocated_size",
+		"sap/hanamonitoring/system/replication_data_latency/total_time",
+		"sap/hanamonitoring/rowstore/memory/total_size",
+		"sap/hanamonitoring/schema/memory/total_size",
+		"sap/hanamonitoring/schema/record/total",
+		"sap/hanamonitoring/schema/memory/estimated_max_total_size",
+		"sap/hanamonitoring/schema/record/last_compressed_total",
+		"sap/hanamonitoring/schema/read/total_count",
+		"sap/hanamonitoring/schema/write/total_count",
+		"sap/hanamonitoring/schema/merge/total_count",
+		"sap/hanamonitoring/service/memory/total_used_size",
+		"sap/hanamonitoring/service/logical_memory/total_size",
+		"sap/hanamonitoring/service/physical_memory/total_size",
+		"sap/hanamonitoring/service/code/total_size",
+		"sap/hanamonitoring/service/stack/total_size",
+		"sap/hanamonitoring/service/heap_memory/total_allocated_size",
+		"sap/hanamonitoring/service/heap_memory/total_used_size",
+		"sap/hanamonitoring/service/shared_memory/total_allocated_size",
+		"sap/hanamonitoring/service/shared_memory/total_used_size",
+		"sap/hanamonitoring/service/compactor/total_allocated_size",
+		"sap/hanamonitoring/service/compactors/total_freeable_size",
+		"sap/hanamonitoring/service/memory/allocation_limit",
+		"sap/hanamonitoring/service/memory/effective_allocation_limit",
+		"sap/hanamonitoring/system/transaction/total_count",
+		"sap/hanamonitoring/transactions/blocked",
+		"sap/hanamonitoring/backups/data",
+		"sap/hanamonitoring/backups/snapshot",
+		"sap/hanamonitoring/backups/log",
+		"sap/hanamonitoring/memory/unloads",
+		"sap/hanamonitoring/disk/writetime",
+		"sap/hanamonitoring/disk/readtime",
+		"sap/hanamonitoring/backups/data/catalog",
+		"sap/hanamonitoring/backups/log/catalog",
+		"sap/hanamonitoring/backups/data/duration_s",
+		"sap/hanamonitoring/backups/data/size_mb",
+		"sap/hanamonitoring/backups/data/throughput_mb_s",
+		"sap/hanamonitoring/backups/log/duration_s",
+		"sap/hanamonitoring/backups/log/size_mb",
+		"sap/hanamonitoring/backups/log/throughput_mb_s",
+		"sap/hanamonitoring/backups/catalog/size_mb",
+		"sap/hanamonitoring/backups/catalog/retention_days",
 	}
 )
 
@@ -266,7 +360,7 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-metrics] [-metrics]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<debug|info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
@@ -339,6 +433,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return fmt.Sprintf("Invalid params for collecting support bundle Report for Agent for SAP: %s", errMessage), subcommands.ExitUsageError
 	}
+	s.oteLogger.LogUsageAction(usagemetrics.SupportBundle)
 	s.Sid = strings.ToUpper(s.Sid)
 	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.Hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
@@ -387,6 +482,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 		reqFilePaths = append(reqFilePaths, s.nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.dotFiles(ctx, hanaPaths, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintLogs(ctx, globalPath, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.collectMessagesLogs(ctx, linuxLogFilesPath, fs)...)
@@ -413,10 +509,14 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if s.Metrics {
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleMetricsCollection)
 		if errMsgs := s.collectMetrics(ctx, processMetricsList, destFilesPath, "process_metrics", cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 		if errMsgs := s.collectMetrics(ctx, hanaMonitoringMetricsList, destFilesPath, "hana_monitoring_metrics", cp, fs, exec); len(errMsgs) > 0 {
+			failureMsgs = append(failureMsgs, errMsgs...)
+		}
+		if errMsgs := s.collectMetrics(ctx, computeMetricsList, destFilesPath, "compute_metrics", cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
 		if err := s.collectSapEvents(ctx, cloudLoggingURL, destFilesPath, cp, fs, exec); err != nil {
@@ -437,12 +537,14 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if s.ResultBucket != "" {
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleUploadStarted)
 		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
 			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.ResultBucket)
 			s.oteLogger.LogMessageToConsole(fmt.Sprintf(errMessage, " Error: ", err))
 			failureMsgs = append(failureMsgs, errMessage)
+			s.oteLogger.LogUsageError(usagemetrics.SupportBundleUploadFailure)
 		} else {
-			msg := fmt.Sprintf("Bundle uploaded to bucket %s", s.ResultBucket)
+			msg := fmt.Sprintf("Bundle uploaded to bucket %s, path: %s", s.ResultBucket, fmt.Sprintf("gs://%s/%s/%s.zip", s.ResultBucket, s.Name(), bundlename))
 			successMsgs = append(successMsgs, msg)
 			// removing the destination directory after zip file is created.
 			if err := s.removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
@@ -451,6 +553,8 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 				failureMsgs = append(failureMsgs, errMessage)
 			}
 		}
+	} else {
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleLocalCollection)
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
@@ -461,6 +565,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	if s.PacemakerDiagnosis {
 		// collect pacemaker reports using OS Specific commands
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundlePacemakerDiagnosis)
 		pacemakerFilesDir := fmt.Sprintf("%spacemaker-%s", destFilePathPrefix, time.Now().UTC().String()[:16])
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, " ", "-")
 		pacemakerFilesDir = strings.ReplaceAll(pacemakerFilesDir, ":", "-")
@@ -604,7 +709,7 @@ func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath st
 }
 
 func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
-	res := []string{}
+	var res []string
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
 		if err != nil {
@@ -625,7 +730,7 @@ func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaP
 }
 
 func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
-	res := []string{}
+	var res []string
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid))
 		if err != nil {
@@ -639,6 +744,29 @@ func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Contex
 			if matchNameServerTraceAndBackup(fd.Name()) {
 				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
 				res = append(res, path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name()))
+			}
+		}
+	}
+	return res
+}
+
+func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs filesystem.FileSystem) []string {
+	var res []string
+	dotFiles := regexp.MustCompile(`.*\.dot`)
+	for _, hanaPath := range hanaPaths {
+		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
+		if err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
+			return nil
+		}
+		for _, fd := range fds {
+			if fd.IsDir() {
+				continue
+			}
+			if dotFiles.MatchString(fd.Name()) {
+				dotFilePath := path.Join(fmt.Sprintf("%s/trace/", hanaPath), fd.Name())
+				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", dotFilePath))
+				res = append(res, dotFilePath)
 			}
 		}
 	}
@@ -1180,11 +1308,22 @@ func (s *SupportBundle) collectSapEvents(ctx context.Context, baseURL, destFileP
 
 // collectMetrics collects the metrics for the given metrics and metrics type.
 func (s *SupportBundle) collectMetrics(ctx context.Context, metrics []string, destFilesPath, metricsType string, cp *ipb.CloudProperties, fs filesystem.FileSystem, exec commandlineexecutor.Execute) []string {
-	message := "Collecting process metrics..."
-	prefix := "pm"
-	if metricsType == "hana_monitoring_metrics" {
+	var message, filePrefix, metricPrefix string
+	switch {
+	case metricsType == "hana_monitoring_metrics":
 		message = "Collecting hana monitoring metrics..."
-		prefix = "hm"
+		filePrefix = "hm"
+		metricPrefix = workloadMetricPrefix
+	case metricsType == "process_metrics":
+		message = "Collecting process metrics..."
+		filePrefix = "pm"
+		metricPrefix = workloadMetricPrefix
+	case metricsType == "compute_metrics":
+		message = "Collecting compute metrics..."
+		filePrefix = "cm"
+		metricPrefix = computeMetricPrefix
+	default:
+		return nil
 	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, message)
 
@@ -1208,17 +1347,19 @@ func (s *SupportBundle) collectMetrics(ctx context.Context, metrics []string, de
 	}
 
 	for _, metric := range metrics {
-		var timeSeries []TimeSeries
 		metricFileName := strings.ReplaceAll(metric, "/", "_")
 		metric = path.Join(metricPrefix, metric)
-		ts, err := s.fetchTimeSeriesData(ctx, cp, metric)
+		timeSeries, err := s.fetchTimeSeriesData(ctx, cp, metric)
 		if err != nil {
 			errMsgs = append(errMsgs, fmt.Sprintf("Failed to fetch time series data for metric %s: %v", metric, err))
 			continue
 		}
-		timeSeries = append(timeSeries, ts...)
+		if len(timeSeries) == 0 {
+			log.CtxLogger(ctx).Infof("No time series data found for metric %s", metric)
+			continue
+		}
 
-		f, err := fs.Create(fmt.Sprintf("%s/%s_%s.json", metricsFolderPath, prefix, metricFileName))
+		f, err := fs.Create(fmt.Sprintf("%s/%s_%s.json", metricsFolderPath, filePrefix, metricFileName))
 		if err != nil {
 			errMsgs = append(errMsgs, fmt.Sprintf("Error while creating file: %v", err))
 			continue
@@ -1303,7 +1444,7 @@ func (s *SupportBundle) getMetricsClients(ctx context.Context) error {
 
 	qc, err := s.createQueryClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return err
 	}
 	cmr := &cloudmetricreader.CloudMetricReader{
@@ -1313,7 +1454,7 @@ func (s *SupportBundle) getMetricsClients(ctx context.Context) error {
 
 	mmc, err := s.createMetricClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.MetricClientCreateFailure)
 		return err
 	}
 
@@ -1351,25 +1492,35 @@ func (s *SupportBundle) fetchTimeSeriesData(ctx context.Context, cp *ipb.CloudPr
 			}
 			itr++
 		}
-
-		var values []string
-		var timestamp string
-		for _, p := range d.GetPointData() {
-			for _, v := range p.GetValues() {
-				if pv, err := getPointValue(ctx, v); err == nil {
-					values = append(values, pv)
-				}
+		// Removing empty labels.
+		for k, v := range labels {
+			if v == "" {
+				delete(labels, k)
 			}
+		}
+
+		var values []Value
+		for _, p := range d.GetPointData() {
+			var currVal Value
+
 			unixTimestamp := int64(p.GetTimeInterval().GetEndTime().GetSeconds())
 			t := time.Unix(unixTimestamp, 0)
-			timestamp = t.Format("2006-01-02 15:04:05")
-			timeSeries = append(timeSeries, TimeSeries{
-				Metric:    metric,
-				Labels:    labels,
-				Values:    values,
-				Timestamp: timestamp,
-			})
+			currVal.Timestamp = t.Format("2006-01-02 15:04:05")
+
+			for _, v := range p.GetValues() {
+				if pv, err := getPointValue(ctx, v); err == nil {
+					currVal.Values = append(currVal.Values, pv)
+				}
+			}
+			values = append(values, currVal)
 		}
+
+		timeSeries = append(timeSeries, TimeSeries{
+			Metric: metric,
+			Labels: labels,
+			Values: values,
+		})
+
 	}
 
 	return timeSeries, nil
@@ -1434,10 +1585,10 @@ func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.Cloud
 }
 
 // newQueryClient abstracts the creation of a new Cloud Monitoring query client for testing purposes.
-func newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+func (s *SupportBundle) newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
 	mqc, err := monitoring.NewQueryClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return nil, fmt.Errorf("failed to create Cloud Monitoring query client: %v", err)
 	}
 
@@ -1445,10 +1596,10 @@ func newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, err
 }
 
 // newMetricClient abstracts the creation of a new Cloud Monitoring metric client for testing purposes.
-func newMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+func (s *SupportBundle) newMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
 	mmc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.MetricClientCreateFailure)
 		return nil, fmt.Errorf("failed to create Cloud Monitoring metric client: %v", err)
 	}
 
@@ -1483,8 +1634,8 @@ func (s *SupportBundle) validateParams() []string {
 	s.rest = &rest.Rest{}
 	s.rest.NewRest()
 
-	s.createQueryClient = newQueryClient
-	s.createMetricClient = newMetricClient
+	s.createQueryClient = s.newQueryClient
+	s.createMetricClient = s.newMetricClient
 
 	return errs
 }

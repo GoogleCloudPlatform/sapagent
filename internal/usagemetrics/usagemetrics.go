@@ -121,6 +121,7 @@ const (
 	MultipartUploadFailure                         = 80 //	MultipartUploadFailure
 	GCBDRActionsFailure                            = 81 //	GCBDRActionsFailure
 	StatusCollectionFailure                        = 82 //	StatusCollectionFailure
+	SupportBundleUploadFailure                     = 83 //	SupportBundleUploadFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -212,6 +213,11 @@ const (
 	MultipartUploadFinished                 = 82 //	MultipartUploadFinished
 	GCBDRActionsStarted                     = 83 //	GCBDRActionsStarted
 	CollectStatus                           = 84 //	Collecting Status
+	SupportBundle                           = 85 //	SupportBundle
+	SupportBundleMetricsCollection          = 86 //	SupportBundleMetricsCollection
+	SupportBundleUploadStarted              = 87 //	SupportBundleUploadStarted
+	SupportBundleLocalCollection             = 88 //	SupportBundleLocalCollection
+	SupportBundlePacemakerDiagnosis          = 89 //	SupportBundlePacemakerDiagnosis
 )
 
 // projectNumbers contains known project numbers for test instances.
