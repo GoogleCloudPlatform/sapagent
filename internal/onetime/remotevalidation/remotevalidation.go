@@ -43,6 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/hostdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/workloadmanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
@@ -127,12 +128,14 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return onetime.HelpCommand(f)
 	}
 
+	usagemetrics.Action(usagemetrics.RemoteValidationOTEStarted)
 	log.SetupLoggingToDiscard()
 	config := r.createConfiguration()
 
 	gceService, err := gce.NewGCEClient(ctx)
 	if err != nil {
 		log.Print(fmt.Sprintf("ERROR: Failed to create GCE service: %v", err))
+		usagemetrics.Error(usagemetrics.RemoteValidationOTEFailure)
 		return subcommands.ExitFailure
 	}
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, gceService)
@@ -140,6 +143,7 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	wlmService, err := wlm.NewWLMClient(ctx, "https://workloadmanager-datawarehouse.googleapis.com/")
 	if err != nil {
 		log.Print(fmt.Sprintf("Failed to create WLM service: %v", err))
+		usagemetrics.Error(usagemetrics.RemoteValidationOTEFailure)
 		return subcommands.ExitFailure
 	}
 	systemDiscovery := &system.Discovery{
@@ -171,12 +175,19 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		Version:  configuration.AgentVersion,
 	}
 
-	return r.remoteValidationHandler(ctx, handlerOptions{
+	exitStatus := r.remoteValidationHandler(ctx, handlerOptions{
 		config:    config,
 		iir:       instanceInfoReader,
 		loadOpts:  loadOptions,
 		discovery: systemDiscovery,
 	})
+
+	if exitStatus == subcommands.ExitSuccess {
+		usagemetrics.Action(usagemetrics.RemoteValidationOTEFinished)
+	} else {
+		usagemetrics.Error(usagemetrics.RemoteValidationOTEFailure)
+	}
+	return exitStatus
 }
 
 type handlerOptions struct {
@@ -189,6 +200,7 @@ type handlerOptions struct {
 func (r *RemoteValidation) remoteValidationHandler(ctx context.Context, opts handlerOptions) subcommands.ExitStatus {
 	if r.project == "" || r.instanceid == "" || r.zone == "" {
 		log.Print("ERROR When running in remote mode the project, instanceid, and zone are required")
+		// N.B. Exiting with ExitUsageError here will be reported as RemoteValidationOTEFailure by the caller.
 		return subcommands.ExitUsageError
 	}
 

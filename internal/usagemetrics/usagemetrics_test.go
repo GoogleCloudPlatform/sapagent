@@ -268,6 +268,15 @@ func TestErrorConstants(t *testing.T) {
 	if StatusCollectionFailure != 82 {
 		t.Errorf("StatusCollectionFailure = %v, want 82", StatusCollectionFailure)
 	}
+	if HANAChangeDiskTypeSnapshotFailure != 83 {
+		t.Errorf("HANAChangeDiskTypeSnapshotFailure = %v, want 83", HANAChangeDiskTypeSnapshotFailure)
+	}
+	if HANAChangeDiskTypeRestoreFailure != 84 {
+		t.Errorf("HANAChangeDiskTypeRestoreFailure = %v, want 84", HANAChangeDiskTypeRestoreFailure)
+	}
+	if RemoteValidationOTEFailure != 85 {
+		t.Errorf("RemoteValidationOTEFailure = %v, want 85", RemoteValidationOTEFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -525,5 +534,17 @@ func TestActionConstants(t *testing.T) {
 	}
 	if CollectStatus != 84 {
 		t.Errorf("CollectStatus = %v, want 84", CollectStatus)
+	}
+	if HANAChangeDiskTypeStarted != 85 {
+		t.Errorf("HANAChangeDiskTypeStarted = %v, want 85", HANAChangeDiskTypeStarted)
+	}
+	if HANAChangeDiskTypeFinished != 86 {
+		t.Errorf("HANAChangeDiskTypeFinished = %v, want 86", HANAChangeDiskTypeFinished)
+	}
+	if RemoteValidationOTEStarted != 87 {
+		t.Errorf("RemoteValidationOTEStarted = %v, want 87", RemoteValidationOTEStarted)
+	}
+	if RemoteValidationOTEFinished != 88 {
+		t.Errorf("RemoteValidationOTEFinished = %v, want 88", RemoteValidationOTEFinished)
 	}
 }

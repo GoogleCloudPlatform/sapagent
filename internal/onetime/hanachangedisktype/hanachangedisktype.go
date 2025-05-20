@@ -37,6 +37,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
@@ -176,9 +177,11 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		SkipDBSnapshotForChangeDiskType: c.skipDBSnapshotForChangeDiskType,
 	}
 	c.oteLogger.LogMessageToFileAndConsole(ctx, "Starting with Snapshot workflow")
+	c.oteLogger.LogUsageAction(usagemetrics.HANAChangeDiskTypeStarted)
 	exitStatus := s.Execute(ctx, f)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to execute snapshot: %v", exitStatus)
+		c.oteLogger.LogUsageError(usagemetrics.HANAChangeDiskTypeSnapshotFailure)
 		return exitStatus
 	}
 	r := &hanadiskrestore.Restorer{
@@ -204,6 +207,7 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 	exitStatus = r.Execute(ctx, f)
 	if exitStatus != subcommands.ExitSuccess {
 		log.CtxLogger(ctx).Errorf("Failed to execute restore: %v", exitStatus)
+		c.oteLogger.LogUsageError(usagemetrics.HANAChangeDiskTypeRestoreFailure)
 		return exitStatus
 	}
 	// TODO: Add delete snapshot step in the end of this workflow.

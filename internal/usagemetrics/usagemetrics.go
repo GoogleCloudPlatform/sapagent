@@ -121,6 +121,9 @@ const (
 	MultipartUploadFailure                         = 80 //	MultipartUploadFailure
 	GCBDRActionsFailure                            = 81 //	GCBDRActionsFailure
 	StatusCollectionFailure                        = 82 //	StatusCollectionFailure
+	HANAChangeDiskTypeSnapshotFailure              = 83 //	HANAChangeDiskTypeSnapshotFailure
+	HANAChangeDiskTypeRestoreFailure               = 84 //	HANAChangeDiskTypeRestoreFailure
+	RemoteValidationOTEFailure                     = 85 //	RemoteValidationFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -212,6 +215,10 @@ const (
 	MultipartUploadFinished                 = 82 //	MultipartUploadFinished
 	GCBDRActionsStarted                     = 83 //	GCBDRActionsStarted
 	CollectStatus                           = 84 //	Collecting Status
+	HANAChangeDiskTypeStarted               = 85 //	HANAChangeDiskTypeStarted
+	HANAChangeDiskTypeFinished              = 86 //	HANAChangeDiskTypeFinished
+	RemoteValidationOTEStarted              = 87 //	RemoteValidationOTEStarted
+	RemoteValidationOTEFinished             = 88 //	RemoteValidationOTEFinished
 )
 
 // projectNumbers contains known project numbers for test instances.
