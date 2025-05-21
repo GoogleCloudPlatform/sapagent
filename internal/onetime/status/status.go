@@ -35,6 +35,7 @@ import (
 	"flag"
 	"cloud.google.com/go/artifactregistry/apiv1"
 	store "cloud.google.com/go/storage"
+	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	backintconfiguration "github.com/GoogleCloudPlatform/sapagent/internal/backint/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -170,7 +171,13 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		// Collect support bundle if there's an error.
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 	}
-	log.CtxLogger(ctx).Infow("Agent Status", "status", agentStatus)
+	jsonBytes, err := protojson.Marshal(agentStatus)
+	if err == nil {
+		log.CtxLogger(ctx).Infow("Agent Status", "status", string(jsonBytes))
+	} else {
+		log.CtxLogger(ctx).Errorw("Could not marshal agent status to JSON", "error", err)
+		log.CtxLogger(ctx).Infow("Agent Status String", "status", agentStatus)
+	}
 	statushelper.PrintStatus(ctx, agentStatus, s.compact)
 	log.CtxLogger(ctx).Info("Status finished")
 	return exitStatus
@@ -280,7 +287,22 @@ func (s *Status) collectAndSendStatus(ctx context.Context) error {
 		return err
 	}
 	// TODO: Send status to data warehouse.
-	log.CtxLogger(ctx).Debugw("Agent Status", "status", agentStatus)
+
+	// logging agent status for cloud logging
+	jsonBytes, err := protojson.Marshal(agentStatus)
+	if err == nil {
+		log.CtxLogger(ctx).Infow("Agent Status",
+			"status", string(jsonBytes),
+			"projectId", s.CloudProps.GetProjectId(),
+			"instanceId", s.CloudProps.GetInstanceId(),
+			"zone", s.CloudProps.GetZone(),
+			"instanceName", s.CloudProps.GetInstanceName(),
+			"image", s.CloudProps.GetImage(),
+			"machineType", s.CloudProps.GetMachineType())
+	} else {
+		log.CtxLogger(ctx).Errorw("Could not marshal agent status to JSON", "error", err)
+		log.CtxLogger(ctx).Infow("Agent Status String", "status", agentStatus)
+	}
 	return nil
 }
 
