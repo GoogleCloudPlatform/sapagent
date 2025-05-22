@@ -107,8 +107,6 @@ func (r *Restore) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		exitStatus = subcommands.ExitFailure
 	}
 	switch exitStatus {
-	case subcommands.ExitUsageError:
-		r.oteLogger.LogErrorToFileAndConsole(ctx, "GCBDR-restore Usage Error:", errors.New(result.GetStderr()))
 	case subcommands.ExitFailure:
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "GCBDR-restore Failure:", errors.New(result.GetStderr()))
 	case subcommands.ExitSuccess:
