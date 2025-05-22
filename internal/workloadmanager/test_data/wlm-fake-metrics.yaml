@@ -16,48 +16,62 @@
 
 metric: system
     metric_value: 1
-    collection_config_version: 20
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
+    agent: sapagent
+    agent_version: 3.8
+    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
+    os_settings:
+    app_server_zonal_separation: true
+    has_app_server: false
+    has_ascs: true
+    has_ers: true
+    kernel_version: {"rawString":"4.18.0-305.152.1.el8_4.x86_64", "osKernel":{"major":4, "minor":18}, "distro_kernel":{"major":305, "minor":152, "build":1, "remainder": "el8_4.x86_64"}}
     gcloud: true
     gsutil: true
-    network_ips: fe80:0:0:0:4001:aff:fe80:24%eth0,10.128.0.32,10.128.0.36,0:0:0:0:0:0:0:1%lo,127.0.0.1
-    agent: sapagent
-    agent_version: 3.7
     agent_state: running
     uefi_enabled: true
+    total_ram: 85899345920
+    total_swap: 42949672960
+    sapconf: active
+    saptune: active
+    tuned: active
+    selinux_config_configured: disabled
+    selinux_config_active: Disabled
 metric: corosync
     metric_value: 1
-    collection_config_version: 24
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     agent: sapagent
-    agent_version: 3.7
+    agent_version: 3.8
     agent_state: running
-    consensus:
-    token_retransmits_before_loss_const: 10
-    two_node: 1
-    max_messages: 20
-    fail_recv_const:
-    join: 60
-    transport: udpu
     token: 20000
-    transport_runtime: udpu
-    join_runtime: 60
-    token_retransmits_before_loss_const_runtime: 10
-    max_messages_runtime: 20
-    consensus_runtime:
+    token_retransmits_before_loss_const: 10
+    consensus:
+    join: 60
+    max_messages: 20
+    transport: udpu
+    fail_recv_const:
+    two_node: 1
     token_runtime: 20000
+    token_retransmits_before_loss_const_runtime: 10
+    consensus_runtime:
+    join_runtime: 60
+    max_messages_runtime: 20
+    transport_runtime: udpu
     fail_recv_const_runtime:
     two_node_runtime: 1
 metric: pacemaker
     metric_value: 1
-    collection_config_version: 24
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     agent: sapagent
-    agent_version: 3.7
+    agent_version: 3.8
     agent_state: running
+    pcmk_delay_base:
     pcmk_delay_max: 30
     pcmk_monitor_retries: 4
     pcmk_reboot_timeout: 300
@@ -75,6 +89,7 @@ metric: pacemaker
     ilb_monitor_interval: 3600
     ilb_monitor_timeout: 60
     has_alias_ip: false
+    cluster_healthy: true
     location_preference_set: true
     migration_threshold: 5000
     resource_stickiness: 1000
@@ -114,22 +129,29 @@ metric: pacemaker
     ers_healthcheck_monitor_timeout: 20
     ers_ilb_monitor_interval: 3600
     ers_ilb_monitor_timeout: 60
+    ensa2_capable: true
+    ascs_ip: 12.123.123.12
+    ers_ip: 12.123.123.12
+    ascs_virtual_ip: 12.123.123.13
+    ers_virtual_ip: 12.123.123.13
     op_timeout: 600
     maintenance_mode_active: false
     stonith_enabled: true
     stonith_timeout: 300
 metric: hana
     metric_value: 1
-    collection_config_version: 24
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     agent: sapagent
-    agent_version: 3.7
+    agent_version: 3.8
     agent_state: running
     fast_restart: disabled
     ha_sr_hook_configured: yes
-    numa_balancing: disabled
-    transparent_hugepages: disabled
+    num_completion_queues: 12
+    num_submit_queues: 12
+    tables_preloaded_in_parallel: 32
+    load_table_numa_aware: true
     disk_data_type: pd-ssd
     disk_data_mount: /hana/data
     disk_data_size: 457409822720
@@ -143,9 +165,19 @@ metric: hana
     hana_backup_volume: /dev/sdc
     hana_shared_volume: /dev/sdd
     usr_sap_volume: /dev/sdd
+    ha_in_same_zone: false
+    dr_in_same_region: false
+    oldest_backup_tenant_name: fake-wlmmetrics-1
+    oldest_last_backup_timestamp_utc: 2029-12-31T23:59:59Z
+    oldest_delta_backup_tenant_name: fake-wlmmetrics-1
+    oldest_last_delta_backup_timestamp_utc: 2029-12-31T23:59:59Z
+    oldest_snapshot_backup_tenant_name: fake-wlmmetrics-1
+    oldest_last_snapshot_backup_timestamp_utc: 2029-12-31T23:59:59Z
+    numa_balancing: disabled
+    transparent_hugepages: disabled
 metric: netweaver
     metric_value: 1
-    collection_config_version: 24
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     agent: sapagent
@@ -153,7 +185,7 @@ metric: netweaver
     agent_state: running
 metric: hanasecurity
     metric_value: 1
-    collection_config_version: 24
+    collection_config_version: 33
     instance_name: fake-wlmmetrics-1
     os: sles-15-SP3
     agent: sapagent
@@ -171,9 +203,9 @@ metric: hanasecurity
     r_password_policy_maximum_unused_productive_password_lifetime_rec_1: false
     r_password_policy_minimum_password_lifetime_rec_1: false
     r_backup_encryption_rec_1: false
-    r_password_policy_maximum_invalid_connect_attempts_rec_1: true
+    r_password_policy_maximum_invalid_connect_attempts_rec_1: false
     r_log_encryption_rec_1: false
-    r_system_replication_allowed_sender_rec_1: true
+    r_system_replication_allowed_sender_rec_1: false
     r_password_policy_maximum_unused_initial_password_lifetime_rec_1: false
     r_persistence_encryption_rec_1: false
     r_sap_hana_internal_support_role_rec_1: false
