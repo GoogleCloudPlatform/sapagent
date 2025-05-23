@@ -80,9 +80,8 @@
         "width": 31,
         "widget": {
           "title": "Maintenance System Events",
-          "id": "",
           "text": {
-            "content": "The widgets on this dashboard show the Maintenance System Events from Log analytics.\n\n### Data\n\nThe data shown on the dashboard is for the selected time range.  Expand the time range to see historical information.\n\n### Enabling\n\nUpgrade the **_Required** <a href=\"http://console.cloud.google.com/logs/storage\" target=\"_blank\">Log Storage</a>.  There are no additional charges for this.\n\nNOTE:  Data will be backfilled for previous system events, this could take several days.",
+            "content": "The widgets on this dashboard show the Maintenance System Events from Log analytics.\n\n### Data\n\nThe data shown on the dashboard is for the selected time range.  Expand the time range to see historical information.\n\n### Enabling\n\nUpgrade the **_Required** <a href=\"http://console.cloud.google.com/logs/storage\" target=\"_blank\">Log Storage</a>.  There are no additional charges for this.\n\nOnce the Log Storage is upgraded all new maintenance system events will be shown here.",
             "format": "MARKDOWN",
             "style": {
               "backgroundColor": "#FFFFFF",
@@ -93,18 +92,6 @@
               "textColor": "#212121",
               "verticalAlignment": "V_TOP"
             }
-          }
-        }
-      },
-      {
-        "yPos": 17,
-        "height": 32,
-        "width": 48,
-        "widget": {
-          "title": "",
-          "id": "",
-          "singleViewGroup": {
-            "displayType": "TAB"
           }
         }
       },
@@ -142,6 +129,18 @@
               "pageSize": "0",
               "showFilterBar": false
             }
+          }
+        }
+      },
+      {
+        "yPos": 17,
+        "height": 32,
+        "width": 48,
+        "widget": {
+          "title": "",
+          "id": "",
+          "singleViewGroup": {
+            "displayType": "TAB"
           }
         }
       },
