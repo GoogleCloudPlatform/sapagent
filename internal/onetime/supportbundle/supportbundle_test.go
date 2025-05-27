@@ -2939,6 +2939,7 @@ func TestGetProcessMetricsClients(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
 			err := tc.s.getMetricsClients(ctx)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("getProcessMetricsClients() returned an unexpected error: %v", err)
@@ -3580,7 +3581,10 @@ func TestNewQueryClient(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := newQueryClient(ctx)
+			var s = &SupportBundle{
+				oteLogger: defaultOTELogger,
+			}
+			_, err := s.newQueryClient(ctx)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("NewQueryClient() returned an unexpected error: %v", diff)
 			}
@@ -3602,7 +3606,10 @@ func TestNewMetricClient(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := newMetricClient(ctx)
+			s := &SupportBundle{
+				oteLogger: defaultOTELogger,
+			}
+			_, err := s.newMetricClient(ctx)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("NewMetricClient() returned an unexpected error: %v", diff)
 			}

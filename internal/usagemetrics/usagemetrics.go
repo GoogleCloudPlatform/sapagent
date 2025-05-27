@@ -124,6 +124,7 @@ const (
 	HANAChangeDiskTypeSnapshotFailure              = 83 //	HANAChangeDiskTypeSnapshotFailure
 	HANAChangeDiskTypeRestoreFailure               = 84 //	HANAChangeDiskTypeRestoreFailure
 	RemoteValidationOTEFailure                     = 85 //	RemoteValidationFailure
+	SupportBundleUploadFailure                     = 86 //	SupportBundleUploadFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -219,6 +220,9 @@ const (
 	HANAChangeDiskTypeFinished              = 86 //	HANAChangeDiskTypeFinished
 	RemoteValidationOTEStarted              = 87 //	RemoteValidationOTEStarted
 	RemoteValidationOTEFinished             = 88 //	RemoteValidationOTEFinished
+	SupportBundle                           = 89 //	SupportBundle
+	SupportBundleUploadStarted              = 90 //	SupportBundleUploadStarted
+	SupportBundleLocalCollection            = 91 //	SupportBundleLocalCollection
 )
 
 // projectNumbers contains known project numbers for test instances.

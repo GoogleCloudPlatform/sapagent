@@ -360,7 +360,7 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-metrics] [-metrics]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<debug|info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
@@ -433,6 +433,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return fmt.Sprintf("Invalid params for collecting support bundle Report for Agent for SAP: %s", errMessage), subcommands.ExitUsageError
 	}
+	s.oteLogger.LogUsageAction(usagemetrics.SupportBundle)
 	s.Sid = strings.ToUpper(s.Sid)
 	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.Hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
 	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
@@ -535,10 +536,12 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if s.ResultBucket != "" {
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleUploadStarted)
 		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
 			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.ResultBucket)
 			s.oteLogger.LogMessageToConsole(fmt.Sprintf(errMessage, " Error: ", err))
 			failureMsgs = append(failureMsgs, errMessage)
+			s.oteLogger.LogUsageError(usagemetrics.SupportBundleUploadFailure)
 		} else {
 			msg := fmt.Sprintf("Bundle uploaded to bucket %s, path: %s", s.ResultBucket, fmt.Sprintf("gs://%s/%s/%s.zip", s.ResultBucket, s.Name(), bundlename))
 			successMsgs = append(successMsgs, msg)
@@ -549,6 +552,8 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 				failureMsgs = append(failureMsgs, errMessage)
 			}
 		}
+	} else {
+		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleLocalCollection)
 	}
 
 	// Rotate out old support bundles so we don't fill the file system.
@@ -1437,7 +1442,7 @@ func (s *SupportBundle) getMetricsClients(ctx context.Context) error {
 
 	qc, err := s.createQueryClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return err
 	}
 	cmr := &cloudmetricreader.CloudMetricReader{
@@ -1447,7 +1452,7 @@ func (s *SupportBundle) getMetricsClients(ctx context.Context) error {
 
 	mmc, err := s.createMetricClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.MetricClientCreateFailure)
 		return err
 	}
 
@@ -1578,10 +1583,10 @@ func (s *SupportBundle) fetchLabelDescriptors(ctx context.Context, cp *ipb.Cloud
 }
 
 // newQueryClient abstracts the creation of a new Cloud Monitoring query client for testing purposes.
-func newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
+func (s *SupportBundle) newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, error) {
 	mqc, err := monitoring.NewQueryClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.QueryClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.QueryClientCreateFailure)
 		return nil, fmt.Errorf("failed to create Cloud Monitoring query client: %v", err)
 	}
 
@@ -1589,10 +1594,10 @@ func newQueryClient(ctx context.Context) (cloudmonitoring.TimeSeriesQuerier, err
 }
 
 // newMetricClient abstracts the creation of a new Cloud Monitoring metric client for testing purposes.
-func newMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
+func (s *SupportBundle) newMetricClient(ctx context.Context) (cloudmonitoring.TimeSeriesDescriptorQuerier, error) {
 	mmc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
-		usagemetrics.Error(usagemetrics.MetricClientCreateFailure)
+		s.oteLogger.LogUsageError(usagemetrics.MetricClientCreateFailure)
 		return nil, fmt.Errorf("failed to create Cloud Monitoring metric client: %v", err)
 	}
 
@@ -1627,8 +1632,8 @@ func (s *SupportBundle) validateParams() []string {
 	s.rest = &rest.Rest{}
 	s.rest.NewRest()
 
-	s.createQueryClient = newQueryClient
-	s.createMetricClient = newMetricClient
+	s.createQueryClient = s.newQueryClient
+	s.createMetricClient = s.newMetricClient
 
 	return errs
 }

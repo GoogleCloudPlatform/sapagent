@@ -277,6 +277,9 @@ func TestErrorConstants(t *testing.T) {
 	if RemoteValidationOTEFailure != 85 {
 		t.Errorf("RemoteValidationOTEFailure = %v, want 85", RemoteValidationOTEFailure)
 	}
+	if SupportBundleUploadFailure != 86 {
+		t.Errorf("PacemakerDiagnosisFailure = %v, want 83", SupportBundleUploadFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -546,5 +549,14 @@ func TestActionConstants(t *testing.T) {
 	}
 	if RemoteValidationOTEFinished != 88 {
 		t.Errorf("RemoteValidationOTEFinished = %v, want 88", RemoteValidationOTEFinished)
+	}
+	if SupportBundle != 89 {
+		t.Errorf("SupportBundle = %v, want 85", SupportBundle)
+	}
+	if SupportBundleUploadStarted != 90 {
+		t.Errorf("SupportBundleUploadStarted = %v, want 87", SupportBundleUploadStarted)
+	}
+	if SupportBundleLocalCollection != 91 {
+		t.Errorf("SupportBundleLocalCollection = %v, want 88", SupportBundleLocalCollection)
 	}
 }
