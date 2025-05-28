@@ -943,6 +943,7 @@ func TestSetBackintConfig(t *testing.T) {
 				FileReadTimeoutMs:       60000,
 				InputFile:               "/dev/stdin",
 				LogToCloud:              &wpb.BoolValue{Value: true},
+				LogLevel:                bpb.LogLevel_INFO,
 				OutputFile:              "backup/backint-output.log",
 				ParallelStreams:         1,
 				Retries:                 5,

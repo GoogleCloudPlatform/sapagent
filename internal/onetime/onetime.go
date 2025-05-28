@@ -128,7 +128,7 @@ func Init(ctx context.Context, opt InitOptions, args ...any) (log.Parameters, *i
 	if opt.LogPath != "" {
 		lp.LogFileName = opt.LogPath
 	}
-	SetupOneTimeLogging(lp, opt.Name, log.StringLevelToZapcore(opt.LogLevel))
+	lp = SetupOneTimeLogging(lp, opt.Name, log.StringLevelToZapcore(opt.LogLevel))
 	ConfigureUsageMetricsForOTE(cloudProps, "", "")
 	return lp, cloudProps, subcommands.ExitSuccess, true
 }

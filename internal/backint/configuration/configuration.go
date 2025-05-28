@@ -46,6 +46,16 @@ type Parameters struct {
 	Config                     *bpb.BackintConfiguration
 }
 
+// GetLogParameters returns the log_to_cloud and log_level configuration.
+func GetLogParameters(readConfig ReadConfigFile, ParamFile string) (bool, zapcore.Level) {
+	p := &Parameters{ParamFile: ParamFile, Config: &bpb.BackintConfiguration{}}
+	p.readParametersFile(readConfig)
+	if p.Config.GetLogToCloud() == nil {
+		p.Config.LogToCloud = wpb.Bool(true)
+	}
+	return p.Config.GetLogToCloud().GetValue(), LogLevelToZapcore(p.Config.GetLogLevel())
+}
+
 // ParseArgsAndValidateConfig reads the backint args and params and validates them.
 // If valid, the proto will be populated and defaults will be applied.
 func (p *Parameters) ParseArgsAndValidateConfig(readConfig ReadConfigFile, readEncryptionKey ReadConfigFile) (*bpb.BackintConfiguration, error) {
@@ -86,7 +96,6 @@ func LogLevelToZapcore(level bpb.LogLevel) zapcore.Level {
 	case bpb.LogLevel_ERROR:
 		return zapcore.ErrorLevel
 	default:
-		log.Logger.Warnw("Unsupported log level, defaulting to INFO", "level", level.String())
 		return zapcore.InfoLevel
 	}
 }
@@ -264,6 +273,9 @@ func (p *Parameters) ApplyDefaults(numCPU int64) {
 		}
 		log.Logger.Infof("folder_prefix is set. All objects in the GCS bucket will be prefixed with '%s'", p.Config.GetFolderPrefix())
 	}
+	if p.Config.GetLogLevel() == bpb.LogLevel_LOG_LEVEL_UNSPECIFIED {
+		p.Config.LogLevel = bpb.LogLevel_INFO
+	}
 }
 
 func (p *Parameters) readEncryptionKeyFromFile(read ReadConfigFile) error {
@@ -285,9 +297,7 @@ func Unmarshal(parameterFile string, content []byte) (*bpb.BackintConfiguration,
 	config := &bpb.BackintConfiguration{}
 	var err error
 	if strings.HasSuffix(parameterFile, ".json") {
-		log.Logger.Infow("Unmarshalling JSON parameters file", "configPath", parameterFile)
 		if err = protojson.Unmarshal(content, config); err != nil {
-			log.Logger.Errorw("Invalid content in the JSON parameters file", "configPath", parameterFile)
 			return nil, err
 		}
 		return config, nil

@@ -59,6 +59,7 @@ type Backint struct {
 	LogPath     string                        `json:"log-path"`
 	help        bool
 	oteLogger   *onetime.OTELogger
+	lp          log.Parameters
 }
 
 // Name implements the subcommand interface for backint.
@@ -111,7 +112,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 	if !completed {
 		return exitStatus
 	}
-	lp.LogToCloud = true
+	b.lp = lp
 
 	// If an error occurs during an operation, collect the support bundle.
 	defer func() {
@@ -145,6 +146,10 @@ func (b *Backint) Run(ctx context.Context, opts *onetime.RunOptions) (string, su
 }
 
 func (b *Backint) backintHandler(ctx context.Context, cloudProps *ipb.CloudProperties, client storage.Client) (string, subcommands.ExitStatus) {
+	logToCloud, logLevel := configuration.GetLogParameters(os.ReadFile, b.ParamFile)
+	b.lp.LogToCloud = logToCloud
+	onetime.SetupOneTimeLogging(b.lp, b.Name(), logLevel)
+
 	log.CtxLogger(ctx).Info("Backint starting")
 	p := configuration.Parameters{
 		User:        b.User,
