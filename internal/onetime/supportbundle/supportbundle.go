@@ -247,6 +247,7 @@ var (
 		"sap/hana/query/state",
 		"sap/hana/query/overalltime",
 		"sap/hana/query/servertime",
+		"sap/hana/log/utilisationkb",
 		"sap/cluster/failcounts",
 		"sap/cluster/nodes",
 		"sap/cluster/resources",
@@ -287,6 +288,27 @@ var (
 		"sap/networkstats/bytes_received",
 		"sap/networkstats/lastsnd",
 		"sap/networkstats/lastrcv",
+		"sap/compute/os/memory/mem_free_kb",
+		"sap/compute/os/memory/mem_available_kb",
+		"sap/compute/os/memory/mem_total_kb",
+		"sap/compute/os/memory/buffers_kb",
+		"sap/compute/os/memory/cached_kb",
+		"sap/compute/os/memory/swap_cached_kb",
+		"sap/compute/os/memory/commit_kb",
+		"sap/compute/os/memory/commit_percent",
+		"sap/compute/os/memory/active_kb",
+		"sap/compute/os/memory/inactive_kb",
+		"sap/compute/os/memory/dirty_kb",
+		"sap/compute/os/memory/shmem_kb",
+		"sap/compute/os/memory/freemem_used_kb",
+		"sap/compute/os/memory/freemem_total_kb",
+		"sap/compute/os/memory/freemem_free_kb",
+		"sap/compute/os/memory/freemem_shared_kb",
+		"sap/compute/os/memory/freemem_buffers_and_cache_kb",
+		"sap/compute/os/memory/freemem_available_kb",
+		"sap/compute/os/memory/freeswap_total_kb",
+		"sap/compute/os/memory/freeswap_used_kb",
+		"sap/compute/os/memory/freeswap_free_kb",
 	}
 
 	hanaMonitoringMetricsList = []string{
@@ -344,6 +366,8 @@ var (
 		"sap/hanamonitoring/backups/log/throughput_mb_s",
 		"sap/hanamonitoring/backups/catalog/size_mb",
 		"sap/hanamonitoring/backups/catalog/retention_days",
+		"sap/hanamonitoring/fast_restart_enabled",
+		"sap/hanamonitoring/logshipping_max_retention_size",
 	}
 )
 
