@@ -473,7 +473,10 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 
 	// Start Status Collection
 	statusCtx := log.SetCtx(ctx, "context", "Status")
-	sp := StatusParams{&status.Status{ConfigFilePath: d.configFilePath, CloudProps: d.cloudProps}, healthMonitor}
+	sp := StatusParams{&status.Status{
+		ConfigFilePath: d.configFilePath,
+		CloudProps:     d.cloudProps,
+		WLMService:     wlmService}, healthMonitor}
 	sp.startCollection(statusCtx)
 
 	waitForShutdown(ctx, shutdownch, cancel, restarting)

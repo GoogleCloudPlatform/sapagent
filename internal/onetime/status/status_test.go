@@ -261,6 +261,8 @@ func TestCollectAndSendStatus(t *testing.T) {
 				},
 				CloudProps: &iipb.CloudProperties{
 					Scopes: []string{requiredScope},
+					Zone:   "us-central1-a",
+					Region: "test-region",
 				},
 				httpGet:        httpGetSuccess,
 				createDBHandle: dbConnectorSuccess,
@@ -270,6 +272,10 @@ func TestCollectAndSendStatus(t *testing.T) {
 					return map[string]bool{
 						"monitoring.timeSeries.create": true,
 					}, nil
+				},
+				WLMService: &fake.TestWLM{
+					WriteInsightArgs: []fake.WriteInsightArgs{},
+					WriteInsightErrs: []error{nil},
 				},
 			},
 			want: nil,
@@ -321,6 +327,8 @@ func TestCollectAndSendStatus(t *testing.T) {
 				},
 				CloudProps: &iipb.CloudProperties{
 					Scopes: []string{},
+					Zone:   "us-central1-a",
+					Region: "test-region",
 				},
 				stat: func(name string) (os.FileInfo, error) {
 					return &mockFileInfo{perm: 0400}, nil
@@ -341,12 +349,57 @@ func TestCollectAndSendStatus(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
+				WLMService: &fake.TestWLM{
+					WriteInsightArgs: []fake.WriteInsightArgs{},
+					WriteInsightErrs: []error{nil},
+				},
 			},
 			want: nil,
 		},
 		{
 			name: "StatusStructNotInitialized",
 			s:    Status{},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "FailedToWriteInsight",
+			s: Status{
+				readFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				backintReadFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0077}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					Scopes: []string{requiredScope},
+					Zone:   "us-central1-a",
+					Region: "test-region",
+				},
+				httpGet:        httpGetSuccess,
+				createDBHandle: dbConnectorSuccess,
+				iamService:     &iam.IAM{},
+				arClient:       fakeArtifactRegistryClient([]string{""}),
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				WLMService: &fake.TestWLM{
+					WriteInsightArgs: []fake.WriteInsightArgs{},
+					WriteInsightErrs: []error{cmpopts.AnyError},
+				},
+			},
 			want: cmpopts.AnyError,
 		},
 	}
@@ -380,6 +433,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
+					Region:    "test-region",
 				},
 			},
 			want: &spb.ServiceStatus{
@@ -407,6 +461,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
+					Region:    "test-region",
 				},
 			},
 			want: &spb.ServiceStatus{
@@ -432,6 +487,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
 					Scopes:    []string{requiredScope},
+					Region:    "test-region",
 				},
 			},
 			want: &spb.ServiceStatus{
@@ -498,6 +554,7 @@ func TestHostMetricsStatus(t *testing.T) {
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
+					Region:     "test-region",
 					Scopes:     []string{requiredScope},
 				},
 			},
@@ -537,6 +594,7 @@ func TestHostMetricsStatus(t *testing.T) {
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
+					Region:     "test-region",
 					Scopes:     []string{requiredScope},
 				},
 				httpGet: httpGetFailure,
@@ -573,6 +631,7 @@ func TestHostMetricsStatus(t *testing.T) {
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
+					Region:     "test-region",
 					Scopes:     []string{requiredScope},
 				},
 				httpGet: httpGetError,
@@ -609,6 +668,7 @@ func TestHostMetricsStatus(t *testing.T) {
 					ProjectId:  "test-project",
 					InstanceId: "test-instance",
 					Zone:       "test-zone",
+					Region:     "test-region",
 					Scopes:     []string{requiredScope},
 				},
 				httpGet: httpGetSuccess,

@@ -53,6 +53,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
+	dwpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/datawarehouse"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
@@ -95,6 +96,11 @@ type (
 		CheckIAMPermissionsOnSecret(ctx context.Context, projectID, secretID string, permissions []string) ([]string, error)
 	}
 
+	// WLMInterface is an interface for the WLM data warehouse service.
+	WLMInterface interface {
+		WriteInsight(project, location string, writeInsightRequest *dwpb.WriteInsightRequest) error
+	}
+
 	httpGetter  func(url string) (resp *http.Response, err error)
 	statFunc    func(name string) (os.FileInfo, error)
 	readDirFunc func(dirname string) ([]fs.FileInfo, error)
@@ -106,6 +112,7 @@ type Status struct {
 	BackintParametersPath string
 	CloudProps            *iipb.CloudProperties
 	HeartbeatSpec         *heartbeat.Spec
+	WLMService            WLMInterface
 
 	compact           bool
 	help              bool
@@ -171,13 +178,7 @@ func (s *Status) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 		// Collect support bundle if there's an error.
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
 	}
-	jsonBytes, err := protojson.Marshal(agentStatus)
-	if err == nil {
-		log.CtxLogger(ctx).Infow("Agent Status", "status", string(jsonBytes))
-	} else {
-		log.CtxLogger(ctx).Errorw("Could not marshal agent status to JSON", "error", err)
-		log.CtxLogger(ctx).Infow("Agent Status String", "status", agentStatus)
-	}
+	s.logAgentStatus(ctx, agentStatus)
 	statushelper.PrintStatus(ctx, agentStatus, s.compact)
 	log.CtxLogger(ctx).Info("Status finished")
 	return exitStatus
@@ -286,9 +287,24 @@ func (s *Status) collectAndSendStatus(ctx context.Context) error {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
 		return err
 	}
-	// TODO: Send status to data warehouse.
+	s.logAgentStatus(ctx, agentStatus)
 
-	// logging agent status for cloud logging
+	insightRequest := &dwpb.WriteInsightRequest{
+		Insight: &dwpb.Insight{
+			AgentStatus: agentStatus,
+			InstanceId:  s.CloudProps.GetInstanceId(),
+		},
+	}
+	if err = s.WLMService.WriteInsight(s.CloudProps.GetProjectId(), s.CloudProps.GetRegion(), insightRequest); err != nil {
+		log.CtxLogger(ctx).Infow("Encountered error writing agent status to WLM", "error", err)
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Successfully wrote agent status to WLM")
+	return nil
+}
+
+// Logging agent status for cloud logging.
+func (s *Status) logAgentStatus(ctx context.Context, agentStatus *spb.AgentStatus) {
 	jsonBytes, err := protojson.Marshal(agentStatus)
 	if err == nil {
 		log.CtxLogger(ctx).Infow("Agent Status",
@@ -303,7 +319,6 @@ func (s *Status) collectAndSendStatus(ctx context.Context) error {
 		log.CtxLogger(ctx).Errorw("Could not marshal agent status to JSON", "error", err)
 		log.CtxLogger(ctx).Infow("Agent Status String", "status", agentStatus)
 	}
-	return nil
 }
 
 // statusHandler executes the status checks and returns the results as the AgentStatus proto.
