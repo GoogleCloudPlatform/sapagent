@@ -16,7 +16,6 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %define _bindir /usr/bin
 %define _docdir /usr/share/doc/%{name}
 %define _servicedir /usr/share/%{name}/service
-%define _gcbdr_sap_core_app_dir /etc/google-cloud-sap-agent/gcbdr
 
 %install
 # clean away any previous RPM build root
@@ -32,7 +31,6 @@ Obsoletes: google-sapnetweavermonitoring-agent
 %attr(0644,root,root) %{_docdir}/LICENSE
 %attr(0644,root,root) %{_docdir}/README.md
 %attr(0644,root,root) %{_docdir}/THIRD_PARTY_NOTICES
-%attr(0654,root,root) %{_gcbdr_sap_core_app_dir}
 
 %pre
 # If we need to check install / upgrade ($1 = 1 is install, $1 = 2 is upgrade)
