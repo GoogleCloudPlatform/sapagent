@@ -244,7 +244,7 @@ limitations under the License.
         </lrm_resources>
       </lrm>
     </node_state>
-    <node_state id="2" uname="rhel-ha2" in_ccm="true" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
+    <node_state id="2" uname="rhel-ha2" in_ccm="1721760952" crmd="online" crm-debug-origin="do_update_resource" join="member" expected="member">
       <lrm id="2">
         <lrm_resources>
           <lrm_resource id="STONITH-rhel-ha1" type="fence_gce" class="stonith">

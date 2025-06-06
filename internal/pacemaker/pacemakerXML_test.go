@@ -51,7 +51,6 @@ var (
 			{
 				ID:             "1",
 				Uname:          "rhel-ha1",
-				InCCM:          true,
 				CRMD:           "online",
 				CRMDebugOrigin: "do_update_resource",
 				Join:           "member",
@@ -160,7 +159,6 @@ var (
 			CIBNodeState{
 				ID:             "2",
 				Uname:          "rhel-ha2",
-				InCCM:          true,
 				CRMD:           "online",
 				CRMDebugOrigin: "do_update_resource",
 				Join:           "member",
@@ -375,10 +373,10 @@ var (
 					},
 					Primitives: []PrimitiveClass{
 						{
-							ID:         "rsc_SAPHana_HAS_HDB00",
-							Class:      "ocf",
-							Provider:   "suse",
-							ClassType:  "SAPHana",
+							ID:        "rsc_SAPHana_HAS_HDB00",
+							Class:     "ocf",
+							Provider:  "suse",
+							ClassType: "SAPHana",
 							Operations: []Op{
 								{Name: "start", Interval: "0", Timeout: "3600", ID: "rsc_sap_HAS_HDB00-operations-start-0"},
 								{Name: "monitor", Interval: "60", Role: "Primary", Timeout: "700", ID: "rsc_sap_HAS_HDB00-operations-monitor-60"},

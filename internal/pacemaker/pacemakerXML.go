@@ -188,7 +188,6 @@ CIBNodeState stores the statuses of individual CIB Nodes (see Configuration stru
 type CIBNodeState struct {
 	ID                  string              `xml:"id,attr"`
 	Uname               string              `xml:"uname,attr"`
-	InCCM               bool                `xml:"in_ccm,attr"`
 	CRMD                string              `xml:"crmd,attr"`
 	CRMDebugOrigin      string              `xml:"crm-debug-origin,attr"`
 	Join                string              `xml:"join,attr"`
