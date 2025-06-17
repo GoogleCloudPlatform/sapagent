@@ -48,11 +48,8 @@ func TestRead(t *testing.T) {
 		ProcessorType:         "Intel",
 	}
 
-	timestamp := "2019-10-12T07:20:50.52Z"
-
 	instanceProperties := &iipb.InstanceProperties{
 		MachineType:               "test_machine",
-		LastMigrationEndTimestamp: timestamp,
 	}
 
 	config := &confpb.Configuration{
@@ -168,16 +165,6 @@ func TestRead(t *testing.T) {
 				LastRefresh:     at.Startup().UnixMilli(),
 				Value:           "unknown",
 			},
-			&mpb.Metric{
-				Name:            "Last Host Change",
-				Context:         mpb.Context_CONTEXT_VM,
-				Category:        mpb.Category_CATEGORY_CONFIG,
-				Type:            mpb.Type_TYPE_INT64,
-				Unit:            mpb.Unit_UNIT_SEC,
-				RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
-				LastRefresh:     at.LocalRefresh().UnixMilli(),
-				Value:           "1570864850",
-			},
 		},
 	}
 
@@ -271,54 +258,6 @@ func TestGetBareMetalMetrics(t *testing.T) {
 				Value:           "Google Cloud Bare Metal",
 			},
 		},
-	}
-
-	if d := cmp.Diff(want, got, protocmp.Transform()); d != "" {
-		t.Errorf("bareMetalMetrics() mismatch (-want, +got):\n%s", d)
-	}
-}
-
-func TestInvalidLastHostChangeTimeStamp(t *testing.T) {
-	at := agenttime.New(agenttime.Clock{})
-	c := ConfigMetricReader{OS: "linux"}
-
-	cpuStats := &statspb.CpuStats{
-		CpuUtilizationPercent: 100,
-		CpuCount:              2,
-		CpuCores:              4,
-		MaxMhz:                2400,
-		ProcessorType:         "Intel",
-	}
-
-	timestamp := "This is an invalid timestamp"
-
-	instanceProperties := &iipb.InstanceProperties{
-		MachineType:               "test_machine",
-		LastMigrationEndTimestamp: timestamp,
-	}
-
-	config := &confpb.Configuration{
-		BareMetal: false,
-		AgentProperties: &confpb.AgentProperties{
-			Version: "Version number",
-		},
-		CloudProperties: &iipb.CloudProperties{
-			InstanceId: "unknown",
-		},
-	}
-
-	metrics := c.Read(config, cpuStats, instanceProperties, *at).GetMetrics()
-
-	got := metrics[len(metrics)-1]
-	want := mpb.Metric{
-		Name:            "Last Host Change",
-		Context:         mpb.Context_CONTEXT_VM,
-		Category:        mpb.Category_CATEGORY_CONFIG,
-		Type:            mpb.Type_TYPE_INT64,
-		Unit:            mpb.Unit_UNIT_SEC,
-		RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
-		LastRefresh:     at.LocalRefresh().UnixMilli(),
-		Value:           "-1",
 	}
 
 	if d := cmp.Diff(want, got, protocmp.Transform()); d != "" {

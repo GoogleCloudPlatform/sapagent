@@ -20,7 +20,6 @@ package instanceinfo
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"google.golang.org/api/compute/v1"
@@ -107,23 +106,6 @@ func (r *Reader) Read(ctx context.Context, config *configpb.Configuration, mappe
 		})
 	}
 
-	// Get last migration info if available.
-	operationList, err := r.gceService.ListZoneOperations(
-		config.GetCloudProperties().GetProjectId(),
-		config.GetCloudProperties().GetZone(),
-		fmt.Sprintf(`(targetId eq %s) (status eq DONE) (operationType eq compute.instances.migrateOnHostMaintenance)`, config.GetCloudProperties().GetInstanceId()),
-		1,
-	)
-	if err != nil {
-		log.CtxLogger(ctx).Errorw("Could not get zone operation list from compute API", "project",
-			config.GetCloudProperties().GetProjectId(), "zone", config.GetCloudProperties().GetZone(),
-			"instanceid", config.GetCloudProperties().GetInstanceId(), "error", err)
-	} else if len(operationList.Items) > 0 {
-		// Sort by EndTime and use the last (most recent) entry.
-		items := endTimeSort(operationList.Items)
-		sort.Sort(items)
-		builder.LastMigrationEndTimestamp = items[len(items)-1].EndTime
-	}
 	r.instanceProperties = builder
 }
 

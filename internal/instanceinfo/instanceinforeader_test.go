@@ -257,7 +257,6 @@ func TestRead(t *testing.T) {
 						Mapping:   "lo",
 					},
 				},
-				LastMigrationEndTimestamp: "2022-08-23T12:00:01.000-04:00",
 			},
 		},
 		{

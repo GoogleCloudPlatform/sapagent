@@ -23,7 +23,6 @@ package configurationmetricreader
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/agenttime"
 	confpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -71,20 +70,6 @@ func (r *ConfigMetricReader) Read(config *confpb.Configuration, cpuStats *statsp
 	// Return the bare metal metrics if the configuration instance is "bare metal".
 	if config.GetBareMetal() {
 		return r.bareMetalMetrics(mc, cpuStats, at)
-	}
-
-	// Populate metrics in the non bare metal case.
-	lastHostChangeTimestamp := instanceProps.GetLastMigrationEndTimestamp()
-	if lastHostChangeTimestamp == "" {
-		lastHostChangeTimestamp = instanceProps.GetCreationTimestamp()
-	}
-
-	// Convert last host change timestamp to UNIX epoch seconds, or "-1" if that is not possible
-	tm, err := time.Parse(time.RFC3339, lastHostChangeTimestamp)
-	if err != nil {
-		lastHostChangeTimestamp = "-1"
-	} else {
-		lastHostChangeTimestamp = strconv.FormatInt(tm.Unix(), 10)
 	}
 
 	machineType := instanceProps.GetMachineType()
@@ -170,16 +155,6 @@ func (r *ConfigMetricReader) Read(config *confpb.Configuration, cpuStats *statsp
 			RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_RESTART,
 			LastRefresh:     at.Startup().UnixMilli(),
 			Value:           config.GetCloudProperties().GetInstanceId(),
-		},
-		&mpb.Metric{
-			Name:            "Last Host Change",
-			Context:         mpb.Context_CONTEXT_VM,
-			Category:        mpb.Category_CATEGORY_CONFIG,
-			Type:            mpb.Type_TYPE_INT64,
-			Unit:            mpb.Unit_UNIT_SEC,
-			RefreshInterval: mpb.RefreshInterval_REFRESHINTERVAL_PER_MINUTE,
-			LastRefresh:     at.LocalRefresh().UnixMilli(),
-			Value:           lastHostChangeTimestamp,
 		},
 	)
 

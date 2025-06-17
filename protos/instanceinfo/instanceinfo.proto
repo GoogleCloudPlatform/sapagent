@@ -66,5 +66,5 @@ message InstanceProperties {
   repeated Disk disks = 3;
   repeated NetworkAdapter network_adapters = 4;
   string creation_timestamp = 5;
-  string last_migration_end_timestamp = 6;
+  string last_migration_end_timestamp = 6 [deprecated = true];
 }
