@@ -19,20 +19,27 @@ package snapshotgroup
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/oauth2"
 )
 
-type mockHTTPClient struct {
-	responses map[string]map[string]httpResponse
-}
-
-type httpResponse struct {
-	statusCode int
-	body       string
-}
+type (
+	mockHTTPClient struct {
+		responses map[string]map[string]httpResponse
+	}
+	httpResponse struct {
+		statusCode int
+		body       string
+	}
+)
 
 func (c *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	verbResponses, ok := c.responses[req.Method]
@@ -49,7 +56,7 @@ func (c *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 func newResponse(statusCode int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: statusCode,
-		Body:       http.NoBody,
+		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     make(http.Header),
 	}
 }
@@ -90,5 +97,169 @@ func TestNewService(t *testing.T) {
 	}
 	if s.maxRetries == 0 {
 		t.Error("NewService() did not initialize maxRetries")
+	}
+}
+
+func TestSetupBackoff(t *testing.T) {
+	var b backoff.BackOff
+	b = &backoff.ExponentialBackOff{
+		InitialInterval:     2 * time.Second,
+		RandomizationFactor: 0,
+		Multiplier:          2,
+		MaxInterval:         1 * time.Hour,
+		MaxElapsedTime:      30 * time.Minute,
+		Clock:               backoff.SystemClock,
+	}
+	gotB := setupBackoff()
+	if diff := cmp.Diff(b, gotB, cmpopts.IgnoreUnexported(backoff.ExponentialBackOff{})); diff != "" {
+		t.Errorf("setupBackoff() returned diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestGetResponse(t *testing.T) {
+	tests := []struct {
+		name           string
+		httpResponses  map[string]map[string]httpResponse
+		method         string
+		url            string
+		data           []byte
+		expectedBody   string
+		expectedError  bool
+		tokenGetterErr error
+	}{
+		{
+			name: "success",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://test.com/success": {statusCode: 200, body: `{"key":"value"}`}},
+			},
+			method:       "GET",
+			url:          "https://test.com/success",
+			expectedBody: `{"key":"value"}`,
+		},
+		{
+			name: "http_error",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://test.com/error": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			},
+			method:        "GET",
+			url:           "https://test.com/error",
+			expectedError: true, // GetResponse now returns the googleapi.Error as error
+		},
+		{
+			name: "unmarshal_error_generic_response",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://test.com/unmarshal_error": {statusCode: 200, body: `invalid_json`}},
+			},
+			method:        "GET",
+			url:           "https://test.com/unmarshal_error",
+			expectedError: true,
+		},
+		{
+			name: "unmarshal_error_googleapi_error",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://test.com/unmarshal_google_error": {statusCode: 400, body: `{"error": "not_an_object"}`}},
+			},
+			method:        "GET",
+			url:           "https://test.com/unmarshal_google_error",
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			httpResponses:  map[string]map[string]httpResponse{},
+			method:         "GET",
+			url:            "https://test.com/any",
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService() // Initialize with default backoff and retries
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			body, err := sgService.GetResponse(ctx, test.method, test.url, test.data)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("GetResponse() error = %v, wantErr %v", err, test.expectedError)
+				return
+			}
+			if err == nil && string(body) != test.expectedBody {
+				t.Errorf("GetResponse() body = %s, want %s", string(body), test.expectedBody)
+			}
+		})
+	}
+}
+
+func TestCreateSG(t *testing.T) {
+	tests := []struct {
+		name            string
+		s               *SGService
+		project         string
+		data            []byte
+		httpResponses   map[string]map[string]httpResponse
+		expectedError   bool
+		expectedBaseURL string
+	}{
+		// TODO: Add a success test.
+		{
+			name:    "error_http",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			},
+			expectedError:   true,
+			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+		},
+		{
+			name:    "error_unmarshal_operation",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `invalid_json`}},
+			},
+			expectedError:   true,
+			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+		},
+		{
+			name:    "error_operation_error",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to create"}]}}`}},
+			},
+			expectedError:   true,
+			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+		},
+		{
+			name:    "error_operation_error_http_code",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}},
+			},
+			expectedError:   true,
+			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+		},
+	}
+
+	for _, test := range tests {
+		test.data = []byte(`{"name": "test-sg", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg"}`)
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.maxRetries = 1
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+
+			err := sgService.CreateSG(ctx, test.project, test.data)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("CreateSG() error = %v, wantErr %v", err, test.expectedError)
+			}
+			if sgService.baseURL != test.expectedBaseURL {
+				t.Errorf("CreateSG() baseURL = %s, want %s", sgService.baseURL, test.expectedBaseURL)
+			}
+		})
 	}
 }

@@ -19,10 +19,15 @@ package snapshotgroup
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 )
 
@@ -98,9 +103,83 @@ func (s *SGService) NewService() error {
 	return nil
 }
 
+// GetResponse is a wrapper around rest.GetResponse.
+func (s *SGService) GetResponse(ctx context.Context, method string, baseURL string, data []byte) (bodyBytes []byte, err error) {
+	bodyBytes, err = s.rest.GetResponse(ctx, method, baseURL, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get response, err: %w", err)
+	}
+
+	var genericResponse map[string]any
+	if err = json.Unmarshal(bodyBytes, &genericResponse); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+	if genericResponse["error"] != nil {
+		var googleapiErr errorResponse
+		if err = json.Unmarshal(bodyBytes, &googleapiErr); err != nil {
+			return nil, fmt.Errorf("error from server: %v", genericResponse["error"])
+		}
+
+		log.CtxLogger(ctx).Errorw("getresponse error", "error", googleapiErr)
+		return nil, fmt.Errorf("%s", googleapiErr.Err.Message)
+	}
+	return bodyBytes, nil
+}
+
 // CreateSG creates a snapshot group.
 func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) error {
-	// TODO: Implement this function.
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
+
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+
+	var i int
+	var bodyBytes []byte
+	var err error
+	if err = backoff.Retry(func() error {
+		var getResponseErr error
+		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
+		if getResponseErr != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
+			return getResponseErr
+		}
+
+		return nil
+	}, bo); err != nil {
+		return fmt.Errorf("failed to initiate creation of group snapshot, err: %w", err)
+	}
+
+	log.CtxLogger(ctx).Debugw("CreateSG", "baseURL", s.baseURL, "data", string(data), "response", string(bodyBytes))
+
+	op := compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, &op); err != nil {
+		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("CreateSG Error", "op.Error", op.Error)
+		// It's common for op.Error.Errors to be a list, but we'll simplify and use the first one if available.
+		// Or, if op.Error.Message is populated, use that.
+		errMsg := "Failed to create snapshot group."
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			errMsg = op.Error.Errors[0].Message
+		} else if op.HttpErrorStatusCode > 0 { // Check if HttpErrorStatusCode indicates an error
+			errMsg = fmt.Sprintf("Failed to create snapshot group with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+		}
+		return errors.New(errMsg)
+	}
+
+	log.CtxLogger(ctx).Debugw("CreateSG Operation", "operation", op)
+
 	return nil
 }
 
