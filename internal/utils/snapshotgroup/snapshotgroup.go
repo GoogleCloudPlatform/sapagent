@@ -167,15 +167,13 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 
 	if op.Error != nil {
 		log.CtxLogger(ctx).Errorw("CreateSG Error", "op.Error", op.Error)
-		// It's common for op.Error.Errors to be a list, but we'll simplify and use the first one if available.
-		// Or, if op.Error.Message is populated, use that.
-		errMsg := "Failed to create snapshot group."
 		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
-			errMsg = op.Error.Errors[0].Message
-		} else if op.HttpErrorStatusCode > 0 { // Check if HttpErrorStatusCode indicates an error
-			errMsg = fmt.Sprintf("Failed to create snapshot group with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+			return fmt.Errorf("error creating snapshot group: %s", op.Error.Errors[0].Message)
 		}
-		return errors.New(errMsg)
+		if op.HttpErrorStatusCode > 0 {
+			return fmt.Errorf("error creating snapshot group with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+		}
+		return errors.New("failed to create snapshot group")
 	}
 
 	log.CtxLogger(ctx).Debugw("CreateSG Operation", "operation", op)
@@ -185,8 +183,23 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 
 // GetSG gets a snapshot group.
 func (s *SGService) GetSG(ctx context.Context, project string, sgName string) (*SGItem, error) {
-	// TODO: Implement this function.
-	return nil, nil
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
+
+	var bodyBytes []byte
+	var err error
+	bodyBytes, err = s.GetResponse(ctx, "GET", s.baseURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get snapshot group, err: %w", err)
+	}
+
+	log.CtxLogger(ctx).Debugw("GetSG", "baseURL", s.baseURL, "response", string(bodyBytes))
+
+	sg := SGItem{}
+	if err := json.Unmarshal(bodyBytes, &sg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	return &sg, nil
 }
 
 // ListSGs lists snapshot groups.

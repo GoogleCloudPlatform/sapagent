@@ -194,6 +194,76 @@ func TestGetResponse(t *testing.T) {
 	}
 }
 
+func TestGetSG(t *testing.T) {
+	tests := []struct {
+		name           string
+		project        string
+		sgName         string
+		httpResponses  map[string]map[string]httpResponse
+		expectedSGItem *SGItem
+		expectedError  bool
+		tokenGetterErr error
+	}{
+		{
+			name:    "success",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 200, body: `{"name":"test-sg", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg"}`}},
+			},
+			expectedSGItem: &SGItem{
+				Name: "test-sg",
+			},
+		},
+		{
+			name:    "http_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "unmarshal_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 200, body: `invalid_json`}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			sgName:         "test-sg",
+			httpResponses:  map[string]map[string]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			sgItem, err := sgService.GetSG(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("GetSG() error = %v, wantErr %v", err, test.expectedError)
+				return
+			}
+			if diff := cmp.Diff(test.expectedSGItem, sgItem); diff != "" && !test.expectedError {
+				t.Errorf("GetSG() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestCreateSG(t *testing.T) {
 	tests := []struct {
 		name            string
