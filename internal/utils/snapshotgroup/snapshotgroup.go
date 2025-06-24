@@ -241,3 +241,35 @@ func (s *SGService) ListSGs(ctx context.Context, project string) ([]SGItem, erro
 
 	return sgs, nil
 }
+
+// WaitForSGUploadCompletion waits for the given snapshot group upload to complete.
+func (s *SGService) WaitForSGUploadCompletion(ctx context.Context, project, sgName string) error {
+	sg, err := s.GetSG(ctx, project, sgName)
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Debug("Snapshot group status:", sg.Status)
+	if sg.Status != "READY" {
+		return fmt.Errorf("snapshot group upload is still in progress, status: %s", sg.Status)
+	}
+	return nil
+}
+
+// WaitForSGUploadCompletionWithRetry waits for the given snapshot group creation operation
+// to complete with constant backoff retries.
+func (s *SGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+
+	operation := func() error {
+		return s.WaitForSGUploadCompletion(ctx, project, sgName)
+	}
+	backoffWithMaxRetries := backoff.WithMaxRetries(bo, uint64(s.maxRetries-1))
+	return backoff.Retry(operation, backoffWithMaxRetries)
+}
