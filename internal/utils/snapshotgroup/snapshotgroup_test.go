@@ -264,6 +264,86 @@ func TestGetSG(t *testing.T) {
 	}
 }
 
+func TestListSGs(t *testing.T) {
+	tests := []struct {
+		name            string
+		project         string
+		httpResponses   map[string]map[string]httpResponse
+		expectedSGItems []SGItem
+		expectedError   bool
+		tokenGetterErr  error
+	}{
+		{
+			name:    "success",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"},{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}},
+			},
+			expectedSGItems: []SGItem{
+				{Name: "test-sg1"},
+				{Name: "test-sg2"},
+			},
+		},
+		{
+			name:    "success_with_pagination",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"}], "nextPageToken":"next-page-token"}`},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {statusCode: 200, body: `{"items":[{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`},
+				},
+			},
+			expectedSGItems: []SGItem{
+				{Name: "test-sg1"},
+				{Name: "test-sg2"},
+			},
+		},
+		{
+			name:    "http_error",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "unmarshal_error",
+			project: "test-project",
+			httpResponses: map[string]map[string]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `invalid_json`}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			httpResponses:  map[string]map[string]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			sgItems, err := sgService.ListSGs(ctx, test.project)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("ListSGs() error = %v, wantErr %v", err, test.expectedError)
+				return
+			}
+			if diff := cmp.Diff(test.expectedSGItems, sgItems); diff != "" && !test.expectedError {
+				t.Errorf("ListSGs() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestCreateSG(t *testing.T) {
 	tests := []struct {
 		name            string

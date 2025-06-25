@@ -204,6 +204,40 @@ func (s *SGService) GetSG(ctx context.Context, project string, sgName string) (*
 
 // ListSGs lists snapshot groups.
 func (s *SGService) ListSGs(ctx context.Context, project string) ([]SGItem, error) {
-	// TODO: Implement this function.
-	return nil, nil
+	if s.baseURL == "" {
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
+	}
+
+	var sgs []SGItem
+	var nextPageToken string
+
+	for {
+		url := s.baseURL
+		if nextPageToken != "" {
+			url = fmt.Sprintf("%s?pageToken=%s", url, nextPageToken)
+		}
+
+		var bodyBytes []byte
+		var err error
+		// s.GetResponse returns the response body as a byte slice and handles closing the underlying http.Response.Body.
+		bodyBytes, err = s.GetResponse(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list snapshot groups, err: %w", err)
+		}
+		log.CtxLogger(ctx).Debugw("ListSGs", "url", url, "response", string(bodyBytes))
+
+		var listResponse SGListResponse
+		if err := json.Unmarshal(bodyBytes, &listResponse); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+		}
+
+		sgs = append(sgs, listResponse.Items...)
+		nextPageToken = listResponse.NextPageToken
+
+		if nextPageToken == "" {
+			break
+		}
+	}
+
+	return sgs, nil
 }
