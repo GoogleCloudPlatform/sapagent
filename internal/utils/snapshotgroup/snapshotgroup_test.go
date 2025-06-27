@@ -33,7 +33,11 @@ import (
 
 type (
 	mockHTTPClient struct {
-		responses map[string]map[string]httpResponse
+		// responses is a map of method -> URL -> slice of responses.
+		// Each call to Do will consume one response from the slice.
+		responses map[string]map[string][]httpResponse
+		// callCount tracks the number of calls for each URL and method.
+		callCount map[string]int
 	}
 	httpResponse struct {
 		statusCode int
@@ -42,14 +46,33 @@ type (
 )
 
 func (c *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	verbResponses, ok := c.responses[req.Method]
-	if !ok {
-		return nil, fmt.Errorf("unexpected verb: %s", req.Method)
+	if c.callCount == nil {
+		c.callCount = make(map[string]int)
 	}
-	resp, ok := verbResponses[req.URL.String()]
+	url := req.URL.String()
+	method := req.Method
+	key := fmt.Sprintf("%s %s", method, url)
+
+	methodResponses, ok := c.responses[method]
 	if !ok {
-		return nil, fmt.Errorf("unexpected URL: %s", req.URL.String())
+		return nil, fmt.Errorf("unexpected verb: %s for URL: %s", method, url)
 	}
+
+	responseList, ok := methodResponses[url]
+	if !ok || len(responseList) == 0 {
+		return nil, fmt.Errorf("unexpected URL: %s for verb: %s", url, method)
+	}
+
+	callIndex := c.callCount[key]
+	c.callCount[key]++
+
+	// If we've exhausted the prepared responses, just use the last one.
+	// This handles polling after a final state is reached.
+	if callIndex >= len(responseList) {
+		callIndex = len(responseList) - 1
+	}
+
+	resp := responseList[callIndex]
 	return newResponse(resp.statusCode, resp.body), nil
 }
 
@@ -119,7 +142,7 @@ func TestSetupBackoff(t *testing.T) {
 func TestGetResponse(t *testing.T) {
 	tests := []struct {
 		name           string
-		httpResponses  map[string]map[string]httpResponse
+		httpResponses  map[string]map[string][]httpResponse
 		method         string
 		url            string
 		data           []byte
@@ -129,8 +152,8 @@ func TestGetResponse(t *testing.T) {
 	}{
 		{
 			name: "success",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://test.com/success": {statusCode: 200, body: `{"key":"value"}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/success": {{statusCode: 200, body: `{"key":"value"}`}}},
 			},
 			method:       "GET",
 			url:          "https://test.com/success",
@@ -138,8 +161,8 @@ func TestGetResponse(t *testing.T) {
 		},
 		{
 			name: "http_error",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://test.com/error": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/error": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			method:        "GET",
 			url:           "https://test.com/error",
@@ -147,8 +170,8 @@ func TestGetResponse(t *testing.T) {
 		},
 		{
 			name: "unmarshal_error_generic_response",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://test.com/unmarshal_error": {statusCode: 200, body: `invalid_json`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/unmarshal_error": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			method:        "GET",
 			url:           "https://test.com/unmarshal_error",
@@ -156,8 +179,8 @@ func TestGetResponse(t *testing.T) {
 		},
 		{
 			name: "unmarshal_error_googleapi_error",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://test.com/unmarshal_google_error": {statusCode: 400, body: `{"error": "not_an_object"}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/unmarshal_google_error": {{statusCode: 400, body: `{"error": "not_an_object"}`}}},
 			},
 			method:        "GET",
 			url:           "https://test.com/unmarshal_google_error",
@@ -165,7 +188,7 @@ func TestGetResponse(t *testing.T) {
 		},
 		{
 			name:           "token_getter_error",
-			httpResponses:  map[string]map[string]httpResponse{},
+			httpResponses:  map[string]map[string][]httpResponse{},
 			method:         "GET",
 			url:            "https://test.com/any",
 			expectedError:  true,
@@ -194,12 +217,74 @@ func TestGetResponse(t *testing.T) {
 	}
 }
 
+func TestWaitForSGUploadCompletion(t *testing.T) {
+	tests := []struct {
+		name           string
+		project        string
+		sgName         string
+		httpResponses  map[string]map[string][]httpResponse
+		expectedError  bool
+		tokenGetterErr error
+	}{
+		{
+			name:    "success",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+			},
+		},
+		{
+			name:    "uploading_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "get_sg_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			sgName:         "test-sg",
+			httpResponses:  map[string]map[string][]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			err := sgService.WaitForSGUploadCompletion(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("WaitForSGUploadCompletion() error = %v, wantErr %v", err, test.expectedError)
+			}
+		})
+	}
+}
+
 func TestGetSG(t *testing.T) {
 	tests := []struct {
 		name           string
 		project        string
 		sgName         string
-		httpResponses  map[string]map[string]httpResponse
+		httpResponses  map[string]map[string][]httpResponse
 		expectedSGItem *SGItem
 		expectedError  bool
 		tokenGetterErr error
@@ -208,8 +293,8 @@ func TestGetSG(t *testing.T) {
 			name:    "success",
 			project: "test-project",
 			sgName:  "test-sg",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 200, body: `{"name":"test-sg", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg"}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg"}`}}},
 			},
 			expectedSGItem: &SGItem{
 				Name: "test-sg",
@@ -219,8 +304,8 @@ func TestGetSG(t *testing.T) {
 			name:    "http_error",
 			project: "test-project",
 			sgName:  "test-sg",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -228,8 +313,8 @@ func TestGetSG(t *testing.T) {
 			name:    "unmarshal_error",
 			project: "test-project",
 			sgName:  "test-sg",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {statusCode: 200, body: `invalid_json`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -237,7 +322,7 @@ func TestGetSG(t *testing.T) {
 			name:           "token_getter_error",
 			project:        "test-project",
 			sgName:         "test-sg",
-			httpResponses:  map[string]map[string]httpResponse{},
+			httpResponses:  map[string]map[string][]httpResponse{},
 			expectedError:  true,
 			tokenGetterErr: fmt.Errorf("token error"),
 		},
@@ -268,7 +353,7 @@ func TestListSGs(t *testing.T) {
 	tests := []struct {
 		name            string
 		project         string
-		httpResponses   map[string]map[string]httpResponse
+		httpResponses   map[string]map[string][]httpResponse
 		expectedSGItems []SGItem
 		expectedError   bool
 		tokenGetterErr  error
@@ -276,8 +361,8 @@ func TestListSGs(t *testing.T) {
 		{
 			name:    "success",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"},{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"},{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}}},
 			},
 			expectedSGItems: []SGItem{
 				{Name: "test-sg1"},
@@ -287,10 +372,10 @@ func TestListSGs(t *testing.T) {
 		{
 			name:    "success_with_pagination",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
+			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"}], "nextPageToken":"next-page-token"}`},
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {statusCode: 200, body: `{"items":[{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {{statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"}], "nextPageToken":"next-page-token"}`}},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {{statusCode: 200, body: `{"items":[{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}},
 				},
 			},
 			expectedSGItems: []SGItem{
@@ -301,23 +386,23 @@ func TestListSGs(t *testing.T) {
 		{
 			name:    "http_error",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
 		{
 			name:    "unmarshal_error",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `invalid_json`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
 		{
 			name:           "token_getter_error",
 			project:        "test-project",
-			httpResponses:  map[string]map[string]httpResponse{},
+			httpResponses:  map[string]map[string][]httpResponse{},
 			expectedError:  true,
 			tokenGetterErr: fmt.Errorf("token error"),
 		},
@@ -350,7 +435,7 @@ func TestCreateSG(t *testing.T) {
 		s               *SGService
 		project         string
 		data            []byte
-		httpResponses   map[string]map[string]httpResponse
+		httpResponses   map[string]map[string][]httpResponse
 		expectedError   bool
 		expectedBaseURL string
 	}{
@@ -358,8 +443,8 @@ func TestCreateSG(t *testing.T) {
 		{
 			name:    "error_http",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError:   true,
 			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
@@ -367,8 +452,8 @@ func TestCreateSG(t *testing.T) {
 		{
 			name:    "error_unmarshal_operation",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `invalid_json`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError:   true,
 			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
@@ -376,8 +461,8 @@ func TestCreateSG(t *testing.T) {
 		{
 			name:    "error_operation_error",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to create"}]}}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to create"}]}}`}}},
 			},
 			expectedError:   true,
 			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
@@ -385,8 +470,8 @@ func TestCreateSG(t *testing.T) {
 		{
 			name:    "error_operation_error_http_code",
 			project: "test-project",
-			httpResponses: map[string]map[string]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}},
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
 			},
 			expectedError:   true,
 			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
@@ -401,6 +486,7 @@ func TestCreateSG(t *testing.T) {
 			sgService.NewService()
 			sgService.maxRetries = 1
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
 
 			err := sgService.CreateSG(ctx, test.project, test.data)
 
