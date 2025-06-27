@@ -99,41 +99,53 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		return err
 	}
 
-	var ssOps []*snapshotOp
-	if ssOps, err = s.convertISGInstantSnapshots(ctx, cp); err != nil {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
-		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
-		if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
-			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
-		}
-		return err
-	}
-
-	if s.ConfirmDataSnapshotAfterCreate {
-		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshots are created but not yet uploaded.")
-		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
-			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
-				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
-			}
-			return err
-		}
-	}
-
-	s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
-	for _, ssOp := range ssOps {
-		if err := s.gceService.WaitForInstantSnapshotConversionCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
-			log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
-			if s.ConfirmDataSnapshotAfterCreate {
-				s.oteLogger.LogErrorToFileAndConsole(
-					ctx, fmt.Sprintf("Error uploading disk snapshot, HANA snapshot %s is not successful", snapshotID), err,
-				)
-			}
+	if s.UseSnapshotGroupWorkflow {
+		if err = s.createSnapshotGroupFromISG(ctx); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error creating snapshot group from ISG, HANA snapshot %s is not successful", snapshotID), err)
 			s.diskSnapshotFailureHandler(ctx, run, snapshotID)
-
+			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+				s.oteLogger.LogErrorToFileAndConsole(ctx, "error deleting created instant snapshot group", err)
+			}
+			return err
+		}
+		// TODO: Add Creations Completion logic.
+	} else {
+		var ssOps []*snapshotOp
+		if ssOps, err = s.convertISGInstantSnapshots(ctx, cp); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error converting instant snapshots to %s, HANA snapshot %s is not successful", strings.ToLower(s.SnapshotType), snapshotID), err)
+			s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
 				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
 			}
 			return err
+		}
+
+		if s.ConfirmDataSnapshotAfterCreate {
+			log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshots are created but not yet uploaded.")
+			if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
+				if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+					s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+				}
+				return err
+			}
+		}
+
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Waiting for disk snapshots to complete uploading.")
+		for _, ssOp := range ssOps {
+			if err := s.gceService.WaitForInstantSnapshotConversionCompletionWithRetry(ctx, ssOp.op, s.Project, s.DiskZone, ssOp.name); err != nil {
+				log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
+				if s.ConfirmDataSnapshotAfterCreate {
+					s.oteLogger.LogErrorToFileAndConsole(
+						ctx, fmt.Sprintf("Error uploading disk snapshot, HANA snapshot %s is not successful", snapshotID), err,
+					)
+				}
+				s.diskSnapshotFailureHandler(ctx, run, snapshotID)
+
+				if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
+					s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+				}
+				return err
+			}
 		}
 	}
 	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
@@ -281,6 +293,35 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 	return nil
 }
 
+func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
+	labels, err := s.createGroupBackupLabels("")
+	if err != nil {
+		return err
+	}
+	snapshotGroup := map[string]any{
+		"name":                       s.groupSnapshotName,
+		"sourceInstantSnapshotGroup": fmt.Sprintf("projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName),
+		"description":                s.Description,
+		"labels":                     labels,
+	}
+	log.CtxLogger(ctx).Infow("Snapshot group to be created: %v", snapshotGroup)
+
+	data, err := json.Marshal(snapshotGroup)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json, err: %w", err)
+	}
+
+	if err := s.sgService.CreateSG(ctx, s.Project, data); err != nil {
+		return fmt.Errorf("failed to create snapshot group for instant snapshot group %s: %w", s.groupSnapshotName, err)
+	}
+
+	if err := s.sgService.WaitForSGUploadCompletionWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Infow("Snapshot group is ready.")
+	return nil
+}
+
 func (s *Snapshot) createSnapshotName(instantSnapshotName string, timestamp string) string {
 	maxLength := 63
 	suffix := fmt.Sprintf("-%s-%s", timestamp, strings.ToLower(s.SnapshotType))
@@ -357,7 +398,9 @@ func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, erro
 	labels["goog-sapagent-version"] = strings.ReplaceAll(configuration.AgentVersion, ".", "_")
 	labels["goog-sapagent-isg"] = s.groupSnapshotName
 	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
-	labels["goog-sapagent-disk-name"] = disk
+	if disk != "" {
+		labels["goog-sapagent-disk-name"] = disk
+	}
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
 

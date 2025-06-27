@@ -52,6 +52,24 @@ type mockISGService struct {
 	waitForISGUploadCompletionWithRetryErr error
 }
 
+type mockSGService struct {
+	newServiceErr                         error
+	createSGErr                           error
+	waitForSGUploadCompletionWithRetryErr error
+}
+
+func (m *mockSGService) NewService() error {
+	return m.newServiceErr
+}
+
+func (m *mockSGService) CreateSG(ctx context.Context, project string, data []byte) error {
+	return m.createSGErr
+}
+
+func (m *mockSGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
+	return m.waitForSGUploadCompletionWithRetryErr
+}
+
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	return m.createISGError
 }
@@ -1055,6 +1073,66 @@ func TestGenerateSHA(t *testing.T) {
 			got := generateSHA(tc.labels)
 			if got != tc.want {
 				t.Errorf("generateSHA(%v) = %q, want: %q", tc.labels, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateSnapshotGroupFromISG(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       *Snapshot
+		wantErr error
+	}{
+		{
+			name: "Success",
+			s: &Snapshot{
+				groupSnapshotName: "test-sg",
+				Project:           "test-project",
+				DiskZone:          "test-zone",
+				Description:       "test-description",
+				sgService: &mockSGService{
+					createSGErr: nil,
+				},
+				groupSnapshot: true,
+			},
+			wantErr: nil,
+		},
+		{
+			name: "CreateSGFailure",
+			s: &Snapshot{
+				groupSnapshotName: "test-sg",
+				Project:           "test-project",
+				DiskZone:          "test-zone",
+				Description:       "test-description",
+				sgService: &mockSGService{
+					createSGErr: cmpopts.AnyError,
+				},
+				groupSnapshot: true,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "WaitForSGCreationFailure",
+			s: &Snapshot{
+				groupSnapshotName: "test-sg",
+				Project:           "test-project",
+				DiskZone:          "test-zone",
+				Description:       "test-description",
+				sgService: &mockSGService{
+					waitForSGUploadCompletionWithRetryErr: cmpopts.AnyError,
+				},
+				groupSnapshot: true,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.s.createSnapshotGroupFromISG(context.Background())
+			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createSnapshotGroupFromISG() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

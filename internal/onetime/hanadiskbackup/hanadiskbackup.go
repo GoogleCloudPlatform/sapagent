@@ -39,6 +39,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
@@ -97,6 +98,13 @@ type (
 		WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error
 	}
 
+	// SGInterface is the testable equivalent for SGService for SG operations.
+	SGInterface interface {
+		NewService() error
+		CreateSG(ctx context.Context, project string, data []byte) error
+		WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error
+	}
+
 	snapshotOp struct {
 		op   *compute.Operation
 		name string
@@ -149,6 +157,7 @@ type Snapshot struct {
 	gceService                             gceInterface
 	computeService                         *compute.Service
 	isgService                             ISGInterface
+	sgService                              SGInterface
 	status                                 bool
 	timeSeriesCreator                      cloudmonitoring.TimeSeriesCreator
 	help                                   bool
@@ -166,6 +175,8 @@ type Snapshot struct {
 	groupSnapshot                          bool
 	provisionedIops, provisionedThroughput int64
 	oteLogger                              *onetime.OTELogger
+	// TODO: Remove this flag once the feature is stable.
+	UseSnapshotGroupWorkflow bool `json:"use-snapshot-group-workflow,string"`
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -229,6 +240,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
 	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
 	fs.StringVar(&s.groupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to '<consistency-group-name>-yyyymmdd-hhmmss'.)")
+	fs.BoolVar(&s.UseSnapshotGroupWorkflow, "use-snapshot-group-workflow", false, "Use snapshot group workflow for creating snapshots. (optional) Default: false")
 }
 
 // Execute implements the subcommand interface for hanadiskbackup.
@@ -420,6 +432,14 @@ func (s *Snapshot) validateScaleoutDisks(ctx context.Context, cp *ipb.CloudPrope
 		return errMessage, subcommands.ExitFailure
 	}
 
+	if s.UseSnapshotGroupWorkflow {
+		s.sgService = &snapshotgroup.SGService{}
+		if err := s.sgService.NewService(); err != nil {
+			errMessage := "ERROR: Failed to create Snapshot Group service"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
+	}
 	s.isgService = &instantsnapshotgroup.ISGService{}
 	if err := s.isgService.NewService(); err != nil {
 		errMessage := "ERROR: Failed to create Instant Snapshot Group service"
@@ -506,6 +526,14 @@ func (s *Snapshot) verifyStriping(ctx context.Context, exec commandlineexecutor.
 		return errMessage, subcommands.ExitFailure
 	}
 
+	if s.UseSnapshotGroupWorkflow {
+		s.sgService = &snapshotgroup.SGService{}
+		if err := s.sgService.NewService(); err != nil {
+			errMessage := "ERROR: Failed to create Snapshot Group service"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
+	}
 	s.isgService = &instantsnapshotgroup.ISGService{}
 	if err := s.isgService.NewService(); err != nil {
 		errMessage := "ERROR: Failed to create Instant Snapshot Group service"
