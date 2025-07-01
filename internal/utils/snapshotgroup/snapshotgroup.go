@@ -110,6 +110,11 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 		return nil, fmt.Errorf("failed to get response, err: %w", err)
 	}
 
+	op := &compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, op); err == nil && op.Error != nil {
+		return nil, fmt.Errorf("Failed to unmarshal compute.Operation: %w", err)
+	}
+
 	var genericResponse map[string]any
 	if err = json.Unmarshal(bodyBytes, &genericResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
@@ -179,6 +184,61 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 	log.CtxLogger(ctx).Debugw("CreateSG Operation", "operation", op)
 
 	return nil
+}
+
+// BulkInsertFromSG creates disks from a snapshot group.
+func (s *SGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks/bulkInsert", project, zone)
+
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+
+	var i int
+	var bodyBytes []byte
+	var err error
+	if err = backoff.Retry(func() error {
+		var getResponseErr error
+		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
+		if getResponseErr != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
+			return getResponseErr
+		}
+
+		return nil
+	}, bo); err != nil {
+		return nil, fmt.Errorf("failed to initiate bulk insert from group snapshot, err: %w", err)
+	}
+
+	log.CtxLogger(ctx).Debugw("BulkInsertFromSG", "baseURL", s.baseURL, "data", string(data), "response", string(bodyBytes))
+
+	op := &compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, op); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("BulkInsertFromSG Error", "op.Error", op.Error)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return nil, fmt.Errorf("error bulk inserting from snapshot group: %s", op.Error.Errors[0].Message)
+		}
+		if op.HttpErrorStatusCode > 0 {
+			return nil, fmt.Errorf("error bulk inserting from snapshot group with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+		}
+		return nil, errors.New("failed to bulk insert from snapshot group")
+	}
+
+	log.CtxLogger(ctx).Debugw("BulkInsertFromSG Operation", "operation", op)
+
+	return op, nil
 }
 
 // GetSG gets a snapshot group.

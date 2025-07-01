@@ -28,6 +28,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/api/compute/v1"
 	"golang.org/x/oauth2"
 )
 
@@ -194,6 +195,15 @@ func TestGetResponse(t *testing.T) {
 			expectedError:  true,
 			tokenGetterErr: fmt.Errorf("token error"),
 		},
+		{
+			name: "op_with_error_success",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://test.com/op_with_error": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to bulk insert"}]}}`}}},
+			},
+			method:        "POST",
+			url:           "https://test.com/op_with_error",
+			expectedError: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -212,6 +222,105 @@ func TestGetResponse(t *testing.T) {
 			}
 			if err == nil && string(body) != test.expectedBody {
 				t.Errorf("GetResponse() body = %s, want %s", string(body), test.expectedBody)
+			}
+		})
+	}
+}
+
+func TestBulkInsertFromSG(t *testing.T) {
+	tests := []struct {
+		name              string
+		project           string
+		zone              string
+		data              []byte
+		httpResponses     map[string]map[string][]httpResponse
+		expectedOperation *compute.Operation
+		expectedError     bool
+		tokenGetterErr    error
+	}{
+		{
+			name:    "success",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
+			},
+			expectedOperation: &compute.Operation{
+				Name:   "operation-123",
+				Status: "RUNNING",
+			},
+		},
+		{
+			name:    "http_error",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "api_error",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to bulk insert"}]}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "api_error_with_http_code",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "api_error_no_details",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "unmarshal_error",
+			project: "test-project",
+			zone:    "test-zone",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `invalid_json`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			zone:           "test-zone",
+			httpResponses:  map[string]map[string][]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.maxRetries = 1
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			op, err := sgService.BulkInsertFromSG(ctx, test.project, test.zone, test.data)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("BulkInsertFromSG() error = %v, wantErr %v", err, test.expectedError)
+			}
+			if diff := cmp.Diff(test.expectedOperation, op); diff != "" && !test.expectedError {
+				t.Errorf("BulkInsertFromSG() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
