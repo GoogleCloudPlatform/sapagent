@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
@@ -76,6 +77,13 @@ type (
 		RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
 		SetLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error)
 	}
+
+	// SGInterface is the testable equivalent for snapshotgroup.SGService.
+	SGInterface interface {
+		NewService() error
+		BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error)
+		GetSG(ctx context.Context, project, sgName string) (*snapshotgroup.SGItem, error)
+	}
 )
 
 const (
@@ -101,6 +109,7 @@ type (
 		DataDiskVG                                                 string
 		gceService                                                 gceInterface
 		computeService                                             *compute.Service
+		sgService                                                  SGInterface
 		cgName                                                     string
 		baseDataPath, baseLogPath                                  string
 		logicalDataPath, logicalLogPath                            string
@@ -121,6 +130,8 @@ type (
 		ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 		IIOTEParams                                                *onetime.InternallyInvokedOTE
 		oteLogger                                                  *onetime.OTELogger
+		// TODO: Remove this flag once the feature is stable.
+		UseSnapshotGroupWorkflow bool
 	}
 )
 
@@ -174,6 +185,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanadiskrestore.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
+	fs.BoolVar(&r.UseSnapshotGroupWorkflow, "use-snapshot-group-workflow", false, "Use snapshot group workflow for creating snapshots. (optional) Default: false")
 }
 
 // Execute implements the subcommand interface for hanadiskrestore.
@@ -300,6 +312,14 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		}
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestoreSucceeded)
 	} else {
+		if r.UseSnapshotGroupWorkflow {
+			r.sgService = &snapshotgroup.SGService{}
+			if err := r.sgService.NewService(); err != nil {
+				errMessage := "ERROR: Failed to create Snapshot Group service"
+				r.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return subcommands.ExitFailure
+			}
+		}
 		if err := r.groupRestore(ctx, cp); err != nil {
 			return subcommands.ExitFailure
 		}

@@ -46,20 +46,28 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 		snapShotKey = key
 	}
 
-	if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
-		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
-		for _, d := range r.disks {
-			if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
-				r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
-			} else {
-				if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, true); modifyCGErr != nil {
-					log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.disk.DiskName)
-					r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
+	if r.UseSnapshotGroupWorkflow {
+		// Check if snapshot group exists
+		if _, err := r.sgService.GetSG(ctx, r.Project, r.GroupSnapshot); err != nil {
+			return fmt.Errorf("failed to get snapshot group %s: %w", r.GroupSnapshot, err)
+		}
+		// TODO: Add logic around bulk insert api of snapshot group.
+	} else {
+		if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
+			for _, d := range r.disks {
+				if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
+					r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
+				} else {
+					if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, true); modifyCGErr != nil {
+						log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.disk.DiskName)
+						r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
+					}
 				}
 			}
+			hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
+			return err
 		}
-		hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
-		return err
 	}
 
 	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
