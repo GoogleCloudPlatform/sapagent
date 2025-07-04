@@ -32,6 +32,7 @@ import (
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	cmFake "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
@@ -40,6 +41,27 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
+
+type fakeSGService struct {
+	ListSnapshotsFromSGErr  error
+	ListSnapshotsFromSGResp []snapshotgroup.SnapshotItem
+}
+
+func (f *fakeSGService) NewService() error {
+	return nil
+}
+
+func (f *fakeSGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
+	return nil, nil
+}
+
+func (f *fakeSGService) GetSG(ctx context.Context, project, sgName string) (*snapshotgroup.SGItem, error) {
+	return nil, nil
+}
+
+func (f *fakeSGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error) {
+	return f.ListSnapshotsFromSGResp, f.ListSnapshotsFromSGErr
+}
 
 type fakeDiskMapper struct {
 	deviceName []string
@@ -1373,6 +1395,64 @@ func TestPrepare(t *testing.T) {
 			got := test.r.prepare(context.Background(), test.cp, test.waitForIndexServerStop, test.exec)
 			if diff := cmp.Diff(got, test.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("prepare() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestVerifySnapshotPresence(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr error
+	}{
+		{
+			name: "GroupSnapshotWorkflowWithListErr",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotWorkflowSnapshotMismatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					&multiDisks{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotWorkflowSuccess",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					&multiDisks{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						snapshotgroup.SnapshotItem{},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.verifySnapshotPresence(context.Background())
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("verifySnapshotPresence() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -83,6 +83,7 @@ type (
 		NewService() error
 		BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error)
 		GetSG(ctx context.Context, project, sgName string) (*snapshotgroup.SGItem, error)
+		ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error)
 	}
 )
 
@@ -278,6 +279,15 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		return subcommands.ExitFailure
 	}
 
+	if r.UseSnapshotGroupWorkflow {
+		r.sgService = &snapshotgroup.SGService{}
+		if err := r.sgService.NewService(); err != nil {
+			errMessage := "ERROR: Failed to create Snapshot Group service"
+			r.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return subcommands.ExitFailure
+		}
+	}
+
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
 	r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestore)
 
@@ -312,14 +322,6 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		}
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestoreSucceeded)
 	} else {
-		if r.UseSnapshotGroupWorkflow {
-			r.sgService = &snapshotgroup.SGService{}
-			if err := r.sgService.NewService(); err != nil {
-				errMessage := "ERROR: Failed to create Snapshot Group service"
-				r.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return subcommands.ExitFailure
-			}
-		}
 		if err := r.groupRestore(ctx, cp); err != nil {
 			return subcommands.ExitFailure
 		}
@@ -603,31 +605,8 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	}
 
 	// Verify the snapshot is present.
-	if !r.isGroupSnapshot {
-		if r.computeService == nil {
-			return fmt.Errorf("compute service is nil")
-		}
-		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
-		if err != nil {
-			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
-		}
-		r.extractLabels(ctx, snapshot)
-	} else {
-		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
-		if err != nil {
-			return fmt.Errorf("failed to list snapshots: %v", err)
-		}
-
-		var numOfSnapshots int
-		for _, snapshot := range snapshotList.Items {
-			if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
-				r.extractLabels(ctx, snapshot)
-				numOfSnapshots++
-			}
-		}
-		if numOfSnapshots != len(r.disks) {
-			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), numOfSnapshots)
-		}
+	if err := r.verifySnapshotPresence(ctx); err != nil {
+		return err
 	}
 
 	if r.isGroupSnapshot && r.NewDiskPrefix != "" {
@@ -664,6 +643,49 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		return err
 	}
 
+	return nil
+}
+
+// verifySnapshotPresence checks if the source snapshot(s) exist and extracts labels.
+func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
+	if !r.isGroupSnapshot {
+		if r.computeService == nil {
+			return fmt.Errorf("compute service is nil")
+		}
+		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+		if err != nil {
+			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
+		}
+		r.extractLabels(ctx, snapshot)
+		return nil
+	}
+
+	// Group snapshot workflow
+	if r.UseSnapshotGroupWorkflow {
+		snapshotItems, err := r.sgService.ListSnapshotsFromSG(ctx, r.Project, r.GroupSnapshot)
+		if err != nil {
+			return fmt.Errorf("failed to list snapshots from snapshot group: %v", err)
+		}
+		if len(snapshotItems) != len(r.disks) {
+			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), len(snapshotItems))
+		}
+	} else {
+		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
+		if err != nil {
+			return fmt.Errorf("failed to list snapshots: %v", err)
+		}
+
+		var numOfSnapshots int
+		for _, snapshot := range snapshotList.Items {
+			if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
+				r.extractLabels(ctx, snapshot)
+				numOfSnapshots++
+			}
+		}
+		if numOfSnapshots != len(r.disks) {
+			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), numOfSnapshots)
+		}
+	}
 	return nil
 }
 
