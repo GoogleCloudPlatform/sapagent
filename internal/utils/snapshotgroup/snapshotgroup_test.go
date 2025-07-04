@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -604,6 +605,92 @@ func TestCreateSG(t *testing.T) {
 			}
 			if sgService.baseURL != test.expectedBaseURL {
 				t.Errorf("CreateSG() baseURL = %s, want %s", sgService.baseURL, test.expectedBaseURL)
+			}
+		})
+	}
+}
+
+func TestListSnapshotsFromSG(t *testing.T) {
+	tests := []struct {
+		name                  string
+		project               string
+		sgName                string
+		httpResponses         map[string]map[string][]httpResponse
+		expectedSnapshotItems []SnapshotItem
+		expectedError         bool
+		tokenGetterErr        error
+	}{
+		{
+			name:    "success",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"},{"name":"test-snapshot2"}]}`}}},
+			},
+			expectedSnapshotItems: []SnapshotItem{
+				{Name: "test-snapshot1"},
+				{Name: "test-snapshot2"},
+			},
+		},
+		{
+			name:    "success_with_pagination",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {
+					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"}], "nextPageToken":"next-page-token"}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s&pageToken=next-page-token", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot2"}]}`}},
+				},
+			},
+			expectedSnapshotItems: []SnapshotItem{
+				{Name: "test-snapshot1"},
+				{Name: "test-snapshot2"},
+			},
+		},
+		{
+			name:    "http_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "unmarshal_error",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `invalid_json`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			sgName:         "test-sg",
+			httpResponses:  map[string]map[string][]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			snapshotItems, err := sgService.ListSnapshotsFromSG(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("ListSnapshotsFromSG() error = %v, wantErr %v", err, test.expectedError)
+				return
+			}
+			if diff := cmp.Diff(test.expectedSnapshotItems, snapshotItems); diff != "" && !test.expectedError {
+				t.Errorf("ListSnapshotsFromSG() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

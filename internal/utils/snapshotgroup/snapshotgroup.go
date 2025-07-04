@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -76,6 +77,40 @@ type (
 	SGSourceInstantSnapshotGroupInfo struct {
 		InstantSnapshotGroup   string `json:"instantSnapshotGroup"`
 		InstantSnapshotGroupId string `json:"instantSnapshotGroupId"`
+	}
+
+	// SnapshotItem represents a single snapshot item in the list.
+	SnapshotItem struct {
+		Kind                      string   `json:"kind"`
+		ID                        string   `json:"id"`
+		CreationTimestamp         string   `json:"creationTimestamp"`
+		Name                      string   `json:"name"`
+		Status                    string   `json:"status"`
+		SourceDisk                string   `json:"sourceDisk"`
+		SourceDiskID              string   `json:"sourceDiskID"`
+		DiskSizeGb                string   `json:"diskSizeGb"`
+		StorageBytes              string   `json:"storageBytes"`
+		StorageBytesStatus        string   `json:"storageBytesStatus"`
+		SelfLink                  string   `json:"selfLink"`
+		SelfLinkWithID            string   `json:"selfLinkWithID"`
+		LabelFingerprint          string   `json:"labelFingerprint"`
+		StorageLocations          []string `json:"storageLocations"`
+		DownloadBytes             string   `json:"downloadBytes"`
+		SourceInstantSnapshot     string   `json:"sourceInstantSnapshot"`
+		SourceInstantSnapshotID   string   `json:"sourceInstantSnapshotID"`
+		CreationSizeBytes         string   `json:"creationSizeBytes"`
+		EnableConfidentialCompute bool     `json:"enableConfidentialCompute"`
+		SnapshotGroupName         string   `json:"snapshotGroupName"`
+		SnapshotGroupID           string   `json:"snapshotGroupID"`
+	}
+
+	// SnapshotListResponse represents the response of a list snapshots request.
+	SnapshotListResponse struct {
+		Kind          string         `json:"kind"`
+		ID            string         `json:"id"`
+		Items         []SnapshotItem `json:"items"`
+		SelfLink      string         `json:"selfLink"`
+		NextPageToken string         `json:"nextPageToken"`
 	}
 )
 
@@ -332,4 +367,42 @@ func (s *SGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, proj
 	}
 	backoffWithMaxRetries := backoff.WithMaxRetries(bo, uint64(s.maxRetries-1))
 	return backoff.Retry(operation, backoffWithMaxRetries)
+}
+
+// ListSnapshotsFromSG lists snapshots for a given snapshot group.
+func (s *SGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]SnapshotItem, error) {
+	filterValue := fmt.Sprintf(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s"`, project, sgName)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshots?filter=%s", project, url.QueryEscape(filterValue))
+
+	var snaps []SnapshotItem
+	var nextPageToken string
+
+	for {
+		url := s.baseURL
+		if nextPageToken != "" {
+			url = fmt.Sprintf("%s&pageToken=%s", url, nextPageToken)
+		}
+
+		var bodyBytes []byte
+		var err error
+		bodyBytes, err = s.GetResponse(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list snapshots for snapshot group %s, err: %w", sgName, err)
+		}
+		log.CtxLogger(ctx).Debugw("ListSnapshotsFromSG", "url", url, "response", string(bodyBytes))
+
+		var listResponse SnapshotListResponse
+		if err := json.Unmarshal(bodyBytes, &listResponse); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+		}
+
+		snaps = append(snaps, listResponse.Items...)
+		nextPageToken = listResponse.NextPageToken
+
+		if nextPageToken == "" {
+			break
+		}
+	}
+
+	return snaps, nil
 }
