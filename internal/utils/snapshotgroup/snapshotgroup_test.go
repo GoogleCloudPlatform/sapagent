@@ -695,3 +695,95 @@ func TestListSnapshotsFromSG(t *testing.T) {
 		})
 	}
 }
+
+func TestListDisksFromSnapshot(t *testing.T) {
+	tests := []struct {
+		name              string
+		project           string
+		zone              string
+		snapshotName      string
+		httpResponses     map[string]map[string][]httpResponse
+		expectedDiskItems []DiskItem
+		expectedError     bool
+		tokenGetterErr    error
+	}{
+		{
+			name:         "success",
+			project:      "test-project",
+			zone:         "test-zone",
+			snapshotName: "test-snapshot",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk1"},{"name":"test-disk2"}]}`}}},
+			},
+			expectedDiskItems: []DiskItem{
+				{Name: "test-disk1"},
+				{Name: "test-disk2"},
+			},
+		},
+		{
+			name:         "success_with_pagination",
+			project:      "test-project",
+			zone:         "test-zone",
+			snapshotName: "test-snapshot",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {
+					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-disk1"}], "nextPageToken":"next-page-token"}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s&pageToken=next-page-token", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk2"}]}`}},
+				},
+			},
+			expectedDiskItems: []DiskItem{
+				{Name: "test-disk1"},
+				{Name: "test-disk2"},
+			},
+		},
+		{
+			name:         "http_error",
+			project:      "test-project",
+			zone:         "test-zone",
+			snapshotName: "test-snapshot",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:         "unmarshal_error",
+			project:      "test-project",
+			zone:         "test-zone",
+			snapshotName: "test-snapshot",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `invalid_json`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:           "token_getter_error",
+			project:        "test-project",
+			zone:           "test-zone",
+			snapshotName:   "test-snapshot",
+			httpResponses:  map[string]map[string][]httpResponse{},
+			expectedError:  true,
+			tokenGetterErr: fmt.Errorf("token error"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+
+			diskItems, err := sgService.ListDisksFromSnapshot(ctx, test.project, test.zone, test.snapshotName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("ListDisksFromSnapshot() error = %v, wantErr %v", err, test.expectedError)
+				return
+			}
+			if diff := cmp.Diff(test.expectedDiskItems, diskItems); diff != "" && !test.expectedError {
+				t.Errorf("ListDisksFromSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

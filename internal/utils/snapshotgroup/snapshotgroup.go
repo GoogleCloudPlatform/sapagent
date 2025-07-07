@@ -112,6 +112,30 @@ type (
 		SelfLink      string         `json:"selfLink"`
 		NextPageToken string         `json:"nextPageToken"`
 	}
+
+	// DiskItem represents a single disk item in the list.
+	DiskItem struct {
+		Kind              string `json:"kind"`
+		ID                string `json:"id"`
+		CreationTimestamp string `json:"creationTimestamp"`
+		Name              string `json:"name"`
+		Status            string `json:"status"`
+		Zone              string `json:"zone"`
+		SizeGb            string `json:"sizeGb"`
+		SourceSnapshot    string `json:"sourceSnapshot"`
+		SourceSnapshotID  string `json:"sourceSnapshotId"`
+		SelfLink          string `json:"selfLink"`
+		SelfLinkWithID    string `json:"selfLinkWithId"`
+	}
+
+	// DiskListResponse represents the response of a list disks request.
+	DiskListResponse struct {
+		Kind          string     `json:"kind"`
+		ID            string     `json:"id"`
+		Items         []DiskItem `json:"items"`
+		SelfLink      string     `json:"selfLink"`
+		NextPageToken string     `json:"nextPageToken"`
+	}
 )
 
 func setupBackoff() *backoff.ExponentialBackOff {
@@ -405,4 +429,42 @@ func (s *SGService) ListSnapshotsFromSG(ctx context.Context, project, sgName str
 	}
 
 	return snaps, nil
+}
+
+// ListDisksFromSnapshot lists disks restored from a given standard snapshot.
+func (s *SGService) ListDisksFromSnapshot(ctx context.Context, project, zone, snapshotName string) ([]DiskItem, error) {
+	filterValue := fmt.Sprintf(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/%s/global/snapshots/%s"`, project, snapshotName)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks?filter=%s", project, zone, url.QueryEscape(filterValue))
+
+	var disks []DiskItem
+	var nextPageToken string
+
+	for {
+		url := s.baseURL
+		if nextPageToken != "" {
+			url = fmt.Sprintf("%s&pageToken=%s", url, nextPageToken)
+		}
+
+		var bodyBytes []byte
+		var err error
+		bodyBytes, err = s.GetResponse(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list disks for snapshot %s, err: %w", snapshotName, err)
+		}
+		log.CtxLogger(ctx).Debugw("ListDisksFromSnapshot", "url", url, "response", string(bodyBytes))
+
+		var listResponse DiskListResponse
+		if err := json.Unmarshal(bodyBytes, &listResponse); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
+		}
+
+		disks = append(disks, listResponse.Items...)
+		nextPageToken = listResponse.NextPageToken
+
+		if nextPageToken == "" {
+			break
+		}
+	}
+
+	return disks, nil
 }
