@@ -410,6 +410,7 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	if err != nil && runtime.GOOS == "linux" {
 		log.CtxLogger(ctx).Errorw("Could not fetch kernel version", "error", err)
 	}
+	agentStatus.InstanceUri = fmt.Sprintf("projects/%s/zones/%s/instances/%s", s.CloudProps.GetProjectId(), s.CloudProps.GetZone(), s.CloudProps.GetInstanceId())
 
 	return agentStatus, config
 }

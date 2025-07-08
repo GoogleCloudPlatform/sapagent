@@ -1288,6 +1288,7 @@ func TestStatusHandler(t *testing.T) {
 				ConfigurationValid:              spb.State_SUCCESS_STATE,
 				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
 				KernelVersion:                   &spb.KernelVersion{RawString: "enabled"},
+				InstanceUri:                     "projects//zones//instances/",
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Host Metrics",
@@ -1429,7 +1430,10 @@ func TestStatusHandler(t *testing.T) {
 					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
 				},
 				CloudProps: &iipb.CloudProperties{
-					Scopes: []string{},
+					Scopes:     []string{},
+					InstanceId: "instance-id",
+					ProjectId:  "project-id",
+					Zone:       "zone-id",
 				},
 				stat: func(name string) (os.FileInfo, error) {
 					return &mockFileInfo{perm: 0400}, nil
@@ -1460,6 +1464,7 @@ func TestStatusHandler(t *testing.T) {
 				ConfigurationFilePath:           configuration.LinuxConfigPath,
 				ConfigurationValid:              spb.State_SUCCESS_STATE,
 				CloudApiAccessFullScopesGranted: spb.State_FAILURE_STATE,
+				InstanceUri:                     "projects/project-id/zones/zone-id/instances/instance-id",
 				Services: []*spb.ServiceStatus{
 					{
 						Name:            "Host Metrics",

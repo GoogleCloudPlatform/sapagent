@@ -18,10 +18,10 @@ require (
   cloud.google.com/go/storage v1.50.0
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250602170558-ba7ba33eb91b
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250708193908-d263b695432a
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250602170558-ba7ba33eb91b
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250708193908-d263b695432a
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.52.1
