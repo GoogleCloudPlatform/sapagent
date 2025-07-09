@@ -56,6 +56,7 @@ type mockSGService struct {
 	newServiceErr                         error
 	createSGErr                           error
 	waitForSGUploadCompletionWithRetryErr error
+	waitForSGCreationWithRetryErr         error
 }
 
 func (m *mockSGService) NewService() error {
@@ -68,6 +69,10 @@ func (m *mockSGService) CreateSG(ctx context.Context, project string, data []byt
 
 func (m *mockSGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
 	return m.waitForSGUploadCompletionWithRetryErr
+}
+
+func (m *mockSGService) WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error {
+	return m.waitForSGCreationWithRetryErr
 }
 
 func (m *mockISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
@@ -1092,7 +1097,8 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 				DiskZone:          "test-zone",
 				Description:       "test-description",
 				sgService: &mockSGService{
-					createSGErr: nil,
+					createSGErr:                   nil,
+					waitForSGCreationWithRetryErr: nil,
 				},
 				groupSnapshot: true,
 			},
@@ -1120,7 +1126,7 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 				DiskZone:          "test-zone",
 				Description:       "test-description",
 				sgService: &mockSGService{
-					waitForSGUploadCompletionWithRetryErr: cmpopts.AnyError,
+					waitForSGCreationWithRetryErr: cmpopts.AnyError,
 				},
 				groupSnapshot: true,
 			},

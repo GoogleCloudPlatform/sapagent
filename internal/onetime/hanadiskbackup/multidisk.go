@@ -108,7 +108,9 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 			}
 			return err
 		}
-		// TODO: Add Creations Completion logic.
+		if err := s.sgService.WaitForSGUploadCompletionWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
+			return err
+		}
 	} else {
 		var ssOps []*snapshotOp
 		if ssOps, err = s.convertISGInstantSnapshots(ctx, cp); err != nil {
@@ -315,7 +317,7 @@ func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
 		return fmt.Errorf("failed to create snapshot group for instant snapshot group %s: %w", s.groupSnapshotName, err)
 	}
 
-	if err := s.sgService.WaitForSGUploadCompletionWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
+	if err := s.sgService.WaitForSGCreationWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
 		return err
 	}
 	log.CtxLogger(ctx).Infow("Snapshot group is ready.")

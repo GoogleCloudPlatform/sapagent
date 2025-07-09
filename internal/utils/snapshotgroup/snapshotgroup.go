@@ -393,6 +393,38 @@ func (s *SGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, proj
 	return backoff.Retry(operation, backoffWithMaxRetries)
 }
 
+// WaitForSGCreation waits for the given snapshot group to be created.
+func (s *SGService) WaitForSGCreation(ctx context.Context, project, sgName string) error {
+	sg, err := s.GetSG(ctx, project, sgName)
+	if err != nil {
+		return err
+	}
+	log.CtxLogger(ctx).Debug("Snapshot group status:", sg.Status)
+	if sg.Status == "CREATING" {
+		return fmt.Errorf("snapshot group creation is still in progress, status: %s", sg.Status)
+	}
+	return nil
+}
+
+// WaitForSGCreationWithRetry waits for the given snapshot group creation to complete with
+// constant backoff retries. The retry will stop once the status is not "CREATING".
+func (s *SGService) WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error {
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+
+	operation := func() error {
+		return s.WaitForSGCreation(ctx, project, sgName)
+	}
+	backoffWithMaxRetries := backoff.WithMaxRetries(bo, uint64(s.maxRetries-1))
+	return backoff.Retry(operation, backoffWithMaxRetries)
+}
+
 // ListSnapshotsFromSG lists snapshots for a given snapshot group.
 func (s *SGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]SnapshotItem, error) {
 	filterValue := fmt.Sprintf(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s"`, project, sgName)
