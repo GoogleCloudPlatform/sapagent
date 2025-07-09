@@ -45,6 +45,10 @@ import (
 type fakeSGService struct {
 	ListSnapshotsFromSGErr  error
 	ListSnapshotsFromSGResp []snapshotgroup.SnapshotItem
+	GetSGErr                error
+	GetSGResp               *snapshotgroup.SGItem
+	BulkInsertFromSGErr     error
+	ListDisksFromSnapshotFn func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error)
 }
 
 func (f *fakeSGService) NewService() error {
@@ -52,15 +56,22 @@ func (f *fakeSGService) NewService() error {
 }
 
 func (f *fakeSGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
-	return nil, nil
+	return nil, f.BulkInsertFromSGErr
 }
 
 func (f *fakeSGService) GetSG(ctx context.Context, project, sgName string) (*snapshotgroup.SGItem, error) {
-	return nil, nil
+	return f.GetSGResp, f.GetSGErr
 }
 
 func (f *fakeSGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error) {
 	return f.ListSnapshotsFromSGResp, f.ListSnapshotsFromSGErr
+}
+
+func (f *fakeSGService) ListDisksFromSnapshot(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+	if f.ListDisksFromSnapshotFn != nil {
+		return f.ListDisksFromSnapshotFn(ctx, project, zone, snapshot)
+	}
+	return nil, nil
 }
 
 type fakeDiskMapper struct {

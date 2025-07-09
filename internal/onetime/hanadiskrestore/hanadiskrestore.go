@@ -84,6 +84,7 @@ type (
 		BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error)
 		GetSG(ctx context.Context, project, sgName string) (*snapshotgroup.SGItem, error)
 		ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error)
+		ListDisksFromSnapshot(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error)
 	}
 )
 
@@ -133,6 +134,7 @@ type (
 		oteLogger                                                  *onetime.OTELogger
 		// TODO: Remove this flag once the feature is stable.
 		UseSnapshotGroupWorkflow bool
+		snapshotItems            []snapshotgroup.SnapshotItem
 	}
 )
 
@@ -662,13 +664,14 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 
 	// Group snapshot workflow
 	if r.UseSnapshotGroupWorkflow {
-		snapshotItems, err := r.sgService.ListSnapshotsFromSG(ctx, r.Project, r.GroupSnapshot)
+		sItems, err := r.sgService.ListSnapshotsFromSG(ctx, r.Project, r.GroupSnapshot)
 		if err != nil {
 			return fmt.Errorf("failed to list snapshots from snapshot group: %v", err)
 		}
-		if len(snapshotItems) != len(r.disks) {
-			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), len(snapshotItems))
+		if len(sItems) != len(r.disks) {
+			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), len(sItems))
 		}
+		r.snapshotItems = sItems
 	} else {
 		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
 		if err != nil {

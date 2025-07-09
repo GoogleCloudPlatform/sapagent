@@ -19,11 +19,13 @@ package hanadiskrestore
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
@@ -1133,6 +1135,212 @@ func TestScaleoutDisksAttachedToInstanceErrors(t *testing.T) {
 			gotErr := tc.r.scaleoutDisksAttachedToInstance(ctx, tc.cp)
 			if diff := cmp.Diff(gotErr, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("scaleoutDisksAttachedToInstance()=%v, want=%v, diff=%v", gotErr, tc.wantErr, diff)
+			}
+		})
+	}
+}
+
+func TestGroupRestoreWithSGWorkflow(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr error
+	}{
+		{
+			name: "GetSGErr",
+			r: &Restorer{
+				sgService: &fakeSGService{
+					GetSGErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SGNotFound",
+			r: &Restorer{
+				sgService: &fakeSGService{},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "BulkInsertErr",
+			r: &Restorer{
+				sgService: &fakeSGService{
+					GetSGResp:           &snapshotgroup.SGItem{},
+					BulkInsertFromSGErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ListDiskErr",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return nil, cmpopts.AnyError
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr: nil,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoDiskFound",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return nil, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr: nil,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "AttachDiskErr",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				disks: []*multiDisks{
+					{disk: &ipb.Disk{DiskName: "source-disk-1"}, instanceName: "instance-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:     nil,
+					AttachDiskErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CouldNotFindInstance",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				disks: []*multiDisks{
+					{disk: &ipb.Disk{DiskName: "random-disk"}, instanceName: "instance-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:     nil,
+					AttachDiskErr: nil,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DiskAttachedToInstanceErr",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				disks: []*multiDisks{
+					{disk: &ipb.Disk{DiskName: "source-disk-1"}, instanceName: "instance-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DiskNotAttached",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				disks: []*multiDisks{
+					{disk: &ipb.Disk{DiskName: "source-disk-1"}, instanceName: "instance-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            false,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				disks: []*multiDisks{
+					{disk: &ipb.Disk{DiskName: "source-disk-1"}, instanceName: "instance-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					AddResourcePoliciesErr:    nil,
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.groupRestoreWithSGWorkflow(context.Background())
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

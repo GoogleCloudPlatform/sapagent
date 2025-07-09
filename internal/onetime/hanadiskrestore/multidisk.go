@@ -18,6 +18,7 @@ package hanadiskrestore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -46,32 +47,145 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 		snapShotKey = key
 	}
 
+	var err error
 	if r.UseSnapshotGroupWorkflow {
-		// Check if snapshot group exists
-		if _, err := r.sgService.GetSG(ctx, r.Project, r.GroupSnapshot); err != nil {
-			return fmt.Errorf("failed to get snapshot group %s: %w", r.GroupSnapshot, err)
-		}
-		// TODO: Add logic around bulk insert api of snapshot group.
+		err = r.groupRestoreWithSGWorkflow(ctx)
 	} else {
-		if err := r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey); err != nil {
-			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
-			for _, d := range r.disks {
-				if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
-					r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
-				} else {
-					if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, true); modifyCGErr != nil {
-						log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.disk.DiskName)
-						r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
-					}
-				}
-			}
-			hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
-			return err
-		}
+		err = r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
+	}
+	if err != nil {
+		r.handleRestoreFailure(ctx, err)
+		return err
 	}
 
 	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 	log.CtxLogger(ctx).Info("HANA restore from group snapshot succeeded.")
+	return nil
+}
+
+func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context) error {
+	// Check if snapshot group exists
+	sg, err := r.sgService.GetSG(ctx, r.Project, r.GroupSnapshot)
+	if err != nil {
+		return fmt.Errorf("failed to get snapshot group %s: %w", r.GroupSnapshot, err)
+	}
+	if sg == nil {
+		return fmt.Errorf("snapshot group %s not found", r.GroupSnapshot)
+	}
+
+	if err := r.bulkInsertDisksFromSG(ctx); err != nil {
+		return err
+	}
+
+	return r.attachAndConfigureDisks(ctx)
+}
+
+func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
+	// Create mew disks using bulk insert api from snapshot group
+	sourceSnapshotGroupURI := fmt.Sprintf("https://www.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", r.Project, r.GroupSnapshot)
+	parts := strings.Split(r.NewDiskType, "/")
+	diskTypeName := parts[len(parts)-1]
+	diskTypeURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, diskTypeName)
+	requestBody := map[string]any{
+		"snapshotGroupParameters": map[string]string{
+			"sourceSnapshotGroup": sourceSnapshotGroupURI,
+			"type":                diskTypeURI,
+		},
+	}
+	data, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal bulk insert request body: %w", err)
+	}
+	log.CtxLogger(ctx).Debugw("Bulk inserting disks from snapshot group", "requestBody", string(data))
+	op, err := r.sgService.BulkInsertFromSG(ctx, r.Project, r.DataDiskZone, data)
+	if err != nil {
+		return fmt.Errorf("failed to bulk insert from snapshot group %s: %w", r.GroupSnapshot, err)
+	}
+
+	// Wait for bulk insert operation to complete
+	log.CtxLogger(ctx).Debugw("Waiting for bulk insert operation to complete")
+	if err = r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Restorer) attachAndConfigureDisks(ctx context.Context) error {
+	// Creating a map of disk names to their respective instances.
+	// This map is used to retrieve the instance name to which the original disk was attached.
+	diskToInstanceMap := make(map[string]string)
+	for _, d := range r.disks {
+		diskToInstanceMap[d.disk.DiskName] = d.instanceName
+	}
+
+	for _, snapshotItem := range r.snapshotItems {
+		// Get the new disk created using ListDisksFromSnapshot api request
+		disks, err := r.sgService.ListDisksFromSnapshot(ctx, r.Project, r.DataDiskZone, snapshotItem.Name)
+		if err != nil {
+			return fmt.Errorf("failed to list disks from snapshot %s: %w", snapshotItem.Name, err)
+		}
+
+		if disks == nil || len(disks) == 0 {
+			return fmt.Errorf("no disks found for snapshot %s", snapshotItem.Name)
+		}
+
+		// Initialize latestDisk with the first disk
+		latestDisk := disks[0]
+		// If there's more than one disk, iterate and find the latest
+		if len(disks) > 1 {
+			latestTimestamp, err := time.Parse(time.RFC3339, latestDisk.CreationTimestamp)
+			if err != nil {
+				return fmt.Errorf("failed to parse timestamp for initial disk %s: %w", latestDisk.Name, err)
+			}
+
+			for _, disk := range disks {
+				currentTimestamp, err := time.Parse(time.RFC3339, disk.CreationTimestamp)
+				if err != nil {
+					continue // Skip this disk and try the next one
+				}
+
+				// If the current disk's timestamp is after the latestTimestamp found so far, update latestDisk
+				if currentTimestamp.After(latestTimestamp) {
+					latestDisk = disk
+					latestTimestamp = currentTimestamp
+				}
+			}
+		}
+
+		newDisk := latestDisk
+
+		sourceDiskURI := snapshotItem.SourceDisk
+		if sourceDiskURI == "" {
+			return fmt.Errorf("SourceDisk field is empty for snapshot item %s", snapshotItem.Name)
+		}
+		uriParts := strings.Split(sourceDiskURI, "/")
+		sourceDiskName := uriParts[len(uriParts)-1]
+
+		instanceName, ok := diskToInstanceMap[sourceDiskName]
+		if !ok {
+			return fmt.Errorf("could not find instance for original disk: %s", sourceDiskName)
+		}
+
+		log.CtxLogger(ctx).Debugw("Attaching disk to instance", "diskName", newDisk.Name, "instanceName", instanceName)
+		if err := r.gceService.AttachDisk(ctx, newDisk.Name, instanceName, r.Project, r.DataDiskZone); err != nil {
+			return fmt.Errorf("failed to attach new data disk %s to instance %s: %w", newDisk.Name, instanceName, err)
+		}
+
+		_, ok, err = r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, newDisk.Name)
+		if err != nil {
+			return fmt.Errorf("failed to check if new disk %v is attached to the instance %s: %w", newDisk.Name, instanceName, err)
+		}
+		if !ok {
+			return fmt.Errorf("newly created disk %v is not attached to the instance %s", newDisk.Name, instanceName)
+		}
+		time.Sleep(5 * time.Second)
+
+		if err := r.modifyDiskInCG(ctx, newDisk.Name, true); err != nil {
+			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDisk.Name)
+		}
+		log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDisk.Name)
+	}
+
 	return nil
 }
 
@@ -338,4 +452,23 @@ func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.
 		leftoverDisks = append(leftoverDisks, disk)
 	}
 	return fmt.Errorf("-source-disks does not contain disks: [%s] that also back up /hana/data", strings.Join(leftoverDisks, ","))
+}
+
+// handleRestoreFailure handles the failure of the restore process.
+// It reattaches the old disks to the instance and adds them to the consistency group.
+func (r *Restorer) handleRestoreFailure(ctx context.Context, err error) {
+	r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
+	for _, d := range r.disks {
+		if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)
+		} else {
+			if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, true); modifyCGErr != nil {
+				log.CtxLogger(ctx).Warnw("failed to add old disk to consistency group", "disk", d.disk.DiskName)
+				r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Adding old disk to consistency group failed,", modifyCGErr)
+			}
+		}
+	}
+
+	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
+	return
 }
