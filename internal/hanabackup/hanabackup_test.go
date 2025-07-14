@@ -430,14 +430,13 @@ func TestCheckLogDir(t *testing.T) {
 		wantLogicalLogPath  string
 		wantPhysicalLogPath string
 		wantErr             error
-		parseBasePathExec   commandlineexecutor.Execute
 	}{
 		{
 			name: "ParseBasePathFails",
-			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{Error: errors.New("grep failed"), ExitCode: 1}
-			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{Error: errors.New("grep failed"), ExitCode: 1}
+				}
 				return commandlineexecutor.Result{}
 			},
 			wantBasePath:        "",
@@ -448,13 +447,13 @@ func TestCheckLogDir(t *testing.T) {
 		{
 			name: "ParseLogicalPathFails",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+				}
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
 					return commandlineexecutor.Result{Error: errors.New("df failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
-			},
-			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 			},
 			wantBasePath: "/hana/log/SID",
 			wantErr:      cmpopts.AnyError,
@@ -462,37 +461,37 @@ func TestCheckLogDir(t *testing.T) {
 		{
 			name: "ParsePhysicalPathFails",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+				}
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
-					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-loglv"}
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
 			},
-			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
-			},
 			wantBasePath:       "/hana/log/SID",
-			wantLogicalLogPath: "/dev/mapper/vg-loglv",
+			wantLogicalLogPath: "/dev/mapper/vg-lv",
 			wantErr:            cmpopts.AnyError,
 		},
 		{
 			name: "Success",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+				}
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
-					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-loglv"}
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{StdOut: "/dev/sdc"}
 				}
 				return commandlineexecutor.Result{}
 			},
-			parseBasePathExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
-			},
 			wantBasePath:        "/hana/log/SID",
-			wantLogicalLogPath:  "/dev/mapper/vg-loglv",
+			wantLogicalLogPath:  "/dev/mapper/vg-lv",
 			wantPhysicalLogPath: "/dev/sdc",
 			wantErr:             nil,
 		},
@@ -500,9 +499,12 @@ func TestCheckLogDir(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, llp, plp, err := CheckLogDir(context.Background(), tc.exec)
+			bpl, llp, plp, err := CheckLogDir(context.Background(), tc.exec)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("CheckLogDir() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if bpl != tc.wantBasePath {
+				t.Errorf("CheckLogDir() baseLogPath = %s, want %s", bpl, tc.wantBasePath)
 			}
 			if llp != tc.wantLogicalLogPath {
 				t.Errorf("CheckLogDir() logicalLogPath = %s, want %s", llp, tc.wantLogicalLogPath)
