@@ -404,7 +404,7 @@ func TestGetSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg"}`}}},
 			},
 			expectedSGItem: &SGItem{
 				Name: "test-sg",
@@ -452,7 +452,7 @@ func TestGetSG(t *testing.T) {
 				t.Errorf("GetSG() error = %v, wantErr %v", err, test.expectedError)
 				return
 			}
-			if diff := cmp.Diff(test.expectedSGItem, sgItem); diff != "" && !test.expectedError {
+			if diff := cmp.Diff(test.expectedSGItem, sgItem, cmpopts.IgnoreUnexported(SGItem{})); diff != "" && !test.expectedError {
 				t.Errorf("GetSG() returned diff (-want +got):\n%s", diff)
 			}
 		})
@@ -472,7 +472,7 @@ func TestListSGs(t *testing.T) {
 			name:    "success",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"},{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}}},
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"items":[{"name":"test-sg1"},{"name":"test-sg2"}]}`}}},
 			},
 			expectedSGItems: []SGItem{
 				{Name: "test-sg1"},
@@ -484,8 +484,8 @@ func TestListSGs(t *testing.T) {
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {{statusCode: 200, body: `{"items":[{"name":"test-sg1", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg1"}], "nextPageToken":"next-page-token"}`}},
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {{statusCode: 200, body: `{"items":[{"name":"test-sg2", "sourceInstantSnapshotGroup":"projects/test-project/zones/us-central1-a/instantSnapshotGroups/test-isg2"}]}`}},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {{statusCode: 200, body: `{"items":[{"name":"test-sg1"}], "nextPageToken":"next-page-token"}`}},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {{statusCode: 200, body: `{"items":[{"name":"test-sg2"}]}`}},
 				},
 			},
 			expectedSGItems: []SGItem{
@@ -532,7 +532,7 @@ func TestListSGs(t *testing.T) {
 				t.Errorf("ListSGs() error = %v, wantErr %v", err, test.expectedError)
 				return
 			}
-			if diff := cmp.Diff(test.expectedSGItems, sgItems); diff != "" && !test.expectedError {
+			if diff := cmp.Diff(test.expectedSGItems, sgItems, cmpopts.IgnoreUnexported(SGItem{})); diff != "" && !test.expectedError {
 				t.Errorf("ListSGs() returned diff (-want +got):\n%s", diff)
 			}
 		})
@@ -689,7 +689,7 @@ func TestListSnapshotsFromSG(t *testing.T) {
 				t.Errorf("ListSnapshotsFromSG() error = %v, wantErr %v", err, test.expectedError)
 				return
 			}
-			if diff := cmp.Diff(test.expectedSnapshotItems, snapshotItems); diff != "" && !test.expectedError {
+			if diff := cmp.Diff(test.expectedSnapshotItems, snapshotItems, cmpopts.IgnoreUnexported(SnapshotItem{})); diff != "" && !test.expectedError {
 				t.Errorf("ListSnapshotsFromSG() returned diff (-want +got):\n%s", diff)
 			}
 		})
@@ -781,8 +781,120 @@ func TestListDisksFromSnapshot(t *testing.T) {
 				t.Errorf("ListDisksFromSnapshot() error = %v, wantErr %v", err, test.expectedError)
 				return
 			}
-			if diff := cmp.Diff(test.expectedDiskItems, diskItems); diff != "" && !test.expectedError {
+			if diff := cmp.Diff(test.expectedDiskItems, diskItems, cmpopts.IgnoreUnexported(DiskItem{})); diff != "" && !test.expectedError {
 				t.Errorf("ListDisksFromSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestWaitForSGCreation(t *testing.T) {
+	tests := []struct {
+		name          string
+		project       string
+		sgName        string
+		httpResponses map[string]map[string][]httpResponse
+		expectedError bool
+	}{
+		{
+			name:    "Success",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+			},
+			expectedError: false,
+		},
+		{
+			name:    "Creating",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "GetSGError",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+
+			err := sgService.WaitForSGCreation(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("WaitForSGCreation() error = %v, wantErr %v", err, test.expectedError)
+			}
+		})
+	}
+}
+
+func TestWaitForSGCreationWithRetry(t *testing.T) {
+	tests := []struct {
+		name          string
+		project       string
+		sgName        string
+		httpResponses map[string]map[string][]httpResponse
+		maxRetries    int
+		expectedError bool
+	}{
+		{
+			name:    "SuccessAfterRetry",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {
+					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
+					{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`},
+				}},
+			},
+			maxRetries: 3,
+		},
+		{
+			name:    "RetryExhausted",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {
+					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
+					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
+					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
+				}},
+			},
+			maxRetries:    3,
+			expectedError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+			sgService.maxRetries = test.maxRetries
+			// Use a fast backoff for testing
+			sgService.backoff.InitialInterval = 1 * time.Millisecond
+			sgService.backoff.MaxElapsedTime = 100 * time.Millisecond
+
+			err := sgService.WaitForSGCreationWithRetry(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("WaitForSGCreationWithRetry() error = %v, wantErr %v", err, test.expectedError)
 			}
 		})
 	}

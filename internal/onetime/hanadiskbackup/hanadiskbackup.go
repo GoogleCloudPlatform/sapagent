@@ -103,6 +103,7 @@ type (
 		NewService() error
 		CreateSG(ctx context.Context, project string, data []byte) error
 		WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error
+		WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error
 	}
 
 	snapshotOp struct {
