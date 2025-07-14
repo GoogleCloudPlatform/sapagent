@@ -49,7 +49,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 
 	var err error
 	if r.UseSnapshotGroupWorkflow {
-		err = r.groupRestoreWithSGWorkflow(ctx)
+		err = r.groupRestoreWithSGWorkflow(ctx, commandlineexecutor.ExecuteCommand, cp)
 	} else {
 		err = r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
 	}
@@ -63,7 +63,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	return nil
 }
 
-func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context) error {
+func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	// Check if snapshot group exists
 	sg, err := r.sgService.GetSG(ctx, r.Project, r.GroupSnapshot)
 	if err != nil {
@@ -77,7 +77,11 @@ func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context) error {
 		return err
 	}
 
-	return r.attachAndConfigureDisks(ctx)
+	if err := r.attachAndConfigureDisks(ctx, exec, cp); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
@@ -110,7 +114,7 @@ func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
 	return nil
 }
 
-func (r *Restorer) attachAndConfigureDisks(ctx context.Context) error {
+func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	// Creating a map of disk names to their respective instances.
 	// This map is used to retrieve the instance name to which the original disk was attached.
 	diskToInstanceMap := make(map[string]string)
@@ -118,6 +122,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context) error {
 		diskToInstanceMap[d.disk.DiskName] = d.instanceName
 	}
 
+	var lastDiskName string
 	for _, snapshotItem := range r.snapshotItems {
 		// Get the new disk created using ListDisksFromSnapshot api request
 		disks, err := r.sgService.ListDisksFromSnapshot(ctx, r.Project, r.DataDiskZone, snapshotItem.Name)
@@ -153,6 +158,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context) error {
 		}
 
 		newDisk := latestDisk
+		lastDiskName = newDisk.Name
 
 		sourceDiskURI := snapshotItem.SourceDisk
 		if sourceDiskURI == "" {
@@ -184,6 +190,10 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context) error {
 			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDisk.Name)
 		}
 		log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDisk.Name)
+	}
+
+	if err := r.renameLVMForScaleup(ctx, exec, cp, lastDiskName); err != nil {
+		return err
 	}
 
 	return nil
@@ -233,19 +243,26 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		return fmt.Errorf("required number of disks did not get restored, wanted: %v, got: %v", len(r.disks), numOfDisksRestored)
 	}
 
+	if err := r.renameLVMForScaleup(ctx, exec, cp, lastDiskName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Restorer) renameLVMForScaleup(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, diskName string) error {
 	if !r.isScaleout {
-		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), lastDiskName)
+		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), diskName)
 		if err != nil {
-			return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", lastDiskName)
+			return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", diskName)
 		}
 		if !ok {
-			return fmt.Errorf("source-disk=%v is not attached to the instance", lastDiskName)
+			return fmt.Errorf("source-disk=%v is not attached to the instance", diskName)
 		}
 
 		if r.DataDiskVG != "" {
-			if err := r.renameLVM(ctx, exec, cp, dev, lastDiskName); err != nil {
+			if err := r.renameLVM(ctx, exec, cp, dev, diskName); err != nil {
 				log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-				if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, lastDiskName, dev); detachErr != nil {
+				if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, diskName, dev); detachErr != nil {
 					log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", detachErr)
 					return detachErr
 				}

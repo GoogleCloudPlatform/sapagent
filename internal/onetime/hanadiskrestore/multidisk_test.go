@@ -1338,9 +1338,156 @@ func TestGroupRestoreWithSGWorkflow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.groupRestoreWithSGWorkflow(context.Background())
+			err := tc.r.groupRestoreWithSGWorkflow(context.Background(), commandlineexecutor.ExecuteCommand, defaultCloudProperties)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRenameLVMForScaleup(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		exec     commandlineexecutor.Execute
+		cp       *ipb.CloudProperties
+		diskName string
+		wantErr  error
+	}{
+		{
+			name: "isScaleout",
+			r: &Restorer{
+				isScaleout: true,
+			},
+			wantErr: nil,
+		},
+		{
+			name: "DiskAttachedToInstanceErr",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceErr: cmpopts.AnyError,
+				},
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DiskNotAttached",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: false,
+				},
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "EmptyDataDiskVG",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+				},
+				DataDiskVG: "",
+			},
+			cp:      defaultCloudProperties,
+			wantErr: nil,
+		},
+		{
+			name: "renameLVMErrDetachErr",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetInstanceResp: []*compute.Instance{{
+						Disks: []*compute.AttachedDisk{
+							{DeviceName: "dev", Source: "projects/p/zones/z/disks/d"},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{{
+						Items: []*compute.Disk{
+							{Name: "d"},
+						},
+					}},
+					ListDisksErr:  []error{nil},
+					DetachDiskErr: cmpopts.AnyError,
+				},
+				DataDiskVG: "vg",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "renameLVMErr",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetInstanceResp: []*compute.Instance{{
+						Disks: []*compute.AttachedDisk{
+							{DeviceName: "dev", Source: "projects/p/zones/z/disks/d"},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{{
+						Items: []*compute.Disk{
+							{Name: "d"},
+						},
+					}},
+					ListDisksErr:  []error{nil},
+					DetachDiskErr: nil,
+				},
+				DataDiskVG: "vg",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				isScaleout: false,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetInstanceResp: []*compute.Instance{{
+						Disks: []*compute.AttachedDisk{
+							{DeviceName: "dev", Source: "projects/p/zones/z/disks/d"},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{{
+						Items: []*compute.Disk{
+							{Name: "d"},
+						},
+					}},
+					ListDisksErr: []error{nil},
+				},
+				DataDiskVG: "vg",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.renameLVMForScaleup(context.Background(), tc.exec, tc.cp, tc.diskName)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("renameLVMForScaleup() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
