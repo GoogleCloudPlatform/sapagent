@@ -31,6 +31,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
@@ -177,8 +178,7 @@ type Snapshot struct {
 	sidadmUser                             bool
 	provisionedIops, provisionedThroughput int64
 	oteLogger                              *onetime.OTELogger
-	// TODO: Remove this flag once the feature is stable.
-	UseSnapshotGroupWorkflow bool
+	UseSnapshotGroupWorkflow               bool
 }
 
 // Name implements the subcommand interface for hanadiskbackup.
@@ -282,6 +282,12 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 		return errMessage, subcommands.ExitFailure
 	}
 	s.timeSeriesCreator = mc
+
+	s.UseSnapshotGroupWorkflow = true
+	// TODO: Remove this check once version 3.9 is released.
+	if configuration.AgentVersion <= "3.7" {
+		s.UseSnapshotGroupWorkflow = false
+	}
 
 	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, hanabackup.CheckDataDir, opts.CloudProperties)
 	if exitStatus != subcommands.ExitSuccess {

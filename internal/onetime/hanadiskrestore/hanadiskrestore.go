@@ -30,6 +30,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
+	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -132,9 +133,8 @@ type (
 		ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 		IIOTEParams                                                *onetime.InternallyInvokedOTE
 		oteLogger                                                  *onetime.OTELogger
-		// TODO: Remove this flag once the feature is stable.
-		UseSnapshotGroupWorkflow bool
-		snapshotItems            []snapshotgroup.SnapshotItem
+		UseSnapshotGroupWorkflow                                   bool
+		snapshotItems                                              []snapshotgroup.SnapshotItem
 	}
 )
 
@@ -188,7 +188,6 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanadiskrestore.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
-	fs.BoolVar(&r.UseSnapshotGroupWorkflow, "use-snapshot-group-workflow", false, "Use snapshot group workflow for creating snapshots. (optional) Default: false")
 }
 
 // Execute implements the subcommand interface for hanadiskrestore.
@@ -211,6 +210,12 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 
 // Run performs the functionality specified by the hanadiskrestore subcommand.
 func (r *Restorer) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
+	r.UseSnapshotGroupWorkflow = true
+	// TODO: Remove this check once version 3.9 is released.
+	if configuration.AgentVersion <= "3.7" {
+		r.UseSnapshotGroupWorkflow = false
+	}
+
 	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
 	return r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
 }
