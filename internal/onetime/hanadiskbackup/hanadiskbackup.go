@@ -244,7 +244,8 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.groupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to '<consistency-group-name>-yyyymmdd-hhmmss'.)")
 }
 
-// Execute implements the subcommand interface for hanadiskbackup.
+// Execute executes the subcommand interface for hanadiskbackup.
+// TODO: Add handling for Archive Snapshot.
 func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help will return before the args are parsed.
 	lp, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{

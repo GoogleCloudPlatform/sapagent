@@ -190,7 +190,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
 }
 
-// Execute implements the subcommand interface for hanadiskrestore.
+// Execute executes the subcommand interface for hanadiskrestore.
+// TODO: Add handling for Archive Snapshot.
 func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subcommands.ExitStatus {
 	// Help will return before the args are parsed.
 	_, cp, exitStatus, completed := onetime.Init(ctx, onetime.InitOptions{
