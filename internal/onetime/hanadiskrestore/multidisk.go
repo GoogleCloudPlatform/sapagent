@@ -27,9 +27,10 @@ import (
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 // groupRestore creates several new HANA data disks from snapshots belonging to given group snapshot and attaches them to the instance.
@@ -122,7 +123,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		diskToInstanceMap[d.disk.DiskName] = d.instanceName
 	}
 
-	var lastDiskName string
+	var newDisks []multiDisks
 	for _, snapshotItem := range r.snapshotItems {
 		// Get the new disk created using ListDisksFromSnapshot api request
 		disks, err := r.sgService.ListDisksFromSnapshot(ctx, r.Project, r.DataDiskZone, snapshotItem.Name)
@@ -158,7 +159,6 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 
 		newDisk := latestDisk
-		lastDiskName = newDisk.Name
 
 		sourceDiskURI := snapshotItem.SourceDisk
 		if sourceDiskURI == "" {
@@ -177,7 +177,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 			return fmt.Errorf("failed to attach new data disk %s to instance %s: %w", newDisk.Name, instanceName, err)
 		}
 
-		_, ok, err = r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, newDisk.Name)
+		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, newDisk.Name)
 		if err != nil {
 			return fmt.Errorf("failed to check if new disk %v is attached to the instance %s: %w", newDisk.Name, instanceName, err)
 		}
@@ -186,13 +186,21 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 		time.Sleep(5 * time.Second)
 
+		newDisks = append(newDisks, multiDisks{
+			disk: &ipb.Disk{
+				DiskName:   newDisk.Name,
+				DeviceName: dev,
+			},
+			instanceName: instanceName,
+		})
+
 		if err := r.modifyDiskInCG(ctx, newDisk.Name, true); err != nil {
 			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDisk.Name)
 		}
 		log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDisk.Name)
 	}
 
-	if err := r.renameLVMForScaleup(ctx, exec, cp, lastDiskName); err != nil {
+	if err := r.renameLVMForScaleup(ctx, exec, cp, newDisks); err != nil {
 		return err
 	}
 
@@ -215,7 +223,8 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 	for _, d := range r.disks {
 		diskToInstanceMap[d.disk.DiskName] = d.instanceName
 	}
-	var lastDiskName string
+
+	var newDisks []multiDisks
 	var numOfDisksRestored int
 	for _, snapshot := range snapshotList.Items {
 		if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
@@ -224,13 +233,21 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 			if r.NewDiskPrefix != "" {
 				newDiskName = fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", numOfDisksRestored+1))
 			}
-			lastDiskName = newDiskName
 
 			log.CtxLogger(ctx).Debugw("Restoring snapshot", "new Disk", newDiskName, "source disk", snapshot.Labels["goog-sapagent-disk-name"])
 			instanceName := diskToInstanceMap[snapshot.Labels["goog-sapagent-disk-name"]]
 			if err := r.restoreFromSnapshot(ctx, exec, instanceName, snapshotKey, newDiskName, snapshot.Name); err != nil {
 				return err
 			}
+			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
+			newDisks = append(newDisks, multiDisks{
+				disk: &ipb.Disk{
+					DiskName:   newDiskName,
+					DeviceName: dev,
+				},
+				instanceName: cp.GetInstanceName(),
+			})
+
 			if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
 				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDiskName)
 			}
@@ -243,28 +260,22 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		return fmt.Errorf("required number of disks did not get restored, wanted: %v, got: %v", len(r.disks), numOfDisksRestored)
 	}
 
-	if err := r.renameLVMForScaleup(ctx, exec, cp, lastDiskName); err != nil {
+	if err := r.renameLVMForScaleup(ctx, exec, cp, newDisks); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Restorer) renameLVMForScaleup(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, diskName string) error {
+func (r *Restorer) renameLVMForScaleup(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, disks []multiDisks) error {
 	if !r.isScaleout {
-		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), diskName)
-		if err != nil {
-			return fmt.Errorf("failed to check if the source-disk=%v is attached to the instance", diskName)
-		}
-		if !ok {
-			return fmt.Errorf("source-disk=%v is not attached to the instance", diskName)
-		}
-
 		if r.DataDiskVG != "" {
-			if err := r.renameLVM(ctx, exec, cp, dev, diskName); err != nil {
-				log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-				if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, diskName, dev); detachErr != nil {
-					log.CtxLogger(ctx).Info("Failed to detach newly attached restored disk: %v", detachErr)
-					return detachErr
+			if err := r.renameLVM(ctx, exec, cp, disks[0].disk.DeviceName, disks[0].disk.DiskName); err != nil {
+				log.CtxLogger(ctx).Info("Removing newly attached restored disk(s)")
+				for _, d := range disks {
+					if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, d.disk.DiskName, d.disk.DeviceName); detachErr != nil {
+						log.CtxLogger(ctx).Errorw("Failed to detach newly attached restored disk", "error", detachErr)
+						continue
+					}
 				}
 				return err
 			}

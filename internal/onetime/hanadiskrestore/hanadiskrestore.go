@@ -90,7 +90,8 @@ type (
 )
 
 const (
-	metricPrefix = "workload.googleapis.com/sap/agent/"
+	metricPrefix   = "workload.googleapis.com/sap/agent/"
+	M2AgentVersion = "3.9"
 )
 
 var (
@@ -212,8 +213,7 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 // Run performs the functionality specified by the hanadiskrestore subcommand.
 func (r *Restorer) Run(ctx context.Context, runOpts *onetime.RunOptions) subcommands.ExitStatus {
 	r.UseSnapshotGroupWorkflow = true
-	// TODO: Remove this check once version 3.9 is released.
-	if configuration.AgentVersion <= "3.7" {
+	if configuration.AgentVersion < M2AgentVersion {
 		r.UseSnapshotGroupWorkflow = false
 	}
 

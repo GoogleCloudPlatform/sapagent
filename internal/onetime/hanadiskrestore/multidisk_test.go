@@ -26,9 +26,10 @@ import (
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
+
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 var (
@@ -279,6 +280,9 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 							{
 								Name:       "test-snapshot-1",
 								SourceDisk: "test-disk-1",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
 							},
 						},
 					},
@@ -298,51 +302,27 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			want:        cmpopts.AnyError,
 		},
 		{
-			name: "LVMRenameErrDetachErr",
-			r: &Restorer{
-				GroupSnapshot: "test-group-snapshot",
-				gceService: &fake.TestGCE{
-					SnapshotList: &compute.SnapshotList{
-						Items: []*compute.Snapshot{
-							{
-								Name:       "test-snapshot-1",
-								SourceDisk: "test-disk-1",
-							},
-						},
-					},
-					SnapshotListErr:           nil,
-					DiskAttachedToInstanceErr: nil,
-					IsDiskAttached:            false,
-					DetachDiskErr:             cmpopts.AnyError,
-				},
-			},
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 1,
-					Error:    cmpopts.AnyError,
-				}
-			},
-			cp:          defaultCloudProperties,
-			snapshotKey: "test-snapshot-key",
-			want:        cmpopts.AnyError,
-		},
-		{
 			name: "LVMRenameErr",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
+				DataDiskVG:    "test-vg",
 				gceService: &fake.TestGCE{
 					SnapshotList: &compute.SnapshotList{
 						Items: []*compute.Snapshot{
 							{
 								Name:       "test-snapshot-1",
 								SourceDisk: "test-disk-1",
+								Labels: map[string]string{
+									"goog-sapagent-isg": "test-group-snapshot",
+								},
 							},
 						},
 					},
-					SnapshotListErr:           nil,
-					DiskAttachedToInstanceErr: nil,
-					IsDiskAttached:            false,
-					DetachDiskErr:             nil,
+					SnapshotListErr:                  nil,
+					DiskAttachedToInstanceErr:        nil,
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceDeviceName: "test-device",
+					DetachDiskErr:                    nil,
 				},
 			},
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1363,28 +1343,6 @@ func TestRenameLVMForScaleup(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "DiskAttachedToInstanceErr",
-			r: &Restorer{
-				isScaleout: false,
-				gceService: &fake.TestGCE{
-					DiskAttachedToInstanceErr: cmpopts.AnyError,
-				},
-			},
-			cp:      defaultCloudProperties,
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "DiskNotAttached",
-			r: &Restorer{
-				isScaleout: false,
-				gceService: &fake.TestGCE{
-					IsDiskAttached: false,
-				},
-			},
-			cp:      defaultCloudProperties,
-			wantErr: cmpopts.AnyError,
-		},
-		{
 			name: "EmptyDataDiskVG",
 			r: &Restorer{
 				isScaleout: false,
@@ -1485,7 +1443,14 @@ func TestRenameLVMForScaleup(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.renameLVMForScaleup(context.Background(), tc.exec, tc.cp, tc.diskName)
+			disks := []multiDisks{
+				{
+					disk: &ipb.Disk{
+						DiskName: "d",
+					},
+				},
+			}
+			err := tc.r.renameLVMForScaleup(context.Background(), tc.exec, tc.cp, disks)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("renameLVMForScaleup() returned diff (-want +got):\n%s", diff)
 			}

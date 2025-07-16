@@ -114,7 +114,8 @@ type (
 )
 
 const (
-	metricPrefix = "workload.googleapis.com/sap/agent/"
+	metricPrefix   = "workload.googleapis.com/sap/agent/"
+	M2AgentVersion = "3.9"
 )
 
 var (
@@ -285,8 +286,7 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 	s.timeSeriesCreator = mc
 
 	s.UseSnapshotGroupWorkflow = true
-	// TODO: Remove this check once version 3.9 is released.
-	if configuration.AgentVersion <= "3.7" {
+	if configuration.AgentVersion < M2AgentVersion {
 		s.UseSnapshotGroupWorkflow = false
 	}
 

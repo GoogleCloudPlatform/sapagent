@@ -33,10 +33,11 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
-	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+
+	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
 func (s *Snapshot) deleteStaleISGs(ctx context.Context) error {
@@ -116,6 +117,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		if err := s.sgService.WaitForSGUploadCompletionWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
 			return err
 		}
+		log.CtxLogger(ctx).Info("Snapshot group created, marking HANA snapshot as successful.")
 	} else {
 		var ssOps []*snapshotOp
 		if ssOps, err = s.convertISGInstantSnapshots(ctx, cp); err != nil {
@@ -148,12 +150,12 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 				return err
 			}
 		}
+		log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
 	}
 	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "error deleting instant snapshot group, but disk snapshots are successful", err)
 	}
 
-	log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
 	if !s.ConfirmDataSnapshotAfterCreate {
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
 			return err
