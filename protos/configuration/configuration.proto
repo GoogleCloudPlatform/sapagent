@@ -46,6 +46,7 @@ message Configuration {
   SupportConfiguration support_configuration = 11;
   UAPConfiguration uap_configuration = 12;
   GCBDRConfiguration gcbdr_configuration = 13;
+  PubSubActions pub_sub_actions = 14;
 }
 
 message CollectionConfiguration {
@@ -239,4 +240,9 @@ message GCBDRConfiguration {
   google.protobuf.BoolValue communication_enabled = 1;
   google.protobuf.BoolValue test_channel_enabled = 2;
   TargetEnvironment environment = 3;
+}
+
+message PubSubActions {
+  string actions_subscription_id = 1;
+  string topic_id = 2;
 }

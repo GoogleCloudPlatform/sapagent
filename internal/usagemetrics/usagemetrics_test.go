@@ -280,6 +280,9 @@ func TestErrorConstants(t *testing.T) {
 	if SupportBundleUploadFailure != 86 {
 		t.Errorf("PacemakerDiagnosisFailure = %v, want 83", SupportBundleUploadFailure)
 	}
+	if LogCollectionFailure != 87 {
+		t.Errorf("LogCollectionFailure = %v, want 87", LogCollectionFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -558,5 +561,8 @@ func TestActionConstants(t *testing.T) {
 	}
 	if SupportBundleLocalCollection != 91 {
 		t.Errorf("SupportBundleLocalCollection = %v, want 88", SupportBundleLocalCollection)
+	}
+	if LogCollectionStarted != 92 {
+		t.Errorf("LogCollectionStarted = %v, want 92", LogCollectionStarted)
 	}
 }

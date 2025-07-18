@@ -52,6 +52,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/status"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/processmetrics"
+	"github.com/GoogleCloudPlatform/sapagent/internal/pubsubactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
@@ -65,10 +66,9 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/wlm"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/metricevents"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
-
-	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -324,6 +324,15 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		log.Logger.Errorw("Error creating WLM Client", "error", err)
 		usagemetrics.Error(usagemetrics.WLMServiceCreateFailure)
 		return
+	}
+
+	lcCtx := log.SetCtx(ctx, "context", "LogCollection")
+	pubsubActions := &pubsubactions.PubSubActions{
+		Config:          d.config,
+		CloudProperties: d.cloudProps,
+	}
+	if err := pubsubActions.Start(lcCtx); err != nil {
+		log.CtxLogger(lcCtx).Errorw("Failed to start log collection", "error", err)
 	}
 
 	// Start SAP System Discovery

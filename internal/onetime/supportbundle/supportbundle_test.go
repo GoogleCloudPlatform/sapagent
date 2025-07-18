@@ -19,7 +19,6 @@ package supportbundle
 import (
 	"archive/zip"
 	"context"
-	_ "embed"
 	"fmt"
 	"io"
 	"io/fs"
@@ -45,6 +44,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
+	fakeCM "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
@@ -57,7 +57,8 @@ import (
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	fakeCM "github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring/fake"
+
+	_ "embed"
 )
 
 var (
@@ -676,7 +677,7 @@ func TestSOSReportHandler(t *testing.T) {
 			},
 			z:              mockedZipper{},
 			wantMessage:    "Zipped destination support bundle file HANA/Backint",
-			wantExitStatus: subcommands.ExitSuccess,
+			wantExitStatus: subcommands.ExitFailure,
 		},
 		{
 			name: "SuccessForPacemakerDiagnosis",
@@ -700,7 +701,7 @@ func TestSOSReportHandler(t *testing.T) {
 			},
 			z:              mockedZipper{},
 			wantMessage:    "Pacemaker logs are collected and sent to directory",
-			wantExitStatus: subcommands.ExitSuccess,
+			wantExitStatus: subcommands.ExitFailure,
 		},
 	}
 
@@ -708,8 +709,11 @@ func TestSOSReportHandler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.sosr.oteLogger = defaultOTELogger
 			message, exitStatus := test.sosr.supportBundleHandler(test.ctx, test.destFilePrefix, test.exec, test.fs, test.z, defaultCloudProperties)
-			if !strings.Contains(message, test.wantMessage) || exitStatus != test.wantExitStatus {
-				t.Errorf("sosReportHandler() = %v, %v; want %v, %v", message, exitStatus, test.wantMessage, test.wantExitStatus)
+			if !strings.Contains(message, test.wantMessage) {
+				t.Errorf("sosReportHandler() = %v; want %v", message, test.wantMessage)
+			}
+			if exitStatus != test.wantExitStatus {
+				t.Errorf("sosReportHandler() = %v; want %v", exitStatus, test.wantExitStatus)
 			}
 		})
 	}

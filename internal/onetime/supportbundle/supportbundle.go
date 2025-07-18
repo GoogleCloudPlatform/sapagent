@@ -36,6 +36,7 @@ import (
 
 	"flag"
 	"cloud.google.com/go/monitoring/apiv3/v2"
+	st "cloud.google.com/go/storage"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
@@ -52,7 +53,6 @@ import (
 	cpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
-	st "cloud.google.com/go/storage"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
 
@@ -74,6 +74,8 @@ type (
 		ResultBucket           string                        `json:"result-bucket"`
 		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 		LogPath                string                        `json:"log-path"`
+		BundleName             string                        `json:"bundle-name"`
+		bundleUploaded         bool
 		endingTimestamp        string
 		cmr                    *cloudmetricreader.CloudMetricReader
 		mmc                    cloudmonitoring.TimeSeriesDescriptorQuerier
@@ -405,6 +407,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.Help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
+	fs.StringVar(&s.BundleName, "bundle-name", "", "Name of the support bundle file to be created (optional)")
 	fs.StringVar(&s.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/supportbundle.log")
 }
 
@@ -428,7 +431,7 @@ func (s *SupportBundle) Execute(ctx context.Context, f *flag.FlagSet, args ...an
 
 	// TODO: Colour code success and failure messages.
 	msg, exitStatus := s.Run(ctx, onetime.CreateRunOptions(cp, false), commandlineexecutor.ExecuteCommand)
-	s.oteLogger.LogMessageToFileAndConsole(ctx, "Found the following errors: \n"+msg)
+	s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
 	return exitStatus
 }
 
@@ -457,10 +460,13 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
 		return fmt.Sprintf("Invalid params for collecting support bundle Report for Agent for SAP: %s", errMessage), subcommands.ExitUsageError
 	}
+	log.CtxLogger(ctx).Infow("Successfully validated params", "sid", s.Sid, "instanceNums", s.InstanceNums, "hostname", s.Hostname, "agentLogsOnly", s.AgentLogsOnly, "pacemakerDiagnosis", s.PacemakerDiagnosis, "metrics", s.Metrics, "timestamp", s.Timestamp, "beforeDuration", s.BeforeDuration, "afterDuration", s.AfterDuration, "resultBucket", s.ResultBucket, "bundleName", s.BundleName)
 	s.oteLogger.LogUsageAction(usagemetrics.SupportBundle)
 	s.Sid = strings.ToUpper(s.Sid)
-	bundlename := fmt.Sprintf("supportbundle-%s-%s", s.Hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
-	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, bundlename)
+	if s.BundleName == "" {
+		s.BundleName = fmt.Sprintf("supportbundle-%s-%s", s.Hostname, strings.Replace(time.Now().Format(time.RFC3339), ":", "-", -1))
+	}
+	destFilesPath := fmt.Sprintf("%s%s", destFilePathPrefix, s.BundleName)
 	if err := fs.MkdirAll(destFilesPath, 0777); err != nil {
 		errMessage := "Error while making directory: " + destFilesPath
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -548,7 +554,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	var successMsgs []string
-	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, bundlename)
+	zipfile := fmt.Sprintf("%s/%s.zip", destFilesPath, s.BundleName)
 	if err := zipSource(destFilesPath, zipfile, fs, z); err != nil {
 		errMessage := fmt.Sprintf("Error while zipping destination folder %s", destFilesPath)
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -561,14 +567,19 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	if s.ResultBucket != "" {
 		s.oteLogger.LogUsageAction(usagemetrics.SupportBundleUploadStarted)
-		if err := s.uploadZip(ctx, zipfile, bundlename, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
+		if err := s.uploadZip(ctx, zipfile, s.BundleName, storage.ConnectToBucket, getReadWriter, fs, st.NewClient); err != nil {
 			errMessage := fmt.Sprintf("Error while uploading zip file %s to bucket %s", destFilePathPrefix+".zip", s.ResultBucket)
 			s.oteLogger.LogMessageToConsole(fmt.Sprintf(errMessage, " Error: ", err))
 			failureMsgs = append(failureMsgs, errMessage)
 			s.oteLogger.LogUsageError(usagemetrics.SupportBundleUploadFailure)
 		} else {
-			msg := fmt.Sprintf("Bundle uploaded to bucket %s, path: %s", s.ResultBucket, fmt.Sprintf("gs://%s/%s/%s.zip", s.ResultBucket, s.Name(), bundlename))
-			successMsgs = append(successMsgs, msg)
+			s.bundleUploaded = true
+			msg := fmt.Sprintf("Bundle uploaded to bucket %s, path: %s", s.ResultBucket, fmt.Sprintf("gs://%s/%s/%s.zip", s.ResultBucket, s.Name(), s.BundleName))
+			if len(successMsgs) > 0 {
+				successMsgs[len(successMsgs)-1] = msg
+			} else {
+				successMsgs = append(successMsgs, msg)
+			}
 			// removing the destination directory after zip file is created.
 			if err := s.removeDestinationFolder(ctx, destFilesPath, fs); err != nil {
 				errMessage := fmt.Sprintf("Error while removing destination folder %s", destFilesPath)
@@ -603,10 +614,11 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		}
 	}
 
-	if len(failureMsgs) > 0 {
-		return strings.Join(failureMsgs, "\n"), subcommands.ExitFailure
+	messages := fmt.Sprintf("Success:\n%s\n--------------------------------------------\nError(s):\n%s", strings.Join(successMsgs, "\n"), strings.Join(failureMsgs, "\n"))
+	if s.bundleUploaded {
+		return messages, subcommands.ExitSuccess
 	}
-	return strings.Join(successMsgs, "\n"), subcommands.ExitSuccess
+	return messages, subcommands.ExitFailure
 }
 
 // uploadZip uploads the zip file to the bucket provided.
@@ -1651,6 +1663,12 @@ func (s *SupportBundle) validateParams() []string {
 	}
 	if s.Metrics && s.Timestamp == "" {
 		s.Timestamp = time.Now().Format("2006-01-02 15:04:05")
+	}
+	if s.BeforeDuration == 0 {
+		s.BeforeDuration = 3600
+	}
+	if s.AfterDuration == 0 {
+		s.AfterDuration = 1800
 	}
 
 	s.rest = &rest.Rest{}
