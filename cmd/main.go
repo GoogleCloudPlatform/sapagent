@@ -29,7 +29,6 @@ import (
 	"github.com/google/subcommands"
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/aianalyze"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/backint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/balanceirq"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
@@ -80,7 +79,6 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 	d := &startdaemon.Daemon{}
 
 	scs := []subcommands.Command{
-		&aianalyze.AiAnalyzer{},
 		&backint.Backint{},
 		&balanceirq.BalanceIRQ{},
 		&configure.Configure{},
