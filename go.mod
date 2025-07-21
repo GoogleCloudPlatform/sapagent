@@ -38,7 +38,7 @@ require (
   github.com/zieckey/goini v0.0.0-20240615065340-08ee21c836fb // indirect
   go.uber.org/zap v1.27.0
   golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c
-  golang.org/x/oauth2 v0.26.0
+  golang.org/x/oauth2 v0.27.0
   golang.org/x/sys v0.29.0
   google.golang.org/api v0.220.0
   google.golang.org/genproto v0.0.0-20250204164813-702378808489
