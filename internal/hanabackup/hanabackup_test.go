@@ -790,11 +790,12 @@ func TestReadDataDirMountPath(t *testing.T) {
 
 func TestCheckTopology(t *testing.T) {
 	tests := []struct {
-		name    string
-		exec    commandlineexecutor.Execute
-		SID     string
-		want    bool
-		wantErr error
+		name         string
+		exec         commandlineexecutor.Execute
+		SID          string
+		isSidadmUser bool
+		want         bool
+		wantErr      error
 	}{
 		{
 			name: "InstanceNotFound",
@@ -887,7 +888,8 @@ func TestCheckTopology(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "ScaleupTopology",
+			name:         "ScaleupTopology",
+			isSidadmUser: true,
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "grep" {
 					return commandlineexecutor.Result{
@@ -919,7 +921,7 @@ func TestCheckTopology(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := CheckTopology(ctx, tc.exec, tc.SID)
+			got, err := CheckTopology(ctx, tc.exec, tc.SID, tc.isSidadmUser)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.SID, err, tc.wantErr)
 			}

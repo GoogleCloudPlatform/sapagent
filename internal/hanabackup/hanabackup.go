@@ -344,16 +344,25 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 
 // CheckTopology checks if topology of the system this instance belongs to is scaleout or not.
 // If it is scaleout, it returns true, otherwise false.
-func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID string) (bool, error) {
+func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID string, isSidadmUser bool) (bool, error) {
 	instanceNumber, err := getInstanceNumber(ctx, exec, SID)
 	if err != nil {
 		return false, err
 	}
-	cmd := commandlineexecutor.Params{
-		Executable: "sudo",
-		Args:       []string{"-i", "-u", fmt.Sprintf("%sadm", strings.ToLower(SID)), "sapcontrol", "-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+	var cmd commandlineexecutor.Params
+	if isSidadmUser {
+		cmd = commandlineexecutor.Params{
+			Executable: "sapcontrol",
+			Args:       []string{"-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+		}
+	} else {
+		cmd = commandlineexecutor.Params{
+			Executable: "sudo",
+			Args:       []string{"-i", "-u", fmt.Sprintf("%sadm", strings.ToLower(SID)), "sapcontrol", "-nr", instanceNumber, "-function", "GetSystemInstanceList"},
+		}
 	}
 	res := exec(ctx, cmd)
+	log.CtxLogger(ctx).Debugw("CheckTopology", "stdout", res.StdOut, "stderr", res.StdErr, "error", res.Error)
 	if res.Error != nil {
 		return false, fmt.Errorf("failed to verify topology: %w", res.Error)
 	}

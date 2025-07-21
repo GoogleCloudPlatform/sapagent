@@ -415,7 +415,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 func (s *Snapshot) validateDisks(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	var isScaleout bool
 	var err error
-	if isScaleout, err = hanabackup.CheckTopology(ctx, exec, s.Sid); err != nil {
+	if isScaleout, err = hanabackup.CheckTopology(ctx, exec, s.Sid, s.sidadmUser); err != nil {
 		errMessage := "ERROR: Failed to check if topology is scaleout or scaleup"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
