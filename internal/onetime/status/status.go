@@ -582,6 +582,10 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 			return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
 		}
 	}
+	// Ensure usr/sap has executable permissions.
+	if err := checkFilePermissions("/usr/sap", 0100, s.stat); err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "/usr/sap needs to be executable. Run 'sudo chmod +x /usr/sap'", spb.State_FAILURE_STATE)
+	}
 	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }

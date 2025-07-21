@@ -1436,7 +1436,7 @@ func TestStatusHandler(t *testing.T) {
 					Zone:       "zone-id",
 				},
 				stat: func(name string) (os.FileInfo, error) {
-					return &mockFileInfo{perm: 0400}, nil
+					return &mockFileInfo{perm: 0700}, nil
 				},
 				readDir: func(dirname string) ([]fs.FileInfo, error) {
 					return []fs.FileInfo{
