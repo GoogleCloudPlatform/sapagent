@@ -90,24 +90,107 @@ type (
 	}
 )
 
+type (
+	// PubSubClientIface is an interface for the pubsub client for testing purposes.
+	PubSubClientIface interface {
+		Subscription(string) PubSubSubscriptionIface
+		Topic(string) PubSubTopicIface
+		Close() error
+	}
+
+	// PubSubSubscriptionIface is an interface for the pubsub subscription for testing purposes.
+	PubSubSubscriptionIface interface {
+		Exists(context.Context) (bool, error)
+		Receive(context.Context, func(context.Context, *pubsub.Message)) error
+		SetMaxExtension(time.Duration)
+	}
+
+	// PubSubTopicIface is an interface for the pubsub topic for testing purposes.
+	PubSubTopicIface interface {
+		Publish(context.Context, *pubsub.Message) PubSubResultIface
+		Exists(context.Context) (bool, error)
+		GetTopic() *pubsub.Topic
+	}
+
+	// PubSubResultIface is an interface for the pubsub publish result for testing purposes.
+	PubSubResultIface interface {
+		Get(context.Context) (string, error)
+	}
+
+	pubsubClient struct {
+		client *pubsub.Client
+	}
+
+	pubsubSubscription struct {
+		subscription *pubsub.Subscription
+	}
+
+	pubsubTopic struct {
+		topic *pubsub.Topic
+	}
+
+	// CreateClient is a function that creates a new pubsub client.
+	CreateClient func(ctx context.Context, projectID string) (PubSubClientIface, error)
+)
+
+// Subscription returns a pubsub subscription.
+func (p pubsubClient) Subscription(subID string) PubSubSubscriptionIface {
+	return pubsubSubscription{subscription: p.client.Subscription(subID)}
+}
+
+// Topic returns a pubsub topic.
+func (p pubsubClient) Topic(topicID string) PubSubTopicIface {
+	return pubsubTopic{topic: p.client.Topic(topicID)}
+}
+
+// Close closes the pubsub client.
+func (p pubsubClient) Close() error {
+	return p.client.Close()
+}
+
+// Exists checks if the pubsub subscription exists.
+func (p pubsubSubscription) Exists(ctx context.Context) (bool, error) {
+	return p.subscription.Exists(ctx)
+}
+
+// Receive receives messages from the pubsub subscription.
+func (p pubsubSubscription) Receive(ctx context.Context, f func(context.Context, *pubsub.Message)) error {
+	return p.subscription.Receive(ctx, f)
+}
+
+// SetMaxExtension sets the maximum extension for the pubsub subscription.
+func (p pubsubSubscription) SetMaxExtension(d time.Duration) {
+	p.subscription.ReceiveSettings.MaxExtension = d
+}
+
+// Publish publishes a message to the pubsub topic.
+func (p pubsubTopic) Publish(ctx context.Context, msg *pubsub.Message) PubSubResultIface {
+	return p.topic.Publish(ctx, msg)
+}
+
+// Exists checks if the topic exists.
+func (p pubsubTopic) Exists(ctx context.Context) (bool, error) {
+	return p.topic.Exists(ctx)
+}
+
+// GetTopic returns the pubsub topic.
+func (p pubsubTopic) GetTopic() *pubsub.Topic {
+	return p.topic
+}
+
 // LogCollectionHandler is the handler for the log collection pubsub subscription.
-func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, topicID string) error {
+func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, topicID string, createClient CreateClient) error {
 	usagemetrics.Action(usagemetrics.LogCollectionStarted)
-	client, err := pubsub.NewClient(ctx, lc.CloudProperties.GetProjectId())
+	client, err := createClient(ctx, lc.CloudProperties.GetProjectId())
 	if err != nil {
 		return err
 	}
 	defer client.Close()
 
-	actionsSub := client.Subscription(actionsSubID)
-	ok, err := actionsSub.Exists(ctx)
+	actionsSub, err := getSubscription(ctx, client, actionsSubID)
 	if err != nil {
-		return fmt.Errorf("failed to check if subscription %s exists: %v", actionsSubID, err)
+		return err
 	}
-	if !ok {
-		return fmt.Errorf("subscription %s does not exist", actionsSubID)
-	}
-	actionsSub.ReceiveSettings.MaxExtension = 15 * time.Minute
 
 	log.CtxLogger(ctx).Infow("Listening for messages on subscription", "subscription", actionsSubID)
 	pullCtx, cancel := context.WithCancel(ctx)
@@ -138,7 +221,7 @@ func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, 
 		log.CtxLogger(ctx).Infow("Successfully collected bundle, acknowledging message", "bundlePath", bundlePath)
 		msg.Ack()
 
-		if err = lc.publishEvent(ctx, bundlePath, topicID, logMessage); err != nil {
+		if err = lc.publishEvent(ctx, bundlePath, topicID, logMessage, createClient); err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to publish event", "error", err)
 			msg.Nack()
 			return
@@ -153,6 +236,10 @@ func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, 
 	return nil
 }
 
+// bundleCollection collects the support bundle for the SAP system.
+//
+// It returns the path of the collected bundle and an error.
+// The path of the collected bundle is in the format gs://<bucket>/supportbundle/<bundleName>.zip.
 func (lc *LogCollector) bundleCollection(ctx context.Context, logMessage ActionMessage) (string, error) {
 	log.CtxLogger(ctx).Info("Collecting bundle")
 	sid, hostname, instanceNums := lc.fetchSAPDetails(ctx, logMessage)
@@ -178,9 +265,10 @@ func (lc *LogCollector) bundleCollection(ctx context.Context, logMessage ActionM
 	return bundlePath, nil
 }
 
-func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID string, action ActionMessage) error {
+// publishEvent publishes the event to the event topic.
+func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID string, action ActionMessage, createClient CreateClient) error {
 	log.CtxLogger(ctx).Infow("Publishing event to event topic", "topicID", topicID)
-	client, err := pubsub.NewClient(ctx, lc.CloudProperties.GetProjectId())
+	client, err := createClient(ctx, lc.CloudProperties.GetProjectId())
 	if err != nil {
 		return err
 	}
@@ -201,16 +289,22 @@ func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID st
 	if err != nil {
 		return err
 	}
-	topic := client.Topic(topicID)
-	result := topic.Publish(ctx, &pubsub.Message{Data: data})
 
-	_, err = result.Get(ctx)
+	topic, err := getTopic(ctx, client, topicID)
 	if err != nil {
-		return fmt.Errorf("failed to publish event back to event topic: %v", err)
+		return err
+	}
+
+	if err := publishMessage(ctx, topic, topicID, data); err != nil {
+		return err
 	}
 	return nil
 }
 
+// validateMessage validates the received message.
+//
+// It checks if the event type is "LOG_COLLECTION", if the instance ID matches the current instance ID,
+// if the GCS bucket is not empty, and if the SAP details are not empty.
 func (lc *LogCollector) validateMessage(ctx context.Context, logMessage ActionMessage) bool {
 	if logMessage.EventType != "LOG_COLLECTION" || logMessage.GCEDetails.InstanceID != lc.CloudProperties.GetInstanceId() {
 		log.CtxLogger(ctx).Infow("Invalid message", "eventType", logMessage.EventType, "instanceID", logMessage.GCEDetails.InstanceID, "currentInstanceID", lc.CloudProperties.GetInstanceId())
@@ -227,7 +321,56 @@ func (lc *LogCollector) validateMessage(ctx context.Context, logMessage ActionMe
 	return true
 }
 
-// fetchSAPDetails fetches the SAP details from the SAP system: SID, hostname, instance numbers.
+// fetchSAPDetails fetches the SAP details from the ActionMessage: SID, hostname, instance numbers.
 func (lc *LogCollector) fetchSAPDetails(ctx context.Context, logMessage ActionMessage) (string, string, string) {
 	return logMessage.SAPDetails.SID, logMessage.SAPDetails.Hostname, logMessage.SAPDetails.InstanceNums
+}
+
+// createClient creates a new pubsub client.
+func createClient(ctx context.Context, projectID string) (PubSubClientIface, error) {
+	client, err := pubsub.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return pubsubClient{client: client}, nil
+}
+
+// getSubscription creates a reference to a pubsub subscription and sets the maximum extension for the subscription to 15 minutes.
+func getSubscription(ctx context.Context, client PubSubClientIface, subID string) (PubSubSubscriptionIface, error) {
+	sub := client.Subscription(subID)
+	ok, err := sub.Exists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if subscription %s exists: %v", subID, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("subscription %s does not exist", subID)
+	}
+	sub.SetMaxExtension(15 * time.Minute)
+	return sub, nil
+}
+
+// getTopic creates a reference to a pubsub topic.
+func getTopic(ctx context.Context, client PubSubClientIface, topicID string) (PubSubTopicIface, error) {
+	topic := client.Topic(topicID)
+	ok, err := topic.Exists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if topic %s exists: %v", topicID, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("topic %s does not exist", topicID)
+	}
+	return pubsubTopic{topic: topic.GetTopic()}, nil
+}
+
+// publishMessage publishes a message to the pubsub topic.
+func publishMessage(ctx context.Context, topic PubSubTopicIface, topicID string, data []byte) error {
+	if topic.GetTopic() == nil {
+		return fmt.Errorf("topic is nil")
+	}
+	result := topic.Publish(ctx, &pubsub.Message{Data: data})
+	_, err := result.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to publish message to topic %s: %v", topicID, err)
+	}
+	return nil
 }

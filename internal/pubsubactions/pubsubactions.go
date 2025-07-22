@@ -55,7 +55,7 @@ func (ps *PubSubActions) Start(ctx context.Context) (err error) {
 	LogCollectionRoutine := &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
 			if _, ok := a.(LogCollectionParameters); ok {
-				lc.LogCollectionHandler(ctx, lcParams.ActionsSubID, lcParams.TopicID)
+				lc.LogCollectionHandler(ctx, lcParams.ActionsSubID, lcParams.TopicID, createClient)
 			}
 		},
 		RoutineArg:          lcParams,
