@@ -26,7 +26,7 @@ jobs:
 
     - name: Add workloadagentplatform submodule
       run: |
-        git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+        git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com".insteadOf "https://github.com"
         git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
         cd workloadagentplatform
         # this is the hash of the workloadagentplatform submodule
