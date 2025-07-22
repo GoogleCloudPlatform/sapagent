@@ -235,7 +235,7 @@ func updateSAPInstances(ctx context.Context, a any) {
 	log.CtxLogger(ctx).Info("Starting SAP Instances update")
 	updateTicker := time.NewTicker(args.config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
 	for {
-		log.CtxLogger(ctx).Info("Updating SAP Instances")
+		log.CtxLogger(ctx).Debugw("Updating SAP Instances")
 		sapInst := args.d.AppsDiscovery(ctx, args.d)
 		args.d.sapMu.Lock()
 		args.d.sapInstances = sapInst

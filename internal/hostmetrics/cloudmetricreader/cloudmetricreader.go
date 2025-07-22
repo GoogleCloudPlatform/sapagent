@@ -97,7 +97,7 @@ func (r *CloudMetricReader) readQueryTimeSeries(ctx context.Context, config *con
 		refresh = at.CloudMetricRefresh()
 	)
 
-	log.CtxLogger(ctx).Info("Collecting metrics via QueryTimeSeries.")
+	log.CtxLogger(ctx).Debugw("Collecting metrics via QueryTimeSeries.")
 
 	metrics = append(metrics, r.createPassthroughMetrics(ctx, config, refresh)...)
 	metrics = append(metrics, r.createNetworkMetrics(ctx, ip.GetNetworkAdapters(), config, refresh)...)

@@ -178,7 +178,7 @@ func collectHostMetrics(ctx context.Context, a any) {
 }
 
 func collectHostMetricsOnce(ctx context.Context, params Parameters, readers hostMetricsReaders) {
-	log.CtxLogger(ctx).Info("Collecting host metrics...")
+	log.CtxLogger(ctx).Debugw("Collecting host metrics...")
 	params.HeartbeatSpec.Beat()
 
 	params.InstanceInfoReader.Read(ctx, params.Config, instanceinfo.NetworkInterfaceAddressMap)
