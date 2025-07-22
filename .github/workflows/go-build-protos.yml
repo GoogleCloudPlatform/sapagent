@@ -26,6 +26,7 @@ jobs:
 
     - name: Add workloadagentplatform submodule
       run: |
+        git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
         git submodule add https://github.com/GoogleCloudPlatform/workloadagentplatform
         cd workloadagentplatform
         # this is the hash of the workloadagentplatform submodule
@@ -33,6 +34,8 @@ jobs:
         git checkout d263b695432a9439950984306e9f15c6ac5f0cd7
         cd ..
         find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
