@@ -412,6 +412,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 				SAPInstance:        instance,
 				Config:             p.Config,
 				Client:             p.Client,
+				SkippedMetrics:     skippedMetrics,
 				PMBackoffPolicy:    cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmFastFreq)*time.Second, 3, time.Minute, 35*time.Second),
 				ReplicationConfig:  sapdiscovery.HANAReplicationConfig,
 				SapSystemInterface: params.Discovery,

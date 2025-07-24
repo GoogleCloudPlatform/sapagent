@@ -73,6 +73,7 @@ any and returns the collected metrics with the last error encountered while coll
 func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var floatMetrics, intMetrics []string
 	for _, metric := range requiredFloatMetrics {
+		log.CtxLogger(ctx).Debugw("Processing float metrics ", "metric", path.Join(nwStatsPath, metric), "skipped: ", p.SkippedMetrics[path.Join(nwStatsPath, metric)])
 		if p.SkippedMetrics[path.Join(nwStatsPath, metric)] {
 			log.CtxLogger(ctx).Debug("Skipping collection of networkstats metric:", metric)
 			continue
@@ -80,6 +81,7 @@ func (p *Properties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 		floatMetrics = append(floatMetrics, metric)
 	}
 	for _, metric := range requiredIntMetrics {
+		log.CtxLogger(ctx).Debugw("Processing int metrics", "metric", path.Join(nwStatsPath, metric), "skipped: ", p.SkippedMetrics[path.Join(nwStatsPath, metric)])
 		if p.SkippedMetrics[path.Join(nwStatsPath, metric)] {
 			log.CtxLogger(ctx).Debug("Skipping collection of networkstats metric:", metric)
 			continue
