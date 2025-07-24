@@ -73,14 +73,28 @@ type (
 
 	// EventTopicMessage represents the structure for the event topic message
 	EventTopicMessage struct {
-		AlertID        string     `json:"alert_id"`
-		EventType      string     `json:"event_type"`
-		EventTimestamp time.Time  `json:"event_timestamp"`
-		EventSource    string     `json:"event_source"`
-		Description    string     `json:"description"`
-		GCEDetails     GCEDetails `json:"gce_details"`
-		SAPDetails     SAPDetails `json:"sap_details"`
-		LogPath        string     `json:"log_path"`
+		Incident Incident `json:"incident"`
+	}
+
+	// Incident represents the top-level incident structure.
+	Incident struct {
+		ResourceDisplayName string           `json:"resource_display_name"`
+		Summary             string           `json:"summary"`
+		Resource            IncidentResource `json:"resource"`
+		SAPDetails          SAPDetails       `json:"sap_details"`
+		LogPath             string           `json:"log_path"`
+	}
+
+	// IncidentResource represents the nested resource details within an incident.
+	IncidentResource struct {
+		Labels IncidentResourceLabels `json:"labels"`
+	}
+
+	// IncidentResourceLabels represents the labels within the incident resource.
+	IncidentResourceLabels struct {
+		ProjectID  string `json:"project_id"`
+		Zone       string `json:"zone"`
+		InstanceID string `json:"instance_id"`
 	}
 
 	// LogCollectionParameters represents the parameters for the log collection routine.
@@ -275,14 +289,19 @@ func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID st
 	defer client.Close()
 
 	event := EventTopicMessage{
-		AlertID:        action.AlertID,
-		EventType:      action.EventType,
-		EventTimestamp: action.EventTimestamp,
-		EventSource:    action.EventSource,
-		Description:    action.Description,
-		GCEDetails:     action.GCEDetails,
-		SAPDetails:     action.SAPDetails,
-		LogPath:        bundlePath,
+		Incident: Incident{
+			ResourceDisplayName: action.GCEDetails.InstanceName,
+			Summary:             action.Description,
+			Resource: IncidentResource{
+				Labels: IncidentResourceLabels{
+					ProjectID:  lc.CloudProperties.GetProjectId(),
+					Zone:       lc.CloudProperties.GetZone(),
+					InstanceID: lc.CloudProperties.GetInstanceId(),
+				},
+			},
+			SAPDetails: action.SAPDetails,
+			LogPath:    bundlePath,
+		},
 	}
 
 	data, err := json.Marshal(event)
