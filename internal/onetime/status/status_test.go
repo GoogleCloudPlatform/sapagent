@@ -1486,9 +1486,9 @@ func TestStatusHandler(t *testing.T) {
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "collect_process_metrics", Value: "true", IsDefault: false},
-							{Name: "process_metrics_frequency", Value: "5", IsDefault: true},
+							{Name: "process_metrics_frequency", Value: "30", IsDefault: true},
 							{Name: "process_metrics_to_skip", Value: "[]", IsDefault: true},
-							{Name: "slow_process_metrics_frequency", Value: "30", IsDefault: true},
+							{Name: "slow_process_metrics_frequency", Value: "120", IsDefault: true},
 						},
 					},
 					{

@@ -203,10 +203,10 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 		cc.WorkloadValidationDbMetricsFrequency = 3600 // Default frequency is 1 hour.
 	}
 	if cc.GetCollectProcessMetrics() && cc.GetProcessMetricsFrequency() <= 0 {
-		cc.ProcessMetricsFrequency = 5
+		cc.ProcessMetricsFrequency = 30
 	}
 	if cc.GetCollectProcessMetrics() && cc.GetSlowProcessMetricsFrequency() <= 0 {
-		cc.SlowProcessMetricsFrequency = 30
+		cc.SlowProcessMetricsFrequency = 120
 	}
 	if cc.GetCollectAgentMetrics() && cc.GetAgentMetricsFrequency() <= 0 {
 		cc.AgentMetricsFrequency = 60

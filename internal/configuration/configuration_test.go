@@ -295,8 +295,8 @@ func TestApplyDefaults(t *testing.T) {
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: false},
 					CollectProcessMetrics:            true,
-					ProcessMetricsFrequency:          5,
-					SlowProcessMetricsFrequency:      30,
+					ProcessMetricsFrequency:          30,
+					SlowProcessMetricsFrequency:      120,
 					CollectAgentMetrics:              true,
 					AgentMetricsFrequency:            60,
 					AgentHealthFrequency:             60,

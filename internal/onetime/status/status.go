@@ -461,9 +461,9 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 		State: spb.State_UNSPECIFIED_STATE,
 		ConfigValues: []*spb.ConfigValue{
 			configValue("collect_process_metrics", config.GetCollectionConfiguration().GetCollectProcessMetrics(), false),
-			configValue("process_metrics_frequency", config.GetCollectionConfiguration().GetProcessMetricsFrequency(), 5),
+			configValue("process_metrics_frequency", config.GetCollectionConfiguration().GetProcessMetricsFrequency(), 30),
 			configValue("process_metrics_to_skip", config.GetCollectionConfiguration().GetProcessMetricsToSkip(), []string{}),
-			configValue("slow_process_metrics_frequency", config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency(), 30),
+			configValue("slow_process_metrics_frequency", config.GetCollectionConfiguration().GetSlowProcessMetricsFrequency(), 120),
 		},
 	}
 	if !config.GetCollectionConfiguration().GetCollectProcessMetrics() {
