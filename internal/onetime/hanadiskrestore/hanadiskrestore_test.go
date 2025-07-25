@@ -89,6 +89,92 @@ func TestMain(t *testing.M) {
 	os.Exit(t.Run())
 }
 
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		name    string
+		v1      string
+		v2      string
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:    "v1 less than v2 minor",
+			v1:      "3.9",
+			v2:      "3.10",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "v1 greater than v2 minor",
+			v1:      "3.10",
+			v2:      "3.9",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "v1 equal to v2",
+			v1:      "3.9",
+			v2:      "3.9",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "v1 less than v2 major",
+			v1:      "2.10",
+			v2:      "3.1",
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "v1 greater than v2 major",
+			v1:      "4.1",
+			v2:      "3.10",
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "invalid v1 format",
+			v1:      "3.9.1",
+			v2:      "3.10",
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name:    "invalid v2 format",
+			v1:      "3.9",
+			v2:      "3",
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name:    "non-integer in v1",
+			v1:      "a.9",
+			v2:      "3.10",
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name:    "non-integer in v2",
+			v1:      "3.9",
+			v2:      "3.b",
+			want:    false,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := compareVersions(tc.v1, tc.v2)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("compareVersions(%q, %q) returned error: %v, wantErr: %v", tc.v1, tc.v2, err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("compareVersions(%q, %q) = %v, want: %v", tc.v1, tc.v2, got, tc.want)
+			}
+		})
+	}
+}
+
 var (
 	defaultRestorer = Restorer{
 		Project:        "my-project",

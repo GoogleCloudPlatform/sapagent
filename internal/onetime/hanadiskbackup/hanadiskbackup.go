@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,12 +116,49 @@ type (
 
 const (
 	metricPrefix   = "workload.googleapis.com/sap/agent/"
-	M2AgentVersion = "3.9"
+	m2AgentVersion = "3.10"
 )
 
 var (
 	dbFreezeStartTime, workflowStartTime time.Time
 )
+
+// compareVersions returns true if version1 is less than version2.
+// It expects versions in "major.minor" format.
+func compareVersions(version1, version2 string) (bool, error) {
+	v1Parts := strings.Split(version1, ".")
+	v2Parts := strings.Split(version2, ".")
+
+	if len(v1Parts) != 2 || len(v2Parts) != 2 {
+		return false, fmt.Errorf("invalid version format. expected 'major.minor', got: %q and %q", version1, version2)
+	}
+
+	v1Major, err := strconv.Atoi(v1Parts[0])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse major version for %q: %w", version1, err)
+	}
+	v1Minor, err := strconv.Atoi(v1Parts[1])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse minor version for %q: %w", version1, err)
+	}
+
+	v2Major, err := strconv.Atoi(v2Parts[0])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse major version for %q: %w", version2, err)
+	}
+	v2Minor, err := strconv.Atoi(v2Parts[1])
+	if err != nil {
+		return false, fmt.Errorf("failed to parse minor version for %q: %w", version2, err)
+	}
+
+	if v1Major < v2Major {
+		return true, nil
+	}
+	if v1Major > v2Major {
+		return false, nil
+	}
+	return v1Minor < v2Minor, nil
+}
 
 // ISG is a placeholder struct defining fields potentially required
 // for lifecycle management of Instant Snapshot Groups.
@@ -286,7 +324,10 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 	s.timeSeriesCreator = mc
 
 	s.UseSnapshotGroupWorkflow = true
-	if configuration.AgentVersion < M2AgentVersion {
+	isOlder, err := compareVersions(configuration.AgentVersion, m2AgentVersion)
+	if err != nil {
+		log.CtxLogger(ctx).Warnw("Could not compare agent versions, defaulting to use snapshot group workflow.", "agent_version", configuration.AgentVersion, "m2_agent_version", m2AgentVersion, "error", err)
+	} else if isOlder {
 		s.UseSnapshotGroupWorkflow = false
 	}
 
