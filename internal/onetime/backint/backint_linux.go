@@ -19,6 +19,7 @@ package backint
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -132,8 +133,12 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		}
 	}()
 
-	_, exitStatus = b.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
+	msg, exitStatus := b.Run(ctx, onetime.CreateRunOptions(cloudProps, false))
 	if exitStatus == subcommands.ExitFailure {
+		// NOTE: This log message has specific keys used in querying Cloud Logging.
+		// Never change these keys since it would have downstream effects.
+		log.CtxLogger(ctx).Errorw("SAP_BACKINT_FILE_TRANSFER", "operation", strings.ToLower(b.Function), "fileName", "Backint failed to start", "fileSize", 0, "fileType", "data", "success", false, "transferTime", "0", "avgTransferSpeedMBps", "0", "userID", b.User, "instanceName", cloudProps.GetInstanceName())
+		fmt.Println("Backint failed to start: ", msg)
 		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
 	}
 	return exitStatus
@@ -178,7 +183,7 @@ func (b *Backint) backintHandler(ctx context.Context, cloudProps *ipb.CloudPrope
 		UserAgent:        cfg.StorageAgentName(),
 	}
 	if _, ok := storage.ConnectToBucket(ctx, connectParams); !ok {
-		return "Failed to connect to bucket", subcommands.ExitFailure
+		return fmt.Sprintf("Failed to connect to bucket: %s", connectParams.BucketName), subcommands.ExitFailure
 	}
 
 	b.oteLogger.LogUsageAction(usagemetrics.BackintRunning)
