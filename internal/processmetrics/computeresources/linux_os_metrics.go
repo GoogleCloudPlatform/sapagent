@@ -277,9 +277,11 @@ func populateProcMemInfoMetrics(ctx context.Context, p *LinuxOsMetricsInstancePr
 	}
 
 	// We are calculating this field separately because commit% is not directly derived from the output of the proc mem info.
-	commitPercent, ok := calculateCommitPercent(fieldToValueMap["MemTotal"], fieldToValueMap["Committed_AS"])
-	if ok {
-		procMemInfoMetrics = append(procMemInfoMetrics, createLinuxOsMetrics(p, commitPercentPath, labels, commitPercent))
+	if !p.SkippedMetrics[commitPercentPath] {
+		commitPercent, ok := calculateCommitPercent(fieldToValueMap["MemTotal"], fieldToValueMap["Committed_AS"])
+		if ok {
+			procMemInfoMetrics = append(procMemInfoMetrics, createLinuxOsMetrics(p, commitPercentPath, labels, commitPercent))
+		}
 	}
 	return procMemInfoMetrics
 }

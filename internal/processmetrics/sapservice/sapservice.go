@@ -63,11 +63,11 @@ type (
 // responsible for collecting sap service statuses metric.
 func (p *InstanceProperties) Collect(ctx context.Context) ([]*mrpb.TimeSeries, error) {
 	var metrics []*mrpb.TimeSeries
-	if _, ok := mPathMap[failedMPath]; !ok {
+	if !p.SkippedMetrics[failedMPath] {
 		isFailedMetrics := queryInstanceState(ctx, p, "is-failed")
 		metrics = append(metrics, isFailedMetrics...)
 	}
-	if _, ok := mPathMap[disabledMPath]; !ok {
+	if !p.SkippedMetrics[disabledMPath] {
 		isDisabledMetrics := queryInstanceState(ctx, p, "is-enabled")
 		metrics = append(metrics, isDisabledMetrics...)
 	}

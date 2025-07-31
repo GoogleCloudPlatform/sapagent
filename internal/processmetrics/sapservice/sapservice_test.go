@@ -151,7 +151,7 @@ func TestCollect(t *testing.T) {
 			},
 			skippedMetrics: map[string]bool{failedMPath: true},
 			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{}
+				return commandlineexecutor.Result{Error: errors.New("unable to execute command")}
 			},
 			exitCode: func(err error) int {
 				if err == nil {
@@ -162,7 +162,7 @@ func TestCollect(t *testing.T) {
 			wantCount: 5,
 		},
 		{
-			name: "SkipIsDisableddMetrics",
+			name: "SkipIsDisabledMetrics",
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
 					ProcessMetricsToSkip: []string{disabledMPath},

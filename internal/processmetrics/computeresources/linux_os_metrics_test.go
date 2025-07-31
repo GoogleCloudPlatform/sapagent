@@ -47,6 +47,30 @@ var (
 	}
 	defaultMemInfoStdOut = "MemTotal: 65319908 kB \nMemFree: 784588 kB\nMemAvailable: 37180312 kB\nBuffers: 6644 kB\nCached: 39375836 kB\nSwapCached: 44 kB\nActive: 26813028 kB\nInactive: 35262344 kB\nDirty: 196 kB\nShmem: 3692176 kB\nCommitLimit: 34757100 kB\nCommitted_AS: 32541940 kB"
 	defaultFreeStdOut    = "total        used        free      shared  buff/cache   available\n Mem:       131902960    18861708   109490620     4807332     9611728   113041252\n Swap:        2097148           0     2097148"
+
+	allMetrics = []string{
+		memFreeKBPath,
+		memAvailKBPath,
+		memTotalKBPath,
+		buffersKBPath,
+		cachedKBPath,
+		swapCachedKBPath,
+		commitKBPath,
+		commitPercentPath,
+		activeKBPath,
+		inactiveKBPath,
+		dirtyKBPath,
+		shMemKBPath,
+		freeMemUsedKBPath,
+		freeMemTotalKBPath,
+		freeMemFreeKBPath,
+		freeMemSharedKBPath,
+		freeMemBuffersAndCacheKBPath,
+		freeMemAvailableKBPath,
+		freeSwapTotalKBPath,
+		freeSwapUsedKBPath,
+		freeSwapFreeKBPath,
+	}
 )
 
 func TestCollectWithRetryLinuxOSMetrics(t *testing.T) {
@@ -247,6 +271,27 @@ func TestCollectForLinuxOsMetrics(t *testing.T) {
 				gotLabels := metrics[0].GetMetric().GetLabels()
 				if cmp.Diff(gotLabels, test.wantLabels) != "" {
 					t.Errorf("Collect() returned unexpected metric labels diff (-want +got):\n%s", cmp.Diff(gotLabels, test.wantLabels))
+				}
+			}
+		})
+	}
+
+	for _, metricToSkip := range allMetrics {
+		t.Run("Skip "+metricToSkip, func(t *testing.T) {
+			testLinuxOsMetricsInstanceProps := &LinuxOsMetricsInstanceProperties{
+				Config:         defaultConfig,
+				Client:         &fake.TimeSeriesCreator{},
+				Executor:       defaultExecutor,
+				SAPInstance:    defaultSAPInstanceHANA,
+				SkippedMetrics: map[string]bool{metricToSkip: true},
+			}
+			metrics, err := testLinuxOsMetricsInstanceProps.Collect(context.Background())
+			if err != nil {
+				t.Errorf("Collect() returned an unexpected error: %v", err)
+			}
+			for _, metric := range metrics {
+				if strings.HasSuffix(metric.GetMetric().GetType(), metricToSkip) {
+					t.Errorf("Collect() returned unexpected metric: %v", metric.GetMetric().GetType())
 				}
 			}
 		})

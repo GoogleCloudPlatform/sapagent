@@ -1673,6 +1673,23 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TS
 	ed1adm   13447 13436  0 Apr26 ?        00:01:10 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
 			}
 		},
+	}, {
+		name: "skipRoleMetric",
+		p: &InstanceProperties{
+			SAPInstance: &sapb.SAPInstance{
+				InstanceId: "ASCS11",
+				Sapsid:     "TST",
+			},
+			SkippedMetrics: map[string]bool{nwInstanceRolePath: true},
+		},
+		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			return commandlineexecutor.Result{
+				StdOut: `
+tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11
+tstadm   13447 13436  0 Apr26 ?        00:01:10 ms.sapTST_ASCS00 pf=/usr/sap/TST/SYS/profile/TST_ASCS00_alidascs11`,
+			}
+		},
+		want: nil,
 	}}
 
 	ctx := context.Background()

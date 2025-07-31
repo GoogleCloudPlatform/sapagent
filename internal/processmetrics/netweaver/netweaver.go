@@ -589,6 +589,9 @@ func collectEnqLockMetrics(ctx context.Context, p *InstanceProperties, exec comm
 }
 
 func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec commandlineexecutor.Execute) (*mrpb.TimeSeries, error) {
+	if _, ok := p.SkippedMetrics[nwInstanceRolePath]; ok {
+		return nil, nil
+	}
 	params := commandlineexecutor.Params{
 		Executable: "ps",
 		Args:       []string{"-ef"},
