@@ -223,7 +223,7 @@ func mergeComponent(old, new *spb.SapDiscovery_Component) *spb.SapDiscovery_Comp
 		merged.Sid = old.Sid
 	}
 
-	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), new.GetHaHosts()...))
+	merged.HaHosts = removeDuplicates(append(merged.GetHaHosts(), old.GetHaHosts()...))
 	merged.ReplicationSites = removeDuplicates(append(merged.GetReplicationSites(), new.GetReplicationSites()...))
 
 	return merged
