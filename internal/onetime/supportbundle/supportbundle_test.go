@@ -474,43 +474,6 @@ func TestExecuteForSOSReport(t *testing.T) {
 	}
 }
 
-func TestRun(t *testing.T) {
-	tests := []struct {
-		name           string
-		sosr           *SupportBundle
-		wantExitStatus subcommands.ExitStatus
-	}{
-		{
-			name:           "FailLengthArgs",
-			sosr:           &SupportBundle{},
-			wantExitStatus: subcommands.ExitUsageError,
-		},
-		{
-			name:           "FailAssertArgs",
-			sosr:           &SupportBundle{},
-			wantExitStatus: subcommands.ExitUsageError,
-		},
-		{
-			name: "InvalidParams",
-			sosr: &SupportBundle{
-				Sid:          "DEH",
-				InstanceNums: "",
-				Hostname:     "sample_host",
-			},
-			wantExitStatus: subcommands.ExitUsageError,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			test.sosr.oteLogger = defaultOTELogger
-			_, exitStatus := test.sosr.Run(context.Background(), defaultRunOptions, fakeExec)
-			if exitStatus != test.wantExitStatus {
-				t.Errorf("ExecuteAndGetMessage(%v) = %v; want: %v", test.sosr, exitStatus, test.wantExitStatus)
-			}
-		})
-	}
-}
-
 func TestCollectAgentSupport(t *testing.T) {
 	tests := []struct {
 		name string
@@ -544,12 +507,10 @@ func TestValidateParams(t *testing.T) {
 		{
 			name:  "NoValueForSID",
 			sosrc: SupportBundle{InstanceNums: "00 01", Hostname: "sample_host"},
-			want:  []string{"no value provided for sid"},
 		},
 		{
 			name:  "NoValueForInstance",
 			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "", Hostname: "sample_host"},
-			want:  []string{"no value provided for instance-numbers"},
 		},
 		{
 			name:  "InvalidValueForinstanceNums",
@@ -559,7 +520,6 @@ func TestValidateParams(t *testing.T) {
 		{
 			name:  "NoValueForHostName",
 			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "00 01", Hostname: ""},
-			want:  []string{"no value provided for hostname"},
 		},
 		{
 			name: "NoTimestamp",
@@ -612,20 +572,6 @@ func TestSOSReportHandler(t *testing.T) {
 		wantMessage    string
 		wantExitStatus subcommands.ExitStatus
 	}{
-		{
-			name: "InvalidParams",
-			sosr: &SupportBundle{
-				Sid:          "DEH",
-				InstanceNums: "",
-				Hostname:     "sample_host",
-			},
-			ctx:            context.Background(),
-			exec:           fakeExec,
-			fs:             mockedfilesystem{},
-			z:              mockedZipper{},
-			wantMessage:    "Invalid params for collecting support bundle Report for Agent for SAP: no value provided for instance-numbers",
-			wantExitStatus: subcommands.ExitUsageError,
-		},
 		{
 			name: "MkdirError",
 			sosr: &SupportBundle{
@@ -2228,6 +2174,146 @@ func TestFetchSystemDServicesErrors(t *testing.T) {
 	}
 }
 
+func TestProcessDiscoveryData(t *testing.T) {
+	tests := []struct {
+		name               string
+		s                  *SupportBundle
+		destFilePathPrefix string
+		cp                 *ipb.CloudProperties
+		fs                 filesystem.FileSystem
+		wantErr            error
+		wantSID            string
+		wantInstanceNums   []string
+		wantHostname       string
+	}{
+		{
+			name: "NoHostname",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs: mockedfilesystem{
+				fileContent: strings.Replace(discoveryResponse, "\"virtualHostname\": \"test-hostname\"", "\"virtualHostname\": \"\"", 1),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoSID",
+			s: &SupportBundle{
+				Hostname: "test-hostname",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs: mockedfilesystem{
+				fileContent: strings.Replace(discoveryResponse, "\"sid\": \"HDB\"", "\"sid\": \"\"", 2),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoInstanceNumbers",
+			s: &SupportBundle{
+				Hostname: "test-hostname",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs: mockedfilesystem{
+				fileContent: strings.Replace(strings.Replace(discoveryResponse, "\"instanceNumber\": \"123\"", "\"instanceNumber\": \"\"", 1), "\"number\": \"01\"", "\"number\": \"\"", 1),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "SuccessWithFlags",
+			s: &SupportBundle{
+				Sid:                    "HDB",
+				InstanceNums:           "00",
+				instanceNumsAfterSplit: []string{"00"},
+				Hostname:               "test-hostname",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs: mockedfilesystem{
+				fileContent: discoveryResponse,
+			},
+			wantErr:          nil,
+			wantSID:          "HDB",
+			wantInstanceNums: []string{"00"},
+			wantHostname:     "test-hostname",
+		},
+	}
+
+	ctx := context.Background()
+	serv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, sampleDiscoveryResponse)
+	}))
+	defer serv.Close()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			gotErr := tc.s.processDiscoveryData(ctx, serv.URL, tc.destFilePathPrefix, tc.cp, tc.fs)
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("processDiscoveryData() error = %v, want %v", gotErr, tc.wantErr)
+			}
+			if tc.wantErr == nil {
+				if tc.s.Sid != tc.wantSID {
+					t.Errorf("processDiscoveryData() Sid = %v, want %v", tc.s.Sid, tc.wantSID)
+				}
+				if diff := cmp.Diff(tc.wantInstanceNums, tc.s.instanceNumsAfterSplit); diff != "" {
+					t.Errorf("processDiscoveryData() instanceNumsAfterSplit diff (-want +got):\n%s", diff)
+				}
+				if tc.s.Hostname != tc.wantHostname {
+					t.Errorf("processDiscoveryData() Hostname = %v, want %v", tc.s.Hostname, tc.wantHostname)
+				}
+			}
+		})
+	}
+}
+
 func TestCollectSapDiscoveryErrors(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -3585,7 +3671,7 @@ func TestNewQueryClient(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var s = &SupportBundle{
+			s := &SupportBundle{
 				oteLogger: defaultOTELogger,
 			}
 			_, err := s.newQueryClient(ctx)

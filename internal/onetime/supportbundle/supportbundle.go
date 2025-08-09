@@ -37,6 +37,7 @@ import (
 	"flag"
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	st "cloud.google.com/go/storage"
+	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hostmetrics/cloudmetricreader"
@@ -54,6 +55,7 @@ import (
 	mpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	systempb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
 type (
@@ -388,16 +390,16 @@ func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
 	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
-	[-h] [-loglevel=<debug|info|warn|error>]
+	[-h] [-loglevel=<info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
 // SetFlags implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.Sid, "sid", "", "SAP System Identifier - required for collecting HANA traces")
-	fs.StringVar(&s.InstanceNums, "instance-numbers", "", "Instance numbers - required for collecting HANA traces")
-	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - required for collecting HANA traces")
+	fs.StringVar(&s.Sid, "sid", "", "SAP System Identifier - optional. If not provided, it will be fetched from SAP system discovery.")
+	fs.StringVar(&s.InstanceNums, "instance-numbers", "", "Instance numbers - optional. If not provided, it will be fetched from SAP system discovery.")
+	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - optional. If not provided, it will be fetched from SAP system discovery.s")
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.Metrics, "metrics", false, "Indicate if metrics(process and hana monitoring) are to be collected from cloud monitoring.")
@@ -473,10 +475,16 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		return errMessage, subcommands.ExitFailure
 	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
+	if !s.AgentLogsOnly && (s.Hostname == "" || s.Sid == "" || len(s.instanceNumsAfterSplit) == 0) {
+		if err := s.processDiscoveryData(ctx, cloudLoggingURL, destFilesPath, cp, fs); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, "Failed to process discovery data", err)
+			return fmt.Sprintf("Failed to process discovery data: %v", err), subcommands.ExitFailure
+		}
+	}
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
 
-	hanaPaths := []string{}
+	var hanaPaths []string
 	for _, inr := range s.instanceNumsAfterSplit {
 		hanaPaths = append(hanaPaths, fmt.Sprintf(`/usr/sap/%s/HDB%s/%s`, s.Sid, inr, s.Hostname))
 	}
@@ -1217,16 +1225,17 @@ func (s *SupportBundle) collectSapDiscovery(ctx context.Context, baseURL, destFi
 	entry = entriesResponse.Entries[0]
 	discovery := entry.JSONPayload.Discovery
 
-	f, err := fs.Create(fmt.Sprintf("%s/%s", destFilePathPrefix, sapDiscoveryFile))
+	filePath := fmt.Sprintf("%s/%s", destFilePathPrefix, sapDiscoveryFile)
+	f, err := fs.Create(filePath)
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error while creating file", "err", err)
+		log.CtxLogger(ctx).Errorw("Error while creating file", "file", filePath, "err", err)
 		return err
 	}
 	defer f.Close()
 
 	_, err = f.Write([]byte(discovery))
 	if err != nil {
-		log.CtxLogger(ctx).Errorw("Error while writing to file", "err", err)
+		log.CtxLogger(ctx).Errorw("Error while writing to file", "file", filePath, "err", err)
 		return err
 	}
 	return nil
@@ -1645,21 +1654,13 @@ func (s *SupportBundle) validateParams() []string {
 	if s.AgentLogsOnly {
 		return errs
 	}
-	if s.Sid == "" {
-		errs = append(errs, "no value provided for sid")
-	}
-	if s.InstanceNums == "" {
-		errs = append(errs, "no value provided for instance-numbers")
-	} else {
+	if s.InstanceNums != "" {
 		s.instanceNumsAfterSplit = strings.Split(s.InstanceNums, " ")
 		for _, nos := range s.instanceNumsAfterSplit {
 			if len(nos) != 2 {
 				errs = append(errs, fmt.Sprintf("invalid instance number %s", nos))
 			}
 		}
-	}
-	if s.Hostname == "" {
-		errs = append(errs, "no value provided for hostname")
 	}
 	if s.Metrics && s.Timestamp == "" {
 		s.Timestamp = time.Now().Format("2006-01-02 15:04:05")
@@ -1684,6 +1685,113 @@ func (s *SupportBundle) removeDestinationFolder(ctx context.Context, path string
 	if err := fu.RemoveAll(path); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing folder %s", path), err)
 		return err
+	}
+	return nil
+}
+
+func (s *SupportBundle) processDiscoveryData(ctx context.Context, baseURL, destFilesPath string, cp *ipb.CloudProperties, fs filesystem.FileSystem) error {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Attempting to fetch SID and Instance Numbers from SAP Discovery...")
+	if err := s.collectSapDiscovery(ctx, baseURL, destFilesPath, cp, fs); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Failed to fetch SAP Discovery data, please provide -sid and -instance-numbers", err)
+		return fmt.Errorf("Failed to fetch SAP Discovery data: %v", err)
+	}
+	discoveryData, err := fs.ReadFile(path.Join(destFilesPath, sapDiscoveryFile))
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Failed to read SAP Discovery data", err)
+		return fmt.Errorf("Failed to read SAP Discovery data: %v", err)
+	}
+	log.CtxLogger(ctx).Debugf("Read SAP Discovery data from file: %s", path.Join(destFilesPath, sapDiscoveryFile))
+	log.CtxLogger(ctx).Debugf("SAP Discovery data: %s", string(discoveryData))
+	var sapDiscovery systempb.SapDiscovery
+	if err := protojson.Unmarshal(discoveryData, &sapDiscovery); err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Failed to parse SAP discovery data", err)
+		return fmt.Errorf("Failed to parse SAP discovery data: %v", err)
+	}
+
+	var discoveredSIDs []string
+	var discoveredInstanceNumbers []string
+
+	// Extract from DatabaseLayer
+	if sapDiscovery.GetDatabaseLayer() != nil {
+		log.CtxLogger(ctx).Debugf("Extracting from DatabaseLayer")
+		for _, res := range sapDiscovery.GetDatabaseLayer().GetResources() {
+			if res.GetResourceKind() == systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				if res.GetInstanceProperties().GetAppInstances() != nil {
+					for _, app := range res.GetInstanceProperties().GetAppInstances() {
+						if app.GetNumber() != "" {
+							discoveredInstanceNumbers = append(discoveredInstanceNumbers, app.GetNumber())
+							log.CtxLogger(ctx).Debugf("Discovered instance number from DatabaseLayer: %s", app.GetNumber())
+						}
+					}
+				}
+			}
+		}
+		if sapDiscovery.GetDatabaseLayer().GetSid() != "" {
+			discoveredSIDs = append(discoveredSIDs, sapDiscovery.GetDatabaseLayer().GetSid())
+			log.CtxLogger(ctx).Debugf("Discovered SID from DatabaseLayer: %s", sapDiscovery.GetDatabaseLayer().GetSid())
+		}
+	}
+
+	// Extract from ApplicationLayer
+	if sapDiscovery.GetApplicationLayer() != nil {
+		log.CtxLogger(ctx).Infof("Extracting from ApplicationLayer")
+		for _, res := range sapDiscovery.GetApplicationLayer().GetResources() {
+			if res.GetResourceKind() == systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
+				if res.GetInstanceProperties().GetAppInstances() != nil {
+					for _, app := range res.GetInstanceProperties().GetAppInstances() {
+						if app.GetNumber() != "" {
+							discoveredInstanceNumbers = append(discoveredInstanceNumbers, app.GetNumber())
+							log.CtxLogger(ctx).Debugf("Discovered instance number from ApplicationLayer: %s", app.GetNumber())
+						}
+					}
+				}
+			}
+		}
+		if sapDiscovery.GetApplicationLayer().GetSid() != "" {
+			discoveredSIDs = append(discoveredSIDs, sapDiscovery.GetApplicationLayer().GetSid())
+			log.CtxLogger(ctx).Debugf("Discovered SID from ApplicationLayer: %s", sapDiscovery.GetApplicationLayer().GetSid())
+		}
+	}
+
+	if s.Sid == "" && len(discoveredSIDs) > 0 {
+		s.Sid = discoveredSIDs[0]
+	}
+
+	if len(s.instanceNumsAfterSplit) == 0 && len(discoveredInstanceNumbers) > 0 {
+		s.instanceNumsAfterSplit = discoveredInstanceNumbers
+	}
+	if s.Hostname == "" {
+		// Extract hostname from discovery data
+		if sapDiscovery.GetDatabaseLayer() != nil {
+			for _, res := range sapDiscovery.GetDatabaseLayer().GetResources() {
+				if res.GetResourceKind() == systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE && res.GetInstanceProperties().GetVirtualHostname() != "" {
+					s.Hostname = res.GetInstanceProperties().GetVirtualHostname()
+					log.CtxLogger(ctx).Debugw("Using discovered hostname from DatabaseLayer", "hostname", s.Hostname)
+					break
+				}
+			}
+		}
+		if s.Hostname == "" && sapDiscovery.GetApplicationLayer() != nil {
+			for _, res := range sapDiscovery.GetApplicationLayer().GetResources() {
+				if res.GetResourceKind() == systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE && res.GetInstanceProperties().GetVirtualHostname() != "" {
+					s.Hostname = res.GetInstanceProperties().GetVirtualHostname()
+					log.CtxLogger(ctx).Debugw("Using discovered hostname from ApplicationLayer", "hostname", s.Hostname)
+					break
+				}
+			}
+		}
+	}
+
+	log.CtxLogger(ctx).Infow("Using discovered values", "sid", s.Sid, "instanceNumbers", s.instanceNumsAfterSplit, "hostname", s.Hostname)
+
+	if s.Sid == "" {
+		return fmt.Errorf("could not determine SID, please provide with -sid flag")
+	}
+	if len(s.instanceNumsAfterSplit) == 0 {
+		return fmt.Errorf("could not determine instance numbers, please provide with -instance-numbers flag")
+	}
+	if s.Hostname == "" {
+		return fmt.Errorf("could not determine hostname, please provide with -hostname flag")
 	}
 	return nil
 }
