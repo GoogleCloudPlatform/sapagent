@@ -116,7 +116,7 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 	}
 }
 
-// appServerZonalSeparation checks if there is an application server residing in a different zone than the central services.
+// appServerZonalSeparation checks if the app servers and central services are distributed across multiple zones.
 func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 	if params.Discovery == nil {
 		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
@@ -139,13 +139,15 @@ func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 			}
 		}
 	}
-	for appServerZone := range appServerZones {
-		if _, found := centralServiceZones[appServerZone]; !found {
-			log.CtxLogger(ctx).Debugw("Found app server without central service in zone", "zone", appServerZone)
-			return true
-		}
+	if len(appServerZones) < 2 {
+		log.CtxLogger(ctx).Debugw("App servers not distributed across multiple zones")
+		return false
 	}
-	return false
+	if len(centralServiceZones) < 2 {
+		log.CtxLogger(ctx).Debugw("Central services not distributed across multiple zones")
+		return false
+	}
+	return true
 }
 
 // hasInstanceRole checks if the instance the agent is running on is functioning as an application server, ASCS, or ERS.
