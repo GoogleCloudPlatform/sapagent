@@ -49,6 +49,7 @@ const (
 	testInstanceName1    = "test-instance-name-1"
 	testInstanceName2    = "test-instance-name-2"
 	testInstanceName3    = "test-instance-name-3"
+	testInstanceName4    = "test-instance-name-4"
 	testInstanceID       = "test-instance-id"
 	testBaseZone         = "test-region-zone"
 	testZone1            = "test-region-zone-1"
@@ -396,11 +397,12 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
-					[]string{testBaseZone, testZone1, testZone2},
-					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
+					[]string{testBaseZone, testZone1, testZone2, testZone1},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
 				),
 			),
 			wantLabels: map[string]string{
@@ -421,6 +423,27 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testZone1, testZone2},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "true",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Different_Zones_App_and_Ascs_Same_Zones",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(
+					systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{testBaseZone, testZone1, testBaseZone, testZone1},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
 				),
 			),
 			wantLabels: map[string]string{
