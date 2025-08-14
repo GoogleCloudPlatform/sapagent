@@ -372,51 +372,6 @@ func TestValidateMessage(t *testing.T) {
 			},
 			want: false,
 		},
-		{
-			name: "MissingSID",
-			logMessage: ActionMessage{
-				EventType: "LOG_COLLECTION",
-				GCEDetails: GCEDetails{
-					InstanceID: "test-instance",
-					GCSBucket:  "test-bucket",
-				},
-				SAPDetails: SAPDetails{
-					Hostname:     "test-hostname",
-					InstanceNums: "00",
-				},
-			},
-			want: false,
-		},
-		{
-			name: "MissingHostname",
-			logMessage: ActionMessage{
-				EventType: "LOG_COLLECTION",
-				GCEDetails: GCEDetails{
-					InstanceID: "test-instance",
-					GCSBucket:  "test-bucket",
-				},
-				SAPDetails: SAPDetails{
-					SID:          "test-sid",
-					InstanceNums: "00",
-				},
-			},
-			want: false,
-		},
-		{
-			name: "MissingInstanceNums",
-			logMessage: ActionMessage{
-				EventType: "LOG_COLLECTION",
-				GCEDetails: GCEDetails{
-					InstanceID: "test-instance",
-					GCSBucket:  "test-bucket",
-				},
-				SAPDetails: SAPDetails{
-					SID:      "test-sid",
-					Hostname: "test-hostname",
-				},
-			},
-			want: false,
-		},
 	}
 
 	for _, tc := range tests {

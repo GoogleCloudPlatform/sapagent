@@ -333,10 +333,6 @@ func (lc *LogCollector) validateMessage(ctx context.Context, logMessage ActionMe
 		log.CtxLogger(ctx).Infow("Invalid message", "gcsBucket", logMessage.GCEDetails.GCSBucket)
 		return false
 	}
-	if logMessage.SAPDetails.SID == "" || logMessage.SAPDetails.Hostname == "" || logMessage.SAPDetails.InstanceNums == "" {
-		log.CtxLogger(ctx).Infow("Invalid message", "sid", logMessage.SAPDetails.SID, "hostname", logMessage.SAPDetails.Hostname, "instanceNums", logMessage.SAPDetails.InstanceNums)
-		return false
-	}
 	return true
 }
 
