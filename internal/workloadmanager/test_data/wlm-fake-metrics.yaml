@@ -148,6 +148,10 @@ metric: hana
     agent_state: running
     fast_restart: disabled
     ha_sr_hook_configured: yes
+    chksrv_hook_configured: true
+    chksrv_provider_configured: true
+    chksrv_hook_active: true
+    chksrv_action_on_lost: stop
     num_completion_queues: 12
     num_submit_queues: 12
     tables_preloaded_in_parallel: 32

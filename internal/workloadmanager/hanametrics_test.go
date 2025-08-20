@@ -192,6 +192,12 @@ num_submit_queues = 12
 
 [ha_dr_provider_SAPHanaSR]
 
+[ha_dr_provider_chksrv]
+provider = ChkSrv
+path = /usr/share/SAPHanaSR/srHook
+execution_order = 2
+action_on_lost = stop
+
 [persistance]
 basepath_datavolumes = /hana/data/ISC
 basepath_logvolumes = /hana/log/ISC
@@ -371,7 +377,8 @@ func GlobalINITest3Exec(ctx context.Context, params commandlineexecutor.Params) 
 			StdOut: "12345",
 			StdErr: "",
 		}
-	} else if params.Executable == "ps" {
+	}
+	if params.Executable == "ps" {
 		return commandlineexecutor.Result{
 			StdOut: "Invalid string",
 			StdErr: "",
@@ -389,7 +396,8 @@ func GlobalINITest4Exec(ctx context.Context, params commandlineexecutor.Params) 
 			StdOut: "12345",
 			StdErr: "",
 		}
-	} else if params.Executable == "ps" {
+	}
+	if params.Executable == "ps" {
 		return commandlineexecutor.Result{
 			StdOut: "HDB_INFO",
 			StdErr: "",
@@ -1035,10 +1043,13 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		{
 			name: "TestHanaAllLabelsDisabled",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
+				if params.Executable == "test" {
+					return commandlineexecutor.Result{
+						Error:    errors.New("file not found"),
+						ExitCode: 1,
+					}
 				}
+				return commandlineexecutor.Result{}
 			},
 			osStatReader:     func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: defaultFileReader,
@@ -1062,6 +1073,10 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":                             "",
 				"fast_restart":                              "disabled",
 				"ha_sr_hook_configured":                     "no",
+				"chksrv_hook_configured":                    "false",
+				"chksrv_provider_configured":                "false",
+				"chksrv_action_on_lost":                     "",
+				"chksrv_hook_active":                        "false",
 				"num_completion_queues":                     "1",
 				"num_submit_queues":                         "1",
 				"tables_preloaded_in_parallel":              "",
@@ -1088,85 +1103,49 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
 					if strings.Contains(params.ArgsToSplit, "finished successfully") {
-						return commandlineexecutor.Result{
-							StdOut: backupLogGrepSuccessOut,
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
 					}
 					if strings.Contains(params.ArgsToSplit, "command:") {
-						return commandlineexecutor.Result{
-							StdOut: backupLogGrepCommandOut,
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
 					}
 					if strings.Contains(params.ArgsToSplit, "hdbnsutil") {
-						return commandlineexecutor.Result{
-							StdOut: "mode: primary",
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: "mode: primary"}
 					}
 				}
 				if params.Executable == "grep" {
 					if strings.Contains(params.ArgsToSplit, "sapservices") {
-						return commandlineexecutor.Result{
-							StdOut: sapservicesGrepOut,
-							StdErr: "",
-						}
-					} else if strings.Contains(params.ArgsToSplit, "basepath_logvolumes") {
-						return commandlineexecutor.Result{
-							StdOut: "basepath location /hana/log",
-							StdErr: "",
-						}
-					} else if strings.Contains(params.ArgsToSplit, "basepath_databackup") {
-						return commandlineexecutor.Result{
-							StdOut: "basepath location /export/backup",
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
 					}
-					return commandlineexecutor.Result{
-						StdOut: "basepath location /hana/data",
-						StdErr: "",
+					if strings.Contains(params.ArgsToSplit, "basepath_logvolumes") {
+						return commandlineexecutor.Result{StdOut: "basepath location /hana/log"}
 					}
+					if strings.Contains(params.ArgsToSplit, "basepath_databackup") {
+						return commandlineexecutor.Result{StdOut: "basepath location /export/backup"}
+					}
+					return commandlineexecutor.Result{StdOut: "basepath location /hana/data"}
 				}
 				if params.Executable == "df" {
 					if strings.Contains(params.ArgsToSplit, "/hana/data") {
-						return commandlineexecutor.Result{
-							StdOut: dfTargetData,
-							StdErr: "",
-						}
-					} else if strings.Contains(params.ArgsToSplit, "/export/backup") {
-						return commandlineexecutor.Result{
-							StdOut: dfTargetBackup,
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: dfTargetData}
 					}
-					return commandlineexecutor.Result{
-						StdOut: dfTargetLog,
-						StdErr: "",
+					if strings.Contains(params.ArgsToSplit, "/export/backup") {
+						return commandlineexecutor.Result{StdOut: dfTargetBackup}
 					}
+					return commandlineexecutor.Result{StdOut: dfTargetLog}
 				}
 				if params.Executable == "lsblk" {
-					return commandlineexecutor.Result{
-						StdOut: DefaultJSONDiskList,
-						StdErr: "",
-					}
+					return commandlineexecutor.Result{StdOut: DefaultJSONDiskList}
 				}
 				if params.Executable == "cat" {
 					if params.Args[0] == "/proc/sys/kernel/numa_balancing" {
-						return commandlineexecutor.Result{
-							StdOut: "1",
-							StdErr: "",
-						}
+						return commandlineexecutor.Result{StdOut: "1"}
 					}
-					return commandlineexecutor.Result{
-						StdOut: "[always]",
-						StdErr: "",
-					}
+					return commandlineexecutor.Result{StdOut: "[always]"}
 				}
-				return commandlineexecutor.Result{
-					StdOut: "",
-					StdErr: "",
+				if params.Executable == "test" {
+					return commandlineexecutor.Result{}
 				}
+				return commandlineexecutor.Result{}
 			},
 			osStatReader: func(string) (os.FileInfo, error) { return nil, nil },
 			configFileReader: ConfigFileReader(func(data string) (io.ReadCloser, error) {
@@ -1223,6 +1202,10 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":                             "default-disk-type",
 				"fast_restart":                              "enabled",
 				"ha_sr_hook_configured":                     "yes",
+				"chksrv_hook_configured":                    "true",
+				"chksrv_provider_configured":                "true",
+				"chksrv_action_on_lost":                     "stop",
+				"chksrv_hook_active":                        "true",
 				"num_completion_queues":                     "12",
 				"num_submit_queues":                         "12",
 				"tables_preloaded_in_parallel":              "32",

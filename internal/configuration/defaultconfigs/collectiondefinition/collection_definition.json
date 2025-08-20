@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 33,
+    "version": 34,
     "validation_system": {
       "system_metrics": [
         {
@@ -755,6 +755,91 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "chksrv_hook_configured"
+          },
+          "or_eval_rules": {
+            "or_eval_rules": [
+              {
+                "eval_rules": [
+                  {
+                    "output_starts_with": "[ha_dr_provider_suschksrv]"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "true"
+                }
+              },
+              {
+                "eval_rules": [
+                  {
+                    "output_starts_with": "[ha_dr_provider_chksrv]"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "true"
+                },
+                "if_false": {
+                  "value_from_literal": "false"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "chksrv_provider_configured"
+          },
+          "or_eval_rules": {
+            "or_eval_rules": [
+              {
+                "eval_rules": [
+                  {
+                    "output_starts_with": "provider = susChkSrv"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "true"
+                }
+              },
+              {
+                "eval_rules": [
+                  {
+                    "output_starts_with": "provider = ChkSrv"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "true"
+                },
+                "if_false": {
+                  "value_from_literal": "false"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "chksrv_action_on_lost"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "action_on_lost = stop"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "stop"
+            },
+            "if_false": {
+              "value_from_literal": ""
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
             "label": "num_completion_queues"
           },
           "and_eval_rules": {
@@ -1027,6 +1112,16 @@
             "min_version": "3.5"
           },
           "value": "LAST_SNAPSHOT_BACKUP_TIMESTAMP"
+        }
+      ],
+      "trace_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "chksrv_hook_active",
+            "min_version": "3.10"
+          },
+          "value": "CHKSRV_HOOK_ACTIVE"
         }
       ],
       "os_command_metrics": [

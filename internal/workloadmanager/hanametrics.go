@@ -97,13 +97,14 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 	l := map[string]string{}
 	hanaVal := 0.0
 
-	hanaSystemConfigDir := hanaSystemConfigFromSAPSID(ctx, params)
-	if hanaSystemConfigDir == "" {
+	instance := sapHANAInstance(ctx, params)
+	if instance == nil {
 		log.CtxLogger(ctx).Debug("Skipping HANA metrics collection, HANA not active on instance")
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
-	sidAdm := sidAdminUser(ctx, params)
+	sidAdm := instance.GetUser()
+	hanaSystemConfigDir := fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config", instance.GetSapsid())
 	globalINIFilePath := hanaSystemConfigDir + "/global.ini"
 	// Short-circuit HANA metrics collection if global.ini file is not found.
 	// In addition to the metrics contained in the file, global.ini also contains
@@ -177,25 +178,16 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 			l[k] = hanaBackupMetrics["oldest_last_snapshot_backup_timestamp_utc"]
 		}
 	}
+	for _, m := range hana.GetTraceMetrics() {
+		k := m.GetMetricInfo().GetLabel()
+		switch m.GetValue() {
+		case wpb.HANATraceVariable_CHKSRV_HOOK_ACTIVE:
+			l[k] = chksrvHookActive(ctx, instance, params.Execute, params.osVendorID)
+		}
+	}
 
 	hanaVal = 1.0
 	return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
-}
-
-// hanaSystemConfigFromSAPSID returns the path to the directory containing
-// SAP HANA configuration files.
-//
-// File path: /usr/sap/[SID]/SYS/global/hdb/custom/config
-func hanaSystemConfigFromSAPSID(ctx context.Context, params Parameters) string {
-	instance := sapHANAInstance(ctx, params)
-	if instance == nil {
-		return ""
-	}
-	return fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/custom/config", instance.GetSapsid())
-}
-
-func sidAdminUser(ctx context.Context, params Parameters) string {
-	return sapHANAInstance(ctx, params).GetUser()
 }
 
 func sapHANAInstance(ctx context.Context, params Parameters) *sapb.SAPInstance {
@@ -375,14 +367,7 @@ func volumeMountPoint(ctx context.Context, basepathVolumePath string, exec comma
 
 // setDiskInfoForDevice sets the diskInfo map with the disk information
 // for the matched block device.
-func setDiskInfoForDevice(
-	ctx context.Context,
-	diskInfo map[string]string,
-	matchedBlockDevice *lsblkdevice,
-	matchedMountPoint string,
-	matchedSize string,
-	iir instanceinfo.Reader,
-) {
+func setDiskInfoForDevice(ctx context.Context, diskInfo map[string]string, matchedBlockDevice *lsblkdevice, matchedMountPoint string, matchedSize string, iir instanceinfo.Reader) {
 	log.CtxLogger(ctx).Debugw("Checking disk mappings against instance disks", "numberofdisks", len(iir.InstanceProperties().GetDisks()))
 	for _, disk := range iir.InstanceProperties().GetDisks() {
 		log.CtxLogger(ctx).Debugw("Checking disk mapping", "mapping", disk.GetMapping(), "matchedblockdevice", matchedBlockDevice.Name)
@@ -717,4 +702,21 @@ func fetchBackupThreadIDs(ctx context.Context, dirPath string, exec commandlinee
 		}
 	}
 	return backups, nil
+}
+
+// chksrvHookActive checks if the chksrv hook is active for the given instance.
+func chksrvHookActive(ctx context.Context, instance *sapb.SAPInstance, exec commandlineexecutor.Execute, osVendorID string) string {
+	filename := "nameserver_chksrv.trc"
+	if osVendorID == "sles" {
+		filename = "nameserver_suschksrv.trc"
+	}
+	path := fmt.Sprintf("/usr/sap/%s/%s/%s/trace/%s", instance.GetSapsid(), instance.GetInstanceId(), instance.GetHostname(), filename)
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable: "test",
+		Args:       []string{"-f", path},
+	})
+	if result.Error != nil {
+		return "false"
+	}
+	return "true"
 }
