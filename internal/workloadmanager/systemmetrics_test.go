@@ -49,6 +49,7 @@ const (
 	testInstanceName1    = "test-instance-name-1"
 	testInstanceName2    = "test-instance-name-2"
 	testInstanceName3    = "test-instance-name-3"
+	testInstanceName4    = "test-instance-name-4"
 	testInstanceID       = "test-instance-id"
 	testBaseZone         = "test-region-zone"
 	testZone1            = "test-region-zone-1"
@@ -125,7 +126,7 @@ func createWorkloadValidation(label string, value wlmpb.SystemVariable) *wlmpb.W
 	}
 }
 
-func createFakeDiscovery(resourceType systempb.SapDiscovery_Resource_ResourceType, instanceRoles []systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole, zones []string, instanceNames []string) *fakeDiscoveryInterface {
+func createFakeDiscovery(resourceType systempb.SapDiscovery_Resource_ResourceType, instanceRoles []systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole, zones []string, instanceNames []string, haHosts []string) *fakeDiscoveryInterface {
 	var resources []*systempb.SapDiscovery_Resource
 	for i := 0; i < len(instanceRoles); i++ {
 		resource := &systempb.SapDiscovery_Resource{
@@ -143,6 +144,7 @@ func createFakeDiscovery(resourceType systempb.SapDiscovery_Resource_ResourceTyp
 			{
 				ApplicationLayer: &systempb.SapDiscovery_Component{
 					Resources: resources,
+					HaHosts:   haHosts,
 				},
 			},
 		},
@@ -396,11 +398,13 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				createFakeDiscovery(systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
 					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
-					[]string{testBaseZone, testZone1, testZone2},
-					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
+					[]string{testBaseZone, testZone1, testZone2, testZone1},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
 				),
 			),
 			wantLabels: map[string]string{
@@ -421,10 +425,55 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testZone1, testZone2},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 				),
 			),
 			wantLabels: map[string]string{
 				"app_server_zonal_separation": "true",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Different_Zones_App_and_Ascs_Same_Zones",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(
+					systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{testBaseZone, testZone1, testBaseZone, testZone1},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "true",
+			},
+		},
+		{
+			name: "AppServerZonalSeparation_Central_Services_Same_Zone",
+			params: createParameters(
+				cnf,
+				createWorkloadValidation("app_server_zonal_separation", wlmpb.SystemVariable_APP_SERVER_ZONAL_SEPARATION),
+				createFakeDiscovery(
+					systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,
+					[]systempb.SapDiscovery_Resource_InstanceProperties_InstanceRole{
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_APP_SERVER,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
+						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
+					},
+					[]string{testBaseZone, testZone1, testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3, testInstanceName4},
+				),
+			),
+			wantLabels: map[string]string{
+				"app_server_zonal_separation": "false",
 			},
 		},
 		{
@@ -440,6 +489,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 					[]string{testInstanceName1, testInstanceName2, testInstanceName3},
 				),
 			),
@@ -458,10 +508,11 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone},
 					[]string{testInstanceName1},
+					[]string{},
 				),
 			),
 			wantLabels: map[string]string{
-				"app_server_zonal_separation": "false",
+				"app_server_zonal_separation": "true",
 			},
 		},
 		{
@@ -475,6 +526,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testInstanceName1},
 					[]string{testBaseInstanceName, testInstanceName1},
 				),
 			),
@@ -494,6 +546,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testZone1},
 					[]string{testBaseInstanceName, testBaseInstanceName},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -511,6 +564,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
@@ -530,6 +584,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testInstanceName1, testBaseInstanceName},
+					[]string{testInstanceName1, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -547,6 +602,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testInstanceName1, testBaseInstanceName},
 					[]string{testInstanceName1, testBaseInstanceName},
 				),
 			),
@@ -566,6 +622,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -583,6 +640,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ASCS,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
@@ -602,6 +660,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testInstanceName1},
+					[]string{testBaseInstanceName, testInstanceName1},
 				),
 			),
 			wantLabels: map[string]string{
@@ -619,6 +678,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
@@ -638,6 +698,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone, testBaseZone},
 					[]string{testBaseInstanceName, testBaseInstanceName},
+					[]string{testBaseInstanceName, testBaseInstanceName},
 				),
 			),
 			wantLabels: map[string]string{
@@ -655,6 +716,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 					},
 					[]string{testBaseZone},
 					[]string{testBaseInstanceName},
+					[]string{},
 				),
 			),
 			wantLabels: map[string]string{
@@ -672,6 +734,7 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 						systempb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_ERS,
 					},
 					[]string{testBaseZone, testBaseZone},
+					[]string{testBaseInstanceName, testInstanceName1},
 					[]string{testBaseInstanceName, testInstanceName1},
 				),
 			),

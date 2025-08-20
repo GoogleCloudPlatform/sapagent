@@ -116,15 +116,19 @@ func collectSystemVariable(ctx context.Context, m *wlmpb.SystemMetric, params Pa
 	}
 }
 
-// appServerZonalSeparation checks if there is an application server residing in a different zone than the central services.
+// appServerZonalSeparation checks if the app servers and central services are distributed across multiple zones.
 func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 	if params.Discovery == nil {
 		log.CtxLogger(ctx).Warn("Discovery has not been initialized, cannot check SAP instances")
 		return false
 	}
-	appServerZones := make(map[string]bool)
-	centralServiceZones := make(map[string]bool)
 	for _, system := range params.Discovery.GetSAPSystems() {
+		if len(system.GetApplicationLayer().GetHaHosts()) < 2 {
+			// No need to check non-HA systems.
+			continue
+		}
+		appServerZones := make(map[string]bool)
+		centralServiceZones := make(map[string]bool)
 		for _, r := range system.GetApplicationLayer().GetResources() {
 			if r.GetResourceType() != systempb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE || r.GetResourceKind() != systempb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE {
 				continue
@@ -138,14 +142,16 @@ func appServerZonalSeparation(ctx context.Context, params Parameters) bool {
 				centralServiceZones[clouddiscovery.ExtractFromURI(r.GetResourceUri(), zonesURIPart)] = true
 			}
 		}
-	}
-	for appServerZone := range appServerZones {
-		if _, found := centralServiceZones[appServerZone]; !found {
-			log.CtxLogger(ctx).Debugw("Found app server without central service in zone", "zone", appServerZone)
-			return true
+		if len(appServerZones) < 2 {
+			log.CtxLogger(ctx).Debugw("App servers not distributed across multiple zones")
+			return false
+		}
+		if len(centralServiceZones) < 2 {
+			log.CtxLogger(ctx).Debugw("Central services not distributed across multiple zones")
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // hasInstanceRole checks if the instance the agent is running on is functioning as an application server, ASCS, or ERS.
