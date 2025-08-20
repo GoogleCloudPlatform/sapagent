@@ -869,6 +869,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "HDB",
 				ProfilePath:   "/usr/sap/DEH/SYS/profile/DEH_HDB00_dnwh75ldbci",
 				LDLibraryPath: "/usr/sap/DEH/HDB00/exe",
+				Hostname:      "dnwh75ldbci",
 			},
 			&instanceInfo{
 				Sid:           "DEV",
@@ -876,6 +877,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ASCS",
 				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
 				LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
+				Hostname:      "dnwh75ldbci",
 			},
 			&instanceInfo{
 				Sid:           "DEV",
@@ -883,6 +885,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "D",
 				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
 				LDLibraryPath: "/usr/sap/DEV/D02/exe",
+				Hostname:      "dnwh75ldbci",
 			},
 		},
 	}, {
@@ -900,6 +903,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ERS",
 				ProfilePath:   "/usr/sap/ED7/SYS/profile/ED7_ERS12_aliders71",
 				LDLibraryPath: "/usr/sap/ED7/ERS12/exe",
+				Hostname:      "aliders71",
 			},
 			&instanceInfo{
 				Sid:           "FD7",
@@ -907,6 +911,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ERS",
 				ProfilePath:   "/usr/sap/FD7/ERS22/profile/FD7_ERS22_aliders71",
 				LDLibraryPath: "/usr/sap/FD7/ERS22/exe",
+				Hostname:      "aliders71",
 			},
 		},
 	}, {
@@ -923,6 +928,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "HDB",
 				ProfilePath:   "/usr/sap/H00/SYS/profile/H00_HDB01_hana-ha-rh81sap-0-u1670561406-primary",
 				LDLibraryPath: "/usr/sap/H00/HDB01/exe",
+				Hostname:      "hana-ha-rh81sap-0-u1670561406-primary",
 			},
 		},
 	}, {
@@ -956,6 +962,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ASCS",
 				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci",
 				LDLibraryPath: "/usr/sap/DEV/ASCS01/exe",
+				Hostname:      "dnwh75ldbci",
 			},
 			&instanceInfo{
 				Sid:           "DEV",
@@ -963,6 +970,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "D",
 				ProfilePath:   "/usr/sap/DEV/SYS/profile/DEV_D02_dnwh75ldbci",
 				LDLibraryPath: "/usr/sap/DEV/D02/exe",
+				Hostname:      "dnwh75ldbci",
 			},
 		},
 	}, {
@@ -980,6 +988,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ASCS",
 				ProfilePath:   "/sapmnt/PRD/profile/PRD_ASCS01_alidascs11",
 				LDLibraryPath: "/usr/sap/PRD/ASCS01/exe",
+				Hostname:      "alidascs11",
 			},
 			&instanceInfo{
 				Sid:           "PRD",
@@ -987,6 +996,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ERS",
 				ProfilePath:   "/sapmnt/PRD/profile/PRD_ERS02_aliders11",
 				LDLibraryPath: "/usr/sap/PRD/ERS02/exe",
+				Hostname:      "aliders11",
 			},
 		},
 	}, {
@@ -1004,6 +1014,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ASCS",
 				ProfilePath:   "/sapmnt/PRD/profile/PRD_ASCS1_alidascs11",
 				LDLibraryPath: "/usr/sap/PRD/ASCS01/exe",
+				Hostname:      "alidascs11",
 			},
 			&instanceInfo{
 				Sid:           "PRD",
@@ -1011,6 +1022,7 @@ func TestListSAPInstances(t *testing.T) {
 				InstanceName:  "ERS",
 				ProfilePath:   "/sapmnt/PRD/profile/PRD_ERS2_aliders11",
 				LDLibraryPath: "/usr/sap/PRD/ERS02/exe",
+				Hostname:      "aliders11",
 			},
 		},
 	}}

@@ -55,7 +55,7 @@ var (
 	// Example: "/usr/sap/DEV/ASCS01/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm"
 	// is parsed as "sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01".
 	// Additional possibilities include sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS01_alidascs11
-	sapServicesStartsrvPattern = regexp.MustCompile(`sapstartsrv pf=/(usr/sap|sapmnt)/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/([A-Z][A-Z0-9]{2})_([a-zA-Z]+)([0-9]+)`)
+	sapServicesStartsrvPattern = regexp.MustCompile(`sapstartsrv pf=/(usr/sap|sapmnt)/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/([A-Z][A-Z0-9]{2})_([a-zA-Z]+)([0-9]+)_([A-Za-z0-9\-]+)`)
 
 	// sapServicesProfilePattern captures the sap profile path in /usr/sap/sapservices.
 	// Example: "/usr/sap/DEV/ASCS01/exe/sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01_dnwh75ldbci -D -u devadm"
@@ -90,7 +90,7 @@ type (
 	// ReplicationConfig is a function that returns the replication configuration information.
 	ReplicationConfig func(context.Context, string, string, string, system.SapSystemDiscoveryInterface) (int, int64, *sapb.HANAReplicaSite, error)
 	instanceInfo      struct {
-		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath string
+		Sid, InstanceName, Snr, ProfilePath, LDLibraryPath, Hostname string
 	}
 
 	// GCEInterface provides an easily testable translation to the secret manager API.
@@ -175,6 +175,7 @@ func hanaInstances(ctx context.Context, hrc ReplicationConfig, list listInstance
 			LdLibraryPath:       entry.LDLibraryPath,
 			SapcontrolPath:      fmt.Sprintf("%s/sapcontrol", entry.LDLibraryPath),
 			HanaReplicationTree: replicationSites,
+			Hostname:            entry.Hostname,
 		}
 		log.CtxLogger(ctx).Debugw("Found SAP HANA instance", "instance", prototext.Format(instance))
 		instances = append(instances, instance)
@@ -403,7 +404,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			continue
 		}
 		path := sapServicesStartsrvPattern.FindStringSubmatch(line)
-		if len(path) != 6 {
+		if len(path) != 7 {
 			log.CtxLogger(ctx).Debugw("No SAP instance found", "line", line, "match", path)
 			continue
 		}
@@ -424,6 +425,7 @@ func listSAPInstances(ctx context.Context, exec commandlineexecutor.Execute) ([]
 			Sid:          strings.ToUpper(path[2]),
 			InstanceName: path[4],
 			Snr:          fmt.Sprintf("%02d", number),
+			Hostname:     path[6],
 			ProfilePath:  profile[1],
 		}
 

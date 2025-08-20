@@ -62,6 +62,7 @@ message SAPInstance {
   HANAReplicaSite hana_replication_tree =
       18;  // Nested instances for HANA replication. This value always contains
            // the primary instance for the HANA replication configuration.
+  string hostname = 19;  // The VM name or virtual hostname of the instance.
 }
 
 message SAPInstances {
