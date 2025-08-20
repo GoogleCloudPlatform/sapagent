@@ -308,6 +308,7 @@ func filterMetrics(cd *cdpb.CollectionDefinition) *cdpb.CollectionDefinition {
 		cd.WorkloadValidation.GetValidationHana().IndexserverIniMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetIndexserverIniMetrics())
 		cd.WorkloadValidation.GetValidationHana().HaMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetHaMetrics())
 		cd.WorkloadValidation.GetValidationHana().DrMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetDrMetrics())
+		cd.WorkloadValidation.GetValidationHana().TraceMetrics = filterBadVersionMetrics(cd.WorkloadValidation.GetValidationHana().GetTraceMetrics())
 		for _, m := range cd.WorkloadValidation.GetValidationHana().GetHanaDiskVolumeMetrics() {
 			if m != nil {
 				m.Metrics = filterBadVersionMetrics(m.GetMetrics())
@@ -423,6 +424,7 @@ func mapWorkloadValidationMetrics(wlm *wlmpb.WorkloadValidation) metricsMap {
 	iterator(hana.GetHaMetrics(), mapper)
 	iterator(hana.GetDrMetrics(), mapper)
 	iterator(hana.GetHanaBackupMetrics(), mapper)
+	iterator(hana.GetTraceMetrics(), mapper)
 	iterator(hana.GetOsCommandMetrics(), mapper)
 
 	netweaver := wlm.GetValidationNetweaver()

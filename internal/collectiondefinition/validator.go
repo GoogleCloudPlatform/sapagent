@@ -151,6 +151,12 @@ func (v *Validator) validateWorkloadValidation(wlm *wlmpb.WorkloadValidation) {
 			validationFailure(v, m, "HANADisasterRecoveryVariable metric has no value specified")
 		}
 	}
+	for _, m := range hana.GetTraceMetrics() {
+		validateMetricInfo(v, m)
+		if m.GetValue() == wlmpb.HANATraceVariable_TRACE_VARIABLE_UNSPECIFIED {
+			validationFailure(v, m, "HANATraceVariable metric has no value specified")
+		}
+	}
 	v.validateOSCommandMetrics(hana.GetOsCommandMetrics())
 
 	netweaver := wlm.GetValidationNetweaver()

@@ -830,6 +830,25 @@ func TestValidate(t *testing.T) {
 			wantCount: 1,
 		},
 		{
+			name: "WorkloadValidation_ValidationHana_TraceMetrics_ValueMissing",
+			definition: &cdpb.CollectionDefinition{
+				WorkloadValidation: &wlmpb.WorkloadValidation{
+					ValidationHana: &wlmpb.ValidationHANA{
+						TraceMetrics: []*wlmpb.HANATraceMetric{
+							&wlmpb.HANATraceMetric{
+								MetricInfo: &cmpb.MetricInfo{
+									Type:  "workload.googleapis.com/sap/validation/hana",
+									Label: "foo",
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValid: false,
+			wantCount: 1,
+		},
+		{
 			name: "WorkloadValidation_ValidationPacemaker_PrimitiveMetrics_ValueMissing",
 			definition: &cdpb.CollectionDefinition{
 				WorkloadValidation: &wlmpb.WorkloadValidation{

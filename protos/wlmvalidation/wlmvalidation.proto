@@ -76,6 +76,11 @@ enum HANADisasterRecoveryVariable {
   DR_IN_SAME_REGION = 1;
 }
 
+enum HANATraceVariable {
+  TRACE_VARIABLE_UNSPECIFIED = 0;
+  CHKSRV_HOOK_ACTIVE = 1;
+}
+
 enum PrimitiveVariable {
   PRIMITIVE_VARIABLE_UNSPECIFIED = 0;
   PCMK_DELAY_BASE = 1;
@@ -230,6 +235,7 @@ message ValidationHANA {
       indexserver_ini_metrics = 5;
   repeated HANABackupMetric hana_backup_metrics = 6;
   repeated HANADisasterRecoveryMetric dr_metrics = 7;
+  repeated HANATraceMetric trace_metrics = 8;
 }
 
 message HANADiskVolumeMetric {
@@ -260,6 +266,12 @@ message HANABackupMetric {
   workloadagentplatform.sharedprotos.configurablemetrics.MetricInfo
       metric_info = 1;
   HANABackupVariable value = 2;
+}
+
+message HANATraceMetric {
+  workloadagentplatform.sharedprotos.configurablemetrics.MetricInfo
+      metric_info = 1;
+  HANATraceVariable value = 2;
 }
 
 message ValidationNetweaver {
