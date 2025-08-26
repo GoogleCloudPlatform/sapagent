@@ -64,6 +64,7 @@ type (
 		EventType      string     `json:"event_type"`
 		EventTimestamp time.Time  `json:"event_timestamp"`
 		EventSource    string     `json:"event_source"`
+		EventName      string     `json:"event_name"`
 		Description    string     `json:"description"`
 		GCEDetails     GCEDetails `json:"gce_details"`
 		SAPDetails     SAPDetails `json:"sap_details"`
@@ -83,6 +84,7 @@ type (
 		Resource            IncidentResource `json:"resource"`
 		SAPDetails          SAPDetails       `json:"sap_details"`
 		LogPath             string           `json:"log_path"`
+		EventName           string           `json:"event_name"`
 	}
 
 	// IncidentResource represents the nested resource details within an incident.
@@ -301,6 +303,7 @@ func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID st
 			},
 			SAPDetails: action.SAPDetails,
 			LogPath:    bundlePath,
+			EventName:  action.EventName,
 		},
 	}
 
