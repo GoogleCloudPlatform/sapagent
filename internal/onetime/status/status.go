@@ -79,11 +79,20 @@ const (
 	workloadEvaluationMELabel = "WORKLOAD_EVALUATION_METRICS"
 	secretManagerLabel        = "SECRET_MANAGER"
 	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
+
+	hostMetrics     = "host_metrics"
+	processMetrics  = "process_metrics"
+	hanaMonitoring  = "hana_monitoring"
+	sapDiscovery    = "sap_discovery"
+	backint         = "backint"
+	diskSnapshot    = "disk_snapshot"
+	workloadManager = "workload_manager"
 )
 
 var (
 	dailyUsageRoutine *recovery.RecoverableRoutine
 	collectRoutine    *recovery.RecoverableRoutine
+	allFeatures       = strings.Join([]string{hostMetrics, processMetrics, hanaMonitoring, sapDiscovery, backint, diskSnapshot, workloadManager}, ",")
 )
 
 type (
@@ -110,6 +119,7 @@ type (
 type Status struct {
 	ConfigFilePath        string
 	BackintParametersPath string
+	Feature               string
 	CloudProps            *iipb.CloudProperties
 	HeartbeatSpec         *heartbeat.Spec
 	WLMService            WLMInterface
@@ -142,7 +152,8 @@ func (*Status) Synopsis() string { return "get the status of the agent and its s
 // Usage implements the subcommand interface for status.
 func (*Status) Usage() string {
 	return `status [-config <path-to-agent-config-file>]
-       [-backint <path-to-backint-parameters-file>] [-compact]
+       [-backint <path-to-backint-parameters-file>] [-compact] [-h]
+       [-feature <` + allFeatures + `>]
 
   Get the status of the agent and its services.
 `
@@ -154,6 +165,8 @@ func (s *Status) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.ConfigFilePath, "c", "", "Configuration path override")
 	fs.StringVar(&s.BackintParametersPath, "backint", "", "Backint parameters path")
 	fs.StringVar(&s.BackintParametersPath, "b", "", "Backint parameters path")
+	fs.StringVar(&s.Feature, "feature", allFeatures, "Comma separated list of features to check. Optional, checks all features if not specified.")
+	fs.StringVar(&s.Feature, "f", allFeatures, "Comma separated list of features to check. Optional, checks all features if not specified.")
 	fs.BoolVar(&s.compact, "compact", false, "Display a compact status (no configuration or IAM)")
 	fs.BoolVar(&s.help, "h", false, "Display help")
 }
@@ -328,13 +341,27 @@ func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	}
 	log.CtxLogger(ctx).Info("Status starting")
 	agentStatus, config := s.agentStatus(ctx)
-	agentStatus.Services = append(agentStatus.Services, s.hostMetricsStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.processMetricsStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.hanaMonitoringMetricsStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.systemDiscoveryStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx))
-	agentStatus.Services = append(agentStatus.Services, s.diskSnapshotStatus(ctx, config))
-	agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
+	if strings.Contains(s.Feature, hostMetrics) {
+		agentStatus.Services = append(agentStatus.Services, s.hostMetricsStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, processMetrics) {
+		agentStatus.Services = append(agentStatus.Services, s.processMetricsStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, hanaMonitoring) {
+		agentStatus.Services = append(agentStatus.Services, s.hanaMonitoringMetricsStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, sapDiscovery) {
+		agentStatus.Services = append(agentStatus.Services, s.systemDiscoveryStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, backint) {
+		agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx))
+	}
+	if strings.Contains(s.Feature, diskSnapshot) {
+		agentStatus.Services = append(agentStatus.Services, s.diskSnapshotStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, workloadManager) {
+		agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
+	}
 	agentStatus.References = append(agentStatus.References, &spb.Reference{
 		Name: "Release notes",
 		Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new",

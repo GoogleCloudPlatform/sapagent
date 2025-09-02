@@ -1277,6 +1277,7 @@ func TestStatusHandler(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
+				Feature: allFeatures,
 			},
 			want: &spb.AgentStatus{
 				AgentName:                       agentPackageName,
@@ -1455,6 +1456,7 @@ func TestStatusHandler(t *testing.T) {
 						"monitoring.timeSeries.create": true,
 					}, nil
 				},
+				Feature: allFeatures,
 			},
 			want: &spb.AgentStatus{
 				AgentName:                       agentPackageName,
@@ -1564,6 +1566,64 @@ func TestStatusHandler(t *testing.T) {
 						FullyFunctional: spb.State_SUCCESS_STATE,
 					},
 				},
+				References: []*spb.Reference{
+					{
+						Name: "Release notes",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/whats-new",
+					},
+					{
+						Name: "Guides",
+						Url:  "https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides",
+					},
+				},
+			},
+		},
+		{
+			name: "SuccessNoFeaturesEnabled",
+			s: Status{
+				readFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				backintReadFile: func(string) ([]byte, error) {
+					return nil, nil
+				},
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "enabled", StdErr: "", ExitCode: 0, Error: nil}
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0077}, nil
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return []fs.FileInfo{
+						&mockFileInfo{perm: 0400},
+					}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					Scopes: []string{requiredScope},
+				},
+				httpGet:        httpGetSuccess,
+				createDBHandle: dbConnectorSuccess,
+				iamService:     &iam.IAM{},
+				arClient:       fakeArtifactRegistryClient([]string{""}),
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				Feature: "",
+			},
+			want: &spb.AgentStatus{
+				AgentName:                       agentPackageName,
+				InstalledVersion:                fmt.Sprintf("%s-%s", configuration.AgentVersion, configuration.AgentBuildChange),
+				AvailableVersion:                "",
+				SystemdServiceEnabled:           spb.State_SUCCESS_STATE,
+				SystemdServiceRunning:           spb.State_SUCCESS_STATE,
+				ConfigurationFilePath:           configuration.LinuxConfigPath,
+				ConfigurationValid:              spb.State_SUCCESS_STATE,
+				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
+				KernelVersion:                   &spb.KernelVersion{RawString: "enabled"},
+				InstanceUri:                     "projects//zones//instances/",
+				Services:                        []*spb.ServiceStatus{},
 				References: []*spb.Reference{
 					{
 						Name: "Release notes",
