@@ -597,20 +597,24 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 	}
 
 	// Ensure sapservices and anything in /hana/shared have readable permissions.
-	if err := checkFilePermissions("/usr/sap/sapservices", 0400, s.stat); err != nil {
+	if err := checkFilePermissions(ctx, "/usr/sap/sapservices", 0400, s.stat); err != nil {
 		return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
 	}
 	files, err := s.readDir("/hana/shared")
-	if err != nil {
-		return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
-	}
-	for _, f := range files {
-		if err := checkFilePermissions("/hana/shared/"+f.Name(), 0400, s.stat); err != nil {
+	if os.IsNotExist(err) {
+		log.CtxLogger(ctx).Infof("/hana/shared does not exist. Skipping permissions check.")
+	} else {
+		if err != nil {
 			return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
+		}
+		for _, f := range files {
+			if err := checkFilePermissions(ctx, "/hana/shared/"+f.Name(), 0400, s.stat); err != nil {
+				return logCheckFailureAndReturnStatus(ctx, status, err.Error(), spb.State_FAILURE_STATE)
+			}
 		}
 	}
 	// Ensure usr/sap has executable permissions.
-	if err := checkFilePermissions("/usr/sap", 0100, s.stat); err != nil {
+	if err := checkFilePermissions(ctx, "/usr/sap", 0100, s.stat); err != nil {
 		return logCheckFailureAndReturnStatus(ctx, status, "/usr/sap needs to be executable. Run 'sudo chmod +x /usr/sap'", spb.State_FAILURE_STATE)
 	}
 	status.FullyFunctional = spb.State_SUCCESS_STATE
@@ -814,8 +818,12 @@ func logCheckFailureAndReturnStatus(ctx context.Context, status *spb.ServiceStat
 	return status
 }
 
-func checkFilePermissions(path string, wantPermissions fs.FileMode, stat statFunc) error {
+func checkFilePermissions(ctx context.Context, path string, wantPermissions fs.FileMode, stat statFunc) error {
 	fileInfo, err := stat(path)
+	if os.IsNotExist(err) {
+		log.CtxLogger(ctx).Infof("File %s does not exist, skipping permissions check", path)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

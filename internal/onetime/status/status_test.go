@@ -2051,6 +2051,45 @@ func TestSystemDiscoveryStatusFailures(t *testing.T) {
 			},
 		},
 		{
+			name: "FileAndFolderDoesNotExist",
+			s: Status{
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return nil, os.ErrNotExist
+				},
+				readDir: func(dirname string) ([]fs.FileInfo, error) {
+					return nil, os.ErrNotExist
+				},
+			},
+			config: &cpb.Configuration{
+				DiscoveryConfiguration: &cpb.DiscoveryConfiguration{
+					EnableDiscovery: wpb.Bool(true),
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "System Discovery",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				ErrorMessage:    "",
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "enable_discovery", Value: "true", IsDefault: true},
+					{Name: "enable_workload_discovery", Value: "false", IsDefault: false},
+					{Name: "sap_instances_update_frequency", Value: "0", IsDefault: false},
+					{Name: "system_discovery_update_frequency", Value: "0", IsDefault: false},
+				},
+			},
+		},
+		{
 			name: "SystemDiscoveryDisabled",
 			s:    Status{},
 			config: &cpb.Configuration{
