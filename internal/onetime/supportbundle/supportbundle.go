@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -58,34 +59,46 @@ import (
 	systempb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/system"
 )
 
+var (
+	ipRegex                     = regexp.MustCompile(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`)
+	backupParameterFilesRegex   = regexp.MustCompile(`_backup_parameter_file.*`)
+	dotFilesRegex               = regexp.MustCompile(`.*\.dot$`)
+	nameServerTraceRegex        = regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	indexServerRegex            = regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	backupLogRegex              = regexp.MustCompile(`backup(.*?).log`)
+	backintLogRegex             = regexp.MustCompile(`backint(.*?).log`)
+)
+
+// SupportBundle is the structure for the support bundle command.
+type SupportBundle struct {
+	Sid                    string                        `json:"sid"`
+	InstanceNums           string                        `json:"instance-numbers"`
+	instanceNumsAfterSplit []string                      `json:"-"`
+	Hostname               string                        `json:"hostname"`
+	PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
+	AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
+	Metrics                bool                          `json:"metrics,string"`
+	MaskIPs                bool                          `json:"mask-ips,string"`
+	Timestamp              string                        `json:"timestamp"`
+	BeforeDuration         int                           `json:"before-duration"`
+	AfterDuration          int                           `json:"after-duration"`
+	Help                   bool                          `json:"help,string"`
+	LogLevel               string                        `json:"loglevel"`
+	ResultBucket           string                        `json:"result-bucket"`
+	IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
+	LogPath                string                        `json:"log-path"`
+	BundleName             string                        `json:"bundle-name"`
+	bundleUploaded         bool
+	endingTimestamp        string
+	cmr                    *cloudmetricreader.CloudMetricReader
+	mmc                    cloudmonitoring.TimeSeriesDescriptorQuerier
+	rest                   RestService
+	createQueryClient      createQueryClient
+	createMetricClient     createMetricClient
+	oteLogger              *onetime.OTELogger
+}
+
 type (
-	// SupportBundle has args for support bundle collection one time mode.
-	SupportBundle struct {
-		Sid                    string                        `json:"sid"`
-		InstanceNums           string                        `json:"instance-numbers"`
-		instanceNumsAfterSplit []string                      `json:"-"`
-		Hostname               string                        `json:"hostname"`
-		PacemakerDiagnosis     bool                          `json:"pacemaker-diagnosis,string"`
-		AgentLogsOnly          bool                          `json:"agent-logs-only,string"`
-		Metrics                bool                          `json:"metrics,string"`
-		Timestamp              string                        `json:"timestamp"`
-		BeforeDuration         int                           `json:"before-duration"`
-		AfterDuration          int                           `json:"after-duration"`
-		Help                   bool                          `json:"help,string"`
-		LogLevel               string                        `json:"loglevel"`
-		ResultBucket           string                        `json:"result-bucket"`
-		IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
-		LogPath                string                        `json:"log-path"`
-		BundleName             string                        `json:"bundle-name"`
-		bundleUploaded         bool
-		endingTimestamp        string
-		cmr                    *cloudmetricreader.CloudMetricReader
-		mmc                    cloudmonitoring.TimeSeriesDescriptorQuerier
-		rest                   RestService
-		createQueryClient      createQueryClient
-		createMetricClient     createMetricClient
-		oteLogger              *onetime.OTELogger
-	}
 	// zipperHelper is a testable struct for zipper.
 	zipperHelper struct{}
 
@@ -388,7 +401,7 @@ func (*SupportBundle) Synopsis() string {
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
 	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false]
+	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false] [-mask-ips=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
@@ -403,6 +416,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
 	fs.BoolVar(&s.AgentLogsOnly, "agent-logs-only", false, "Indicate if only agent logs are to be collected")
 	fs.BoolVar(&s.Metrics, "metrics", false, "Indicate if metrics(process and hana monitoring) are to be collected from cloud monitoring.")
+	fs.BoolVar(&s.MaskIPs, "mask-ips", false, "Indicate if public IPs are to be masked from messages and pacemaker logs.")
 	fs.StringVar(&s.Timestamp, "timestamp", "", "Timestamp(in system timezone) to be used for collecting metrics, format: YYYY-MM-DD HH:MM:SS(eg: 2024-11-11 12:34:56). If not provided, current timestamp will be used.")
 	fs.IntVar(&s.BeforeDuration, "before-duration", 3600, "Before duration(in seconds) to be used for collecting metrics, default value is 3600 seconds (1 hour)")
 	fs.IntVar(&s.AfterDuration, "after-duration", 1800, "After duration(in seconds) to be used for collecting metrics, default value is 1800 seconds (30 minutes)")
@@ -531,10 +545,19 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	for _, path := range reqFilePaths {
 		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
-		if err := copyFile(path, destFilesPath+path, fs); err != nil {
+		destPath := destFilesPath + path
+		if err := copyFile(path, destPath, fs); err != nil {
 			errMessage := "Error while copying file: " + path
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
+			continue
+		}
+		if s.MaskIPs && (strings.Contains(path, "messages") || strings.Contains(path, "pacemaker")) {
+			if err := s.anonymizeFile(ctx, destPath, fs); err != nil {
+				errMessage := "Error while masking file: " + destPath
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				failureMsgs = append(failureMsgs, errMessage)
+			}
 		}
 	}
 
@@ -678,6 +701,50 @@ func (s *SupportBundle) uploadZip(ctx context.Context, destFilesPath, bundleName
 	return nil
 }
 
+// isPublicIP checks if an IP address is public.
+func isPublicIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	return !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() && !ip.IsUnspecified()
+}
+
+// anonymizeFile anonymizes public IPs in a given file.
+func (s *SupportBundle) anonymizeFile(ctx context.Context, filePath string, fs filesystem.FileSystem) error {
+	if !(strings.Contains(filePath, "messages") || strings.Contains(filePath, "pacemaker")) {
+		return nil
+	}
+	content, err := fs.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+	originalContent := string(content)
+
+	modifiedContent := ipRegex.ReplaceAllStringFunc(originalContent, func(ipStr string) string {
+		ip := net.ParseIP(ipStr)
+		if ip != nil && isPublicIP(ip) {
+			s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Masking public IP: %s in file: %s", ipStr, filePath))
+			return "[REDACTED_IP]"
+		}
+		return ipStr
+	})
+
+	if modifiedContent != originalContent {
+		info, err := fs.Stat(filePath)
+		if err != nil {
+			return err
+		}
+		f, err := fs.OpenFile(filePath, os.O_WRONLY|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = fs.WriteStringToFile(f, modifiedContent)
+		return err
+	}
+	return nil
+}
+
 func copyFile(src, dst string, fs filesystem.FileSystem) error {
 	var err error
 	var srcFD, dstFD *os.File
@@ -726,8 +793,8 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 	return fs.Rename(tempZip, target)
 }
 
-func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath string, sid string, fs filesystem.FileSystem) []string {
-	backupFiles := regexp.MustCompile(`_backup_parameter_file.*`)
+func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
+
 	res := []string{globalPath + globalINIFile}
 
 	content, err := fs.ReadFile(globalPath + globalINIFile)
@@ -736,11 +803,13 @@ func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath st
 		return nil
 	}
 	contentData := string(content)
-	op := backupFiles.FindAllString(contentData, -1)
+	op := backupParameterFilesRegex.FindAllString(contentData, -1)
 	for _, path := range op {
 		pathSplit := strings.Split(path, "=")
 		if len(pathSplit) != 2 {
-			s.oteLogger.LogMessageToFileAndConsole(ctx, "Unexpected output from global.ini content")
+			msg := fmt.Sprintf("Unexpected output from global.ini content for %s", path)
+			s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
+
 			continue
 		}
 		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
@@ -794,7 +863,7 @@ func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Contex
 
 func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs filesystem.FileSystem) []string {
 	var res []string
-	dotFiles := regexp.MustCompile(`.*\.dot`)
+
 	for _, hanaPath := range hanaPaths {
 		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
 		if err != nil {
@@ -805,7 +874,7 @@ func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs fil
 			if fd.IsDir() {
 				continue
 			}
-			if dotFiles.MatchString(fd.Name()) {
+			if dotFilesRegex.MatchString(fd.Name()) {
 				dotFilePath := path.Join(fmt.Sprintf("%s/trace/", hanaPath), fd.Name())
 				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", dotFilePath))
 				res = append(res, dotFilePath)
@@ -816,18 +885,7 @@ func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs fil
 }
 
 func matchNameServerTraceAndBackup(name string) bool {
-	nameserverTrace := regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
-	nameserverTopologyJSON := regexp.MustCompile(`nameserver.*topology.*json`)
-	indexServer := regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
-	backuplog := regexp.MustCompile(`backup(.*?).log`)
-	backintlog := regexp.MustCompile(`backint(.*?).log`)
-
-	if nameserverTrace.MatchString(name) || indexServer.MatchString(name) ||
-		backuplog.MatchString(name) || backintlog.MatchString(name) ||
-		nameserverTopologyJSON.MatchString(name) {
-		return true
-	}
-	return false
+	return nameServerTraceRegex.MatchString(name) || indexServerRegex.MatchString(name) || backupLogRegex.MatchString(name) || backintLogRegex.MatchString(name)
 }
 
 // backintLogs returns the list of backint logs to be collected.
@@ -1042,10 +1100,15 @@ func (s *SupportBundle) extractHANAVersion(ctx context.Context, destFilesPath, s
 func (s *SupportBundle) execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while executing command", errors.New(res.StdErr))
-		return errors.New(res.StdErr)
+		// "No such file or directory" is an expected error when a log file does not exist, so we can ignore it.
+		if strings.Contains(res.StdErr, "No such file or directory") {
+			return nil
+		}
+		err := errors.New(res.StdErr)
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while executing command", err)
+		return err
 	}
-	f, err := fu.OpenFile(destFilesPath+"/"+hostname+opFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	f, err := fu.OpenFile(path.Join(destFilesPath, hostname+opFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while opening the file", err)
 		return err
@@ -1086,11 +1149,7 @@ func (s *SupportBundle) pacemakerLogs(ctx context.Context, destFilesPath string,
 // checkForLinuxOSType checks if the OS type is RHEL or SLES.
 func (s *SupportBundle) checkForLinuxOSType(ctx context.Context, exec commandlineexecutor.Execute, p commandlineexecutor.Params) bool {
 	res := exec(ctx, p)
-	if res.ExitCode != 0 || res.StdErr != "" {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while executing command %s %s, returned exitCode: %d", p.Executable, p.ArgsToSplit, res.ExitCode), errors.New(res.StdErr))
-		return false
-	}
-	return true
+	return res.ExitCode == 0
 }
 
 // slesPacemakerLogs collects the pacemaker logs for SLES OS type.
@@ -1128,6 +1187,9 @@ func (s *SupportBundle) slesPacemakerLogs(ctx context.Context, exec commandlinee
 	if res.ExitCode != 0 {
 		return errors.New(res.StdErr)
 	}
+	if s.MaskIPs {
+		return s.maskIPsFromFiles(ctx, destFilesPath, fu)
+	}
 	return nil
 }
 
@@ -1157,6 +1219,9 @@ func (s *SupportBundle) rhelPacemakerLogs(ctx context.Context, exec commandlinee
 		if crmRes.ExitCode != 0 {
 			return errors.New(crmRes.StdErr)
 		}
+	}
+	if s.MaskIPs {
+		return s.maskIPsFromFiles(ctx, destFilesPath, fu)
 	}
 	return nil
 }
@@ -1237,6 +1302,26 @@ func (s *SupportBundle) collectSapDiscovery(ctx context.Context, baseURL, destFi
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Error while writing to file", "file", filePath, "err", err)
 		return err
+	}
+	return nil
+}
+
+func (s *SupportBundle) maskIPsFromFiles(ctx context.Context, dir string, fs filesystem.FileSystem) error {
+	fds, err := fs.ReadDir(dir)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while reading folder %s", dir), err)
+		return err
+	}
+
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		filePath := path.Join(dir, fd.Name())
+		if err := s.anonymizeFile(ctx, filePath, fs); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while masking file %s", filePath), err)
+			return err
+		}
 	}
 	return nil
 }
