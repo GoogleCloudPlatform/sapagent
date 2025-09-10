@@ -245,4 +245,7 @@ message GCBDRConfiguration {
 message PubSubActions {
   string actions_subscription_id = 1;
   string topic_id = 2;
+  string sid = 3;
+  string hostname = 4;
+  string instance_nums = 5;
 }

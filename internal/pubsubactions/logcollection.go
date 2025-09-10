@@ -227,6 +227,10 @@ func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, 
 			return
 		}
 
+		// We ack the message here because we don't want to process the same message again.
+		// All retries, if any, are handled by AIOPs - retries from both can lead to message overflow.
+		msg.Ack()
+
 		var bundlePath string
 		if bundlePath, err = lc.bundleCollection(ctx, logMessage); err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to collect bundle", "error", err)
@@ -234,8 +238,7 @@ func (lc *LogCollector) LogCollectionHandler(ctx context.Context, actionsSubID, 
 			return
 		}
 
-		log.CtxLogger(ctx).Infow("Successfully collected bundle, acknowledging message", "bundlePath", bundlePath)
-		msg.Ack()
+		log.CtxLogger(ctx).Infow("Successfully collected bundle", "bundlePath", bundlePath)
 
 		if err = lc.publishEvent(ctx, bundlePath, topicID, logMessage, createClient); err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to publish event", "error", err)
@@ -341,6 +344,10 @@ func (lc *LogCollector) validateMessage(ctx context.Context, logMessage ActionMe
 
 // fetchSAPDetails fetches the SAP details from the ActionMessage: SID, hostname, instance numbers.
 func (lc *LogCollector) fetchSAPDetails(ctx context.Context, logMessage ActionMessage) (string, string, string) {
+	if logMessage.SAPDetails.SID == "" || logMessage.SAPDetails.Hostname == "" || logMessage.SAPDetails.InstanceNums == "" {
+		log.CtxLogger(ctx).Infow("Did not get all SAP details from event, trying from pubsub actions config", "event sid", logMessage.SAPDetails.SID, "event hostname", logMessage.SAPDetails.Hostname, "event instanceNums", logMessage.SAPDetails.InstanceNums)
+		return lc.Config.GetPubSubActions().GetSid(), lc.Config.GetPubSubActions().GetHostname(), lc.Config.GetPubSubActions().GetInstanceNums()
+	}
 	return logMessage.SAPDetails.SID, logMessage.SAPDetails.Hostname, logMessage.SAPDetails.InstanceNums
 }
 
