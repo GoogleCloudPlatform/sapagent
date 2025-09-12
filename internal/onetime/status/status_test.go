@@ -219,6 +219,38 @@ func TestExecuteStatus(t *testing.T) {
 	}
 }
 
+func TestInitSetsFeature(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Status
+		want string
+	}{
+		{
+			name: "NoFeatureSetToAll",
+			s: Status{
+				Feature: "",
+			},
+			want: allFeatures,
+		},
+		{
+			name: "SomeFeatureSetToSame",
+			s: Status{
+				Feature: "hanaMonitoring,sapDiscovery",
+			},
+			want: "hanaMonitoring,sapDiscovery",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.s.Init(context.Background())
+			if test.s.Feature != test.want {
+				t.Errorf("Init() set Feature to %q, want %q", test.s.Feature, test.want)
+			}
+		})
+	}
+}
+
 func TestStartStatusCollection(t *testing.T) {
 	s := Status{
 		iamService: &iam.IAM{},

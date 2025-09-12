@@ -209,6 +209,9 @@ func (s *Status) Init(ctx context.Context) error {
 	s.permissionsStatus = permissions.GetServicePermissionsStatus
 	s.httpGet = http.Get
 	s.createDBHandle = databaseconnector.CreateDBHandle
+	if s.Feature == "" {
+		s.Feature = allFeatures
+	}
 	s.iamService, err = iam.NewIAMClient(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not create IAM client", "error", err)
