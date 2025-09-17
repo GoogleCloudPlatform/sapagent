@@ -60,13 +60,13 @@ import (
 )
 
 var (
-	ipRegex                     = regexp.MustCompile(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`)
-	backupParameterFilesRegex   = regexp.MustCompile(`_backup_parameter_file.*`)
-	dotFilesRegex               = regexp.MustCompile(`.*\.dot$`)
-	nameServerTraceRegex        = regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
-	indexServerRegex            = regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
-	backupLogRegex              = regexp.MustCompile(`backup(.*?).log`)
-	backintLogRegex             = regexp.MustCompile(`backint(.*?).log`)
+	ipRegex                   = regexp.MustCompile(`[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}`)
+	backupParameterFilesRegex = regexp.MustCompile(`_backup_parameter_file.*`)
+	dotFilesRegex             = regexp.MustCompile(`.*\.dot$`)
+	nameServerTraceRegex      = regexp.MustCompile(`nameserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	indexServerRegex          = regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
+	backupLogRegex            = regexp.MustCompile(`backup(.*?).log`)
+	backintLogRegex           = regexp.MustCompile(`backint(.*?).log`)
 )
 
 // SupportBundle is the structure for the support bundle command.
@@ -88,6 +88,7 @@ type SupportBundle struct {
 	IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 	LogPath                string                        `json:"log-path"`
 	BundleName             string                        `json:"bundle-name"`
+	RecentOnly             bool                          `json:"recent-only"`
 	bundleUploaded         bool
 	endingTimestamp        string
 	cmr                    *cloudmetricreader.CloudMetricReader
@@ -249,6 +250,7 @@ const (
 	workloadMetricPrefix  = "workload.googleapis.com"
 	computeMetricPrefix   = "compute.googleapis.com"
 	cloudLoggingURL       = "https://logging.googleapis.com/v2/entries:list"
+	recentLogsCount       = 3
 )
 
 var (
@@ -425,6 +427,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
 	fs.StringVar(&s.BundleName, "bundle-name", "", "Name of the support bundle file to be created (optional)")
 	fs.StringVar(&s.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/supportbundle.log")
+	fs.BoolVar(&s.RecentOnly, "recent-only", false, "Indicate if only recent log files are to be collected - collects the most recent 3 log files by default")
 }
 
 func getReadWriter(rw storage.ReadWriter) uploader {
@@ -819,23 +822,46 @@ func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, s
 	return res
 }
 
+func (s *SupportBundle) fetchLogPaths(ctx context.Context, dirPath string, fs filesystem.FileSystem, matchFunc func(string) bool) []string {
+	fds, err := fs.ReadDir(dirPath)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+dirPath, err)
+		return nil
+	}
+
+	var matchingFiles []os.FileInfo
+	for _, fd := range fds {
+		if fd.IsDir() {
+			continue
+		}
+		if matchFunc(fd.Name()) {
+			matchingFiles = append(matchingFiles, fd)
+		}
+	}
+
+	if s.RecentOnly {
+		sort.Slice(matchingFiles, func(i, j int) bool {
+			return matchingFiles[i].ModTime().After(matchingFiles[j].ModTime())
+		})
+		if len(matchingFiles) > recentLogsCount {
+			matchingFiles = matchingFiles[:recentLogsCount]
+		}
+	}
+
+	var res []string
+	for _, fd := range matchingFiles {
+		filePath := path.Join(dirPath, fd.Name())
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", filePath))
+		res = append(res, filePath)
+	}
+	return res
+}
+
 func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
 	var res []string
 	for _, hanaPath := range hanaPaths {
-		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
-		if err != nil {
-			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
-			return nil
-		}
-		for _, fd := range fds {
-			if fd.IsDir() {
-				continue
-			}
-			if matchNameServerTraceAndBackup(fd.Name()) {
-				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(hanaPath+"/trace", fd.Name())))
-				res = append(res, path.Join(hanaPath+"/trace/", fd.Name()))
-			}
-		}
+		tracePath := fmt.Sprintf("%s/trace", hanaPath)
+		res = append(res, s.fetchLogPaths(ctx, tracePath, fs, matchNameServerTraceAndBackup)...)
 	}
 	return res
 }
@@ -843,43 +869,17 @@ func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaP
 func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
 	var res []string
 	for _, hanaPath := range hanaPaths {
-		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid))
-		if err != nil {
-			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
-			return nil
-		}
-		for _, fd := range fds {
-			if fd.IsDir() {
-				continue
-			}
-			if matchNameServerTraceAndBackup(fd.Name()) {
-				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name())))
-				res = append(res, path.Join(fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid), fd.Name()))
-			}
-		}
+		tracePath := fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid)
+		res = append(res, s.fetchLogPaths(ctx, tracePath, fs, matchNameServerTraceAndBackup)...)
 	}
 	return res
 }
 
 func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs filesystem.FileSystem) []string {
 	var res []string
-
 	for _, hanaPath := range hanaPaths {
-		fds, err := fs.ReadDir(fmt.Sprintf("%s/trace", hanaPath))
-		if err != nil {
-			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+hanaPath+"/trace", err)
-			return nil
-		}
-		for _, fd := range fds {
-			if fd.IsDir() {
-				continue
-			}
-			if dotFilesRegex.MatchString(fd.Name()) {
-				dotFilePath := path.Join(fmt.Sprintf("%s/trace/", hanaPath), fd.Name())
-				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", dotFilePath))
-				res = append(res, dotFilePath)
-			}
-		}
+		tracePath := fmt.Sprintf("%s/trace", hanaPath)
+		res = append(res, s.fetchLogPaths(ctx, tracePath, fs, dotFilesRegex.MatchString)...)
 	}
 	return res
 }
@@ -942,25 +942,10 @@ func (s *SupportBundle) agentLogFiles(ctx context.Context, linuxLogFilesPath str
 
 // pacemakerLogFiles returns the list of pacemaker log files to be collected.
 func (s *SupportBundle) pacemakerLogFiles(ctx context.Context, linuxLogFilesPath string, fu filesystem.FileSystem) []string {
-	var pacemakerLogs []string
 	pacemakerFolderPath := path.Join(linuxLogFilesPath, "pacemaker")
-
-	// Open the folder and add the files to the list.
-	fds, err := fu.ReadDir(pacemakerFolderPath)
-	if err != nil {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+pacemakerFolderPath, err)
-		return pacemakerLogs
-	}
-	for _, fd := range fds {
-		if fd.IsDir() {
-			continue
-		}
-		if strings.Contains(fd.Name(), "pacemaker.log") {
-			pacemakerLogs = append(pacemakerLogs, path.Join(pacemakerFolderPath, fd.Name()))
-		}
-	}
-
-	return pacemakerLogs
+	return s.fetchLogPaths(ctx, pacemakerFolderPath, fu, func(name string) bool {
+		return strings.Contains(name, "pacemaker.log")
+	})
 }
 
 // extractJournalCTLLogs extracts the journalctl logs for google-cloud-sap-agent.
@@ -1003,24 +988,11 @@ func (s *SupportBundle) copyVarLogMessagesToBundle(ctx context.Context, destFile
 }
 
 // collectMessagesLogs collects the messages including rolled over messages file paths.
-func (s *SupportBundle) collectMessagesLogs(ctx context.Context, destFilesPath string, fu filesystem.FileSystem) []string {
-	s.oteLogger.LogMessageToFileAndConsole(ctx, "Copying /var/log/messages file to the support bundle...")
-	var messagesLogs []string
-
-	fds, err := fu.ReadDir(destFilesPath)
-	if err != nil {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading directory: "+destFilesPath, err)
-		return messagesLogs
-	}
-	for _, fd := range fds {
-		if fd.IsDir() {
-			continue
-		}
-		if strings.Contains(fd.Name(), "messages") {
-			messagesLogs = append(messagesLogs, path.Join(destFilesPath, fd.Name()))
-		}
-	}
-	return messagesLogs
+func (s *SupportBundle) collectMessagesLogs(ctx context.Context, logFilesPath string, fu filesystem.FileSystem) []string {
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting /var/log/messages files...")
+	return s.fetchLogPaths(ctx, logFilesPath, fu, func(name string) bool {
+		return strings.Contains(name, "messages")
+	})
 }
 
 // extractSystemDBErrors extracts the errors from system DB backup logs.

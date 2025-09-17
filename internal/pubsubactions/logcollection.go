@@ -270,6 +270,7 @@ func (lc *LogCollector) bundleCollection(ctx context.Context, logMessage ActionM
 		ResultBucket: logMessage.GCEDetails.GCSBucket,
 		Metrics:      false,
 		BundleName:   bundleName,
+		RecentOnly:   true,
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "logcollection",
 			Cp:        lc.CloudProperties,
