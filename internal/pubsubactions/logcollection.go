@@ -268,7 +268,7 @@ func (lc *LogCollector) bundleCollection(ctx context.Context, logMessage ActionM
 		Hostname:     hostname,
 		InstanceNums: instanceNums,
 		ResultBucket: logMessage.GCEDetails.GCSBucket,
-		Metrics:      true,
+		Metrics:      false,
 		BundleName:   bundleName,
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: "logcollection",
