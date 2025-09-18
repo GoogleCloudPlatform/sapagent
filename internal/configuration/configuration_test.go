@@ -18,11 +18,13 @@ package configuration
 
 import (
 	_ "embed"
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
 
@@ -75,6 +77,34 @@ var (
 	//go:embed testdata/systemConfig.json
 	testConfigWithSapSystemConfigJSON []byte
 )
+
+func TestWrite(t *testing.T) {
+	config := &cpb.Configuration{
+		LogLevel:                   cpb.Configuration_INFO,
+		LogToCloud:                 &wpb.BoolValue{Value: true},
+		ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+	}
+	f, err := os.CreateTemp("", "test_config")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(f.Name())
+	err = Write(config, f.Name(), os.WriteFile)
+	if err != nil {
+		t.Fatalf("Write() got err: %v, want error: %t", err, false)
+	}
+	contents, err := os.ReadFile(f.Name())
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	got := &cpb.Configuration{}
+	if err := protojson.Unmarshal(contents, got); err != nil {
+		t.Fatalf("Failed to unmarshal config: %v", err)
+	}
+	if diff := cmp.Diff(config, got, protocmp.Transform()); diff != "" {
+		t.Errorf("Write() returned unexpected diff (-want +got):\n%s", diff)
+	}
+}
 
 func TestReadFromFile(t *testing.T) {
 	tests := []struct {
@@ -1501,6 +1531,76 @@ func TestValidateAgentConfiguration(t *testing.T) {
 			got := validateAgentConfiguration(test.config)
 			if got != test.want {
 				t.Errorf("validateAgentConfig(%v) = %t, want: %t", test.config, got, test.want)
+			}
+		})
+	}
+}
+
+func TestEnsureConfigExists(t *testing.T) {
+	tests := []struct {
+		name     string
+		stat     StatFile
+		mkdirAll MkdirAll
+		write    WriteConfigFile
+		wantErr  error
+	}{
+		{
+			name: "ConfigExists",
+			stat: func(string) (os.FileInfo, error) {
+				return nil, nil
+			},
+			wantErr: nil,
+		},
+		{
+			name: "StatUnexpectedError",
+			stat: func(string) (os.FileInfo, error) {
+				return nil, os.ErrPermission
+			},
+			wantErr: os.ErrPermission,
+		},
+		{
+			name: "MkdirAllError",
+			stat: func(string) (os.FileInfo, error) {
+				return nil, os.ErrNotExist
+			},
+			mkdirAll: func(string, os.FileMode) error {
+				return os.ErrPermission
+			},
+			wantErr: os.ErrPermission,
+		},
+		{
+			name: "WriteError",
+			stat: func(string) (os.FileInfo, error) {
+				return nil, os.ErrNotExist
+			},
+			mkdirAll: func(string, os.FileMode) error {
+				return nil
+			},
+			write: func(string, []byte, os.FileMode) error {
+				return os.ErrPermission
+			},
+			wantErr: os.ErrPermission,
+		},
+		{
+			name: "CreateConfigSuccess",
+			stat: func(string) (os.FileInfo, error) {
+				return nil, os.ErrNotExist
+			},
+			mkdirAll: func(string, os.FileMode) error {
+				return nil
+			},
+			write: func(string, []byte, os.FileMode) error {
+				return nil
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := EnsureConfigExists(test.stat, test.mkdirAll, test.write)
+			if !errors.Is(err, test.wantErr) {
+				t.Errorf("EnsureConfigExists() returned error: %v, want error: %v", err, test.wantErr)
 			}
 		})
 	}
