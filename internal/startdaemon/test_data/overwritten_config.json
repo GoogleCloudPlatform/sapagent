@@ -1,0 +1,9 @@
+{
+  "provide_sap_host_agent_metrics": true,
+  "log_level": "DEBUG",
+  "log_to_cloud": true,
+  "collection_configuration": {
+    "collect_workload_validation_metrics": false,
+    "collect_process_metrics": true
+  }
+}

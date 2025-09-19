@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -43,7 +44,16 @@ type ReadConfigFile func(string) ([]byte, error)
 // WriteConfigFile abstracts os.WriteFile function for testability.
 type WriteConfigFile func(string, []byte, os.FileMode) error
 
+// StatFile abstracts os.Stat function for testability.
+type StatFile func(string) (os.FileInfo, error)
+
+// MkdirAll abstracts os.MkdirAll function for testability.
+type MkdirAll func(string, os.FileMode) error
+
 var ros = runtime.GOOS
+
+//go:embed defaultconfigs/configuration.json
+var defaultConfigurationContent []byte
 
 //go:embed defaultconfigs/hanamonitoring/default_queries.json
 var defaultHMQueriesContent []byte
@@ -83,6 +93,14 @@ func StorageAgentName() string {
 	return fmt.Sprintf("google-cloud-sap-agent/%s (GPN: Agent for SAP)", AgentVersion)
 }
 
+// Path returns the default configuration file path based on the OS.
+func Path() string {
+	if runtime.GOOS == "windows" {
+		return WindowsConfigPath
+	}
+	return LinuxConfigPath
+}
+
 // Read just reads configuration from given file and parses it into config proto.
 func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	content, err := read(path)
@@ -100,6 +118,18 @@ func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", path, err)
 	}
 	return config, err
+}
+
+// Write writes the contents of a configuration proto to a file at the given path.
+func Write(config *cpb.Configuration, path string, write WriteConfigFile) error {
+	content, err := protojson.MarshalOptions{
+		Multiline: true,
+		UseProtoNames: true,
+	}.Marshal(config)
+	if err != nil {
+		log.Logger.Errorw("Failed to marshal configuration proto to JSON", "error", err)
+	}
+	return write(path, content, 0644)
 }
 
 // ReadFromFile reads the final configuration from the given file. Besides parsing the file,
@@ -364,7 +394,7 @@ func prepareHMConf(config *cpb.HANAMonitoringConfiguration) *cpb.HANAMonitoringC
 // enabled/disabled. In case of default queries if there is no override item in the custom query list
 // then default query is treated as enabled.
 func applyOverrides(defaultHMQueriesList, customHMQueriesList []*cpb.Query) []*cpb.Query {
-	result := []*cpb.Query{}
+	var result []*cpb.Query
 	for _, query := range defaultHMQueriesList {
 		q := query
 		q.Enabled = true
@@ -465,5 +495,32 @@ func validateColumnTypes(col *cpb.Column) error {
 	if col.MetricType == cpb.MetricType_METRIC_CUMULATIVE && (col.ValueType == cpb.ValueType_VALUE_STRING || col.ValueType == cpb.ValueType_VALUE_BOOL) {
 		return errors.New("the value type is not supported for CUMULATIVE custom metrics on column")
 	}
+	return nil
+}
+
+// EnsureConfigExists ensures that the sapagent configuration file exists.
+// If the file does not exist, it creates the file and its parent directories.
+func EnsureConfigExists(stat StatFile, mkdirAll MkdirAll, write WriteConfigFile) error {
+	path := Path()
+	_, err := stat(path)
+	if err == nil {
+		return nil
+	}
+
+	// We expect to see os.ErrNotExist if the file does not exist.
+	// Any other error is unexpected and should be returned.
+	if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to stat configuration file: %w", err)
+	}
+
+	dir := filepath.Dir(path)
+	if err := mkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create configuration file directory %s: %w", dir, err)
+	}
+	if err := write(path, defaultConfigurationContent, 0644); err != nil {
+		return fmt.Errorf("failed to write default configuration to file %s: %w", path, err)
+	}
+
+	log.Logger.Infow("Default configuration file created", "path", path)
 	return nil
 }
