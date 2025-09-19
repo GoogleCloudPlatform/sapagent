@@ -333,7 +333,6 @@ func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID st
 // if the GCS bucket is not empty, and if the SAP details are not empty.
 func (lc *LogCollector) validateMessage(ctx context.Context, logMessage ActionMessage) bool {
 	if logMessage.EventType != "LOG_COLLECTION" || logMessage.GCEDetails.InstanceID != lc.CloudProperties.GetInstanceId() {
-		log.CtxLogger(ctx).Infow("Invalid message", "eventType", logMessage.EventType, "instanceID", logMessage.GCEDetails.InstanceID, "currentInstanceID", lc.CloudProperties.GetInstanceId())
 		return false
 	}
 	if logMessage.GCEDetails.GCSBucket == "" {
