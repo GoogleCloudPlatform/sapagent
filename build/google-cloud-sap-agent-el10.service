@@ -1,0 +1,32 @@
+[Unit]
+Description=Google Cloud Agent for SAP
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+StartLimitIntervalSec=60
+
+[Service]
+WorkingDirectory=/usr/share/google-cloud-sap-agent
+ExecStart=/usr/bin/google_cloud_sap_agent startdaemon
+User=root
+Type=simple
+Restart=always
+RestartSec=10
+SuccessExitStatus=143
+# This limits the exits to 3 in one minute, if it fails 3 times in a minute
+# it will not be restarted
+StartLimitInterval=60
+StartLimitBurst=3
+# Resource controls
+MemoryAccounting=yes
+TasksAccounting=yes
+MemoryMax=1G
+ProtectSystem=yes
+ReadWritePaths=/var/log /tmp -/usr/sap -/etc
+# Do not use ProtectClock, when that is enabled then the agent cannot see LVM mounts
+ProtectKernelModules=true
+RestrictRealtime=true
+# CPUQuota of 50 will allow for up to 50% on 1 CPU
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
