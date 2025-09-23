@@ -143,6 +143,49 @@ func dbConnectorFailure(ctx context.Context, p databaseconnector.Params) (*datab
 	return nil, fmt.Errorf("connection failure")
 }
 
+func TestGetRepositoryLocation(t *testing.T) {
+	tests := []struct {
+		name string
+		cp   *iipb.CloudProperties
+		want string
+	}{
+		{
+			name: "NilCloudProps",
+			cp:   nil,
+			want: "us",
+		},
+		{
+			name: "EmptyZone",
+			cp:   &iipb.CloudProperties{},
+			want: "us",
+		},
+		{
+			name: "USZone",
+			cp:   &iipb.CloudProperties{Zone: "us-central1-a"},
+			want: "us",
+		},
+		{
+			name: "EuropeZone",
+			cp:   &iipb.CloudProperties{Zone: "europe-west1-b"},
+			want: "europe",
+		},
+		{
+			name: "AsiaZone",
+			cp:   &iipb.CloudProperties{Zone: "asia-southeast1-c"},
+			want: "asia",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := getRepositoryLocation(tc.cp)
+			if got != tc.want {
+				t.Errorf("getRepositoryLocation(%v) = %q, want %q", tc.cp, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSynopsisForStatus(t *testing.T) {
 	want := "get the status of the agent and its services"
 	s := Status{}

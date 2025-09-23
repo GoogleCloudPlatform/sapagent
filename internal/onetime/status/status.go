@@ -60,7 +60,6 @@ import (
 const (
 	agentPackageName        = "google-cloud-sap-agent"
 	projectName             = "sap-core-eng-products"
-	repositoryLocation      = "us"
 	repositoryName          = "google-cloud-sap-agent-sles15-x86-64"
 	fetchLatestVersionError = "Error: could not fetch latest version"
 	// TODO: Implement status OTE check for WIF based authentications access to scopes.
@@ -377,6 +376,29 @@ func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	return agentStatus, nil
 }
 
+// getRepositoryLocation returns the repository location based on the cloud properties.
+func getRepositoryLocation(cp *iipb.CloudProperties) string {
+	if cp.GetZone() == "" {
+		return "us"
+	}
+	zone := cp.GetZone()
+	idx := strings.LastIndex(zone, "-")
+	if idx == -1 {
+		return "us"
+	}
+	region := zone[:idx]
+	if strings.HasPrefix(region, "us-") {
+		return "us"
+	}
+	if strings.HasPrefix(region, "europe-") {
+		return "europe"
+	}
+	if strings.HasPrefix(region, "asia-") {
+		return "asia"
+	}
+	return region
+}
+
 // agentStatus returns the agent version, enabled/running, config path, and the
 // configuration as parsed by the agent.
 func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Configuration) {
@@ -386,6 +408,7 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 	}
 
 	var err error
+	repositoryLocation := getRepositoryLocation(s.CloudProps)
 	agentStatus.AvailableVersion, err = statushelper.LatestVersionArtifactRegistry(ctx, s.arClient, projectName, repositoryLocation, repositoryName, agentPackageName)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
