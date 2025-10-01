@@ -60,16 +60,17 @@ type (
 
 	// ActionMessage represents the top-level structure of the JSON
 	ActionMessage struct {
-		AlertID        string     `json:"alert_id"`
-		EventType      string     `json:"event_type"`
-		EventTimestamp time.Time  `json:"event_timestamp"`
-		EventSource    string     `json:"event_source"`
-		EventName      string     `json:"event_name"`
-		Description    string     `json:"description"`
-		GCEDetails     GCEDetails `json:"gce_details"`
-		SAPDetails     SAPDetails `json:"sap_details"`
-		Agents         []string   `json:"agents"`
-		ActionScript   []string   `json:"action_script"`
+		AlertID        string            `json:"alert_id"`
+		EventType      string            `json:"event_type"`
+		EventTimestamp time.Time         `json:"event_timestamp"`
+		EventSource    string            `json:"event_source"`
+		EventName      string            `json:"event_name"`
+		Description    string            `json:"description"`
+		GCEDetails     GCEDetails        `json:"gce_details"`
+		SAPDetails     SAPDetails        `json:"sap_details"`
+		Agents         []string          `json:"agents"`
+		ActionScript   []string          `json:"action_script"`
+		MetricLabels   map[string]string `json:"metric_labels"`
 	}
 
 	// EventTopicMessage represents the structure for the event topic message
@@ -79,12 +80,13 @@ type (
 
 	// Incident represents the top-level incident structure.
 	Incident struct {
-		ResourceDisplayName string           `json:"resource_display_name"`
-		Summary             string           `json:"summary"`
-		Resource            IncidentResource `json:"resource"`
-		SAPDetails          SAPDetails       `json:"sap_details"`
-		LogPath             string           `json:"log_path"`
-		EventName           string           `json:"event_name"`
+		ResourceDisplayName string            `json:"resource_display_name"`
+		Summary             string            `json:"summary"`
+		Resource            IncidentResource  `json:"resource"`
+		SAPDetails          SAPDetails        `json:"sap_details"`
+		LogPath             string            `json:"log_path"`
+		EventName           string            `json:"event_name"`
+		MetricLabels        map[string]string `json:"metric_labels"`
 	}
 
 	// IncidentResource represents the nested resource details within an incident.
@@ -305,9 +307,10 @@ func (lc *LogCollector) publishEvent(ctx context.Context, bundlePath, topicID st
 					InstanceID: lc.CloudProperties.GetInstanceId(),
 				},
 			},
-			SAPDetails: action.SAPDetails,
-			LogPath:    bundlePath,
-			EventName:  action.EventName,
+			SAPDetails:   action.SAPDetails,
+			LogPath:      bundlePath,
+			EventName:    action.EventName,
+			MetricLabels: action.MetricLabels,
 		},
 	}
 
