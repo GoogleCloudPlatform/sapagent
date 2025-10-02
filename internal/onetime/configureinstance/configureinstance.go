@@ -448,7 +448,7 @@ func (c *ConfigureInstance) checkAndRegenerateLines(ctx context.Context, filePat
 // regenerateLine will override values in 'got' provided by 'want,' while
 // preserving any original values not present in 'want'.
 // 'want' should be formatted as either a single key/value: 'key=value',
-// or multiple values for one key: 'key="value1 value2 value3"'.
+// or multiple values for one key: 'key="value1 value2=4 value3=5"'.
 // Returns true if a substitution occurred.
 func regenerateLine(ctx context.Context, got, want string) (bool, string) {
 	if got == want {
@@ -467,17 +467,25 @@ func regenerateLine(ctx context.Context, got, want string) (bool, string) {
 	values := strings.Trim(split[1], `"`)
 	updated := false
 	for _, val := range strings.Split(values, " ") {
-		if !strings.Contains(got, val) {
-			updated = true
+		if strings.Contains(got, val) {
+			continue
 		}
-		// Values will overwrite existing occurrences in 'got'.
-		key := strings.Split(val, "=")[0]
-		re := regexp.MustCompile(key + `[^\s\"]*`)
-		got = re.ReplaceAllString(got, val)
+
+		split := strings.Split(val, "=")
+		if len(split) == 2 {
+			key := split[0]
+			val := split[1]
+			re := regexp.MustCompile(`([\s\"]` + key + `=)[^\s\"]*`)
+			log.CtxLogger(ctx).Infof("Replacing value in line. Got: %s, re: %s, val: %s", got, re.String(), val)
+			got = re.ReplaceAllString(got, "${1}"+val)
+		}
+
 		// If not found, append to the end of 'got'.
 		if !strings.Contains(got, val) {
+			log.CtxLogger(ctx).Infof("Missing value. Got: '%s', want: '%s'", got, val)
 			got = strings.TrimSuffix(got, `"`) + fmt.Sprintf(` %s"`, val)
 		}
+		updated = true
 	}
 	return updated, got
 }

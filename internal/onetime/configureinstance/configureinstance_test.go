@@ -802,6 +802,13 @@ func TestRegenerateLine(t *testing.T) {
 			wantUpdated: false,
 			wantOutput:  `key="val test=3"`,
 		},
+		{
+			name:        "MultiValueSimilarNames",
+			gotLine:     `key="val=1 test.val=3"`,
+			wantLine:    `key="val=2"`,
+			wantUpdated: true,
+			wantOutput:  `key="val=2 test.val=3"`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

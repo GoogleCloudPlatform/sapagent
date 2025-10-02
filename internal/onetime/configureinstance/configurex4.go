@@ -62,7 +62,7 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
 		}
 	}
-	if c.HyperThreading == hyperThreadingOff {
+	if c.HyperThreading == hyperThreadingOff && c.Apply {
 		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.MachineType, "hyperThreading", c.HyperThreading)
 		grubLinuxDefault = strings.TrimSuffix(grubLinuxDefault, `"`) + ` nosmt"`
 	}
@@ -70,7 +70,7 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if c.HyperThreading == hyperThreadingOn {
+	if c.HyperThreading == hyperThreadingOn && c.Apply {
 		log.CtxLogger(ctx).Infow("Hyper threading enabled, ensuring 'nosmt' is removed from 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.MachineType, "hyperThreading", c.HyperThreading)
 		removeNosmt, err := c.removeValues(ctx, "/etc/default/grub", []string{"GRUB_CMDLINE_LINUX_DEFAULT=nosmt"})
 		if err != nil {
