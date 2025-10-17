@@ -210,11 +210,6 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 	}
 
 	sapInstances := instancesWithCredentials(ctx, &parameters)
-	if len(sapInstances.GetInstances()) == 0 {
-		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start process metrics collection.")
-		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
-		return false
-	}
 	// Log usagemetric if hdbuserstore key is configured.
 	if parameters.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHdbuserstoreKey() != "" {
 		usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
@@ -602,11 +597,6 @@ Return false if the config option is not enabled.
 */
 func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 	sapInstances := instancesWithCredentials(ctx, &parameters)
-	if len(sapInstances.GetInstances()) == 0 {
-		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start reliability metrics collection.")
-		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
-		return false
-	}
 
 	dailyMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectReliabilityMetrics) },
