@@ -606,7 +606,6 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 		"ers":  "false",
 		"app":  "false",
 	}
-	hasRole := false
 	hasEnq := false
 	hasMS := false
 	lines := strings.Split(result.StdOut, "\n")
@@ -625,28 +624,20 @@ func collectRoleMetrics(ctx context.Context, p *InstanceProperties, exec command
 		case "enqr", "er":
 			log.CtxLogger(ctx).Debugw("Found enqr or er", "bin", bin)
 			roles["ers"] = "true"
-			hasRole = true
 		case "ms":
 			log.CtxLogger(ctx).Debugw("Found ms", "bin", bin)
 			hasMS = true
-			hasRole = true
 		case "enq", "en":
 			log.CtxLogger(ctx).Debugw("Found enq or en", "bin", bin)
 			hasEnq = true
-			hasRole = true
 		case "dw", "jc":
 			log.CtxLogger(ctx).Debugw("Found dw or jc", "bin", bin)
 			roles["app"] = "true"
-			hasRole = true
 		}
 	}
-	if hasMS && hasEnq {
-		log.CtxLogger(ctx).Debugw("Found both ms and enq.", "hasMS", hasMS, "hasEnq", hasEnq)
+	if hasMS || hasEnq {
+		log.CtxLogger(ctx).Debugw("Found either ms or enq.", "hasMS", hasMS, "hasEnq", hasEnq)
 		roles["ascs"] = "true"
-		hasRole = true
-	}
-	if !hasRole {
-		return nil, nil
 	}
 	return createMetrics(p, nwInstanceRolePath, roles, tspb.Now(), 1), nil
 }

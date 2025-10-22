@@ -573,8 +573,8 @@ func TestCollectNetWeaverMetrics(t *testing.T) {
 func TestCollect(t *testing.T) {
 	// Production API returns only nw/service metric in unit tests.
 	metrics, _ := defaultInstanceProperties.Collect(context.Background())
-	if len(metrics) != 1 {
-		t.Errorf("Collect() metric count mismatch, got: %v want: 1.", len(metrics))
+	if len(metrics) != 2 {
+		t.Errorf("Collect() metric count mismatch, got: %v want: 2.", len(metrics))
 	}
 }
 
@@ -1352,15 +1352,24 @@ func TestCollectRoleMetrics(t *testing.T) {
 		wantErr error
 	}{{
 		name: "noRoles",
-		p: &InstanceProperties{
-			SAPInstance: &sapb.SAPInstance{
-				InstanceId: "ASCS11",
-			},
-		},
+		p:    defaultInstanceProperties,
 		exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 			return commandlineexecutor.Result{
 				StdOut: "usr04, 000ddic, e, dnwh75ldbci, dnwh75ldbci, 1, 1, 000, sap*, su01, e_usr04, false",
 			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
 		},
 	}, {
 		name: "commandError",
@@ -1614,7 +1623,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 ms.sapTST_ASCS00 pf=/usr/sap/TST
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
 					"app":           "false",
-					"ascs":          "false",
+					"ascs":          "true",
 					"ers":           "false",
 					"instance_nr":   "00",
 					"sid":           "TST",
@@ -1637,7 +1646,7 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TS
 				Type: "workload.googleapis.com/sap/nw/instance/role",
 				Labels: map[string]string{
 					"app":           "false",
-					"ascs":          "false",
+					"ascs":          "true",
 					"ers":           "false",
 					"instance_nr":   "00",
 					"sid":           "TST",
@@ -1654,6 +1663,19 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TS
 			`,
 			}
 		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
+		},
 	}, {
 		name: "ersMissing",
 		p:    defaultERSInstanceProperties,
@@ -1662,6 +1684,19 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TS
 				StdOut: `
 				`,
 			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
 		},
 	}, {
 		name: "ignoresNonSIDProcess",
@@ -1672,6 +1707,19 @@ tstadm   13448 13436  0 Apr26 ?        00:10:50 enq.sapTST_ASCS00 pf=/usr/sap/TS
 	ed1adm   13448 13436  0 Apr26 ?        00:10:50 enq.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11
 	ed1adm   13447 13436  0 Apr26 ?        00:01:10 ms.sapED1_ASCS12 pf=/usr/sap/ED1/SYS/profile/ED1_ASCS12_alidascs11`,
 			}
+		},
+		want: &mrpb.TimeSeries{
+			Metric: &mpb.Metric{
+				Type: "workload.googleapis.com/sap/nw/instance/role",
+				Labels: map[string]string{
+					"app":           "false",
+					"ascs":          "false",
+					"ers":           "false",
+					"instance_nr":   "00",
+					"sid":           "TST",
+					"instance_name": "test-instance",
+				},
+			},
 		},
 	}, {
 		name: "skipRoleMetric",
