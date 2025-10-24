@@ -332,20 +332,6 @@ func TestStartProcessMetrics(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "ZeroSAPApplications",
-			parameters: Parameters{
-				Config:       defaultConfig,
-				OSType:       "linux",
-				MetricClient: fakeNewMetricClient,
-				BackOffs:     defaultBackOffIntervals,
-				Discovery: &fakeDiscoveryInterface{
-					instances: fakeSAPInstances("NOSAP"),
-				},
-				OSStatReader: func(data string) (os.FileInfo, error) { return nil, nil },
-			},
-			want: false,
-		},
-		{
 			name: "DemoCollectionMode",
 			parameters: Parameters{
 				Config:       defaultConfig,

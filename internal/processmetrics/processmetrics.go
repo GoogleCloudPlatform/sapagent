@@ -42,6 +42,7 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"golang.org/x/exp/slices"
 	"google.golang.org/api/option"
+	"google.golang.org/protobuf/proto"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/gammazero/workerpool"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -79,6 +80,7 @@ var (
 	collectAndSendReliabilityMetricsRoutine *recovery.RecoverableRoutine
 	slowMetricsRoutine                      *recovery.RecoverableRoutine
 	demoMetricsRoutine                      *recovery.RecoverableRoutine
+	updateMetricsCollectorsRoutine          *recovery.RecoverableRoutine
 )
 
 type (
@@ -122,6 +124,12 @@ type (
 		PCMParams      pcm.Parameters
 		OSStatReader   func(string) (os.FileInfo, error)
 	}
+	updateMetricsCollectorsArgs struct {
+		procCtx    context.Context
+		procCancel context.CancelFunc
+
+		parameters Parameters
+	}
 )
 
 const (
@@ -144,9 +152,16 @@ in the background and return control to the caller with return value = true.
 Return false if the config option is not enabled.
 */
 func Start(ctx context.Context, parameters Parameters) bool {
-	rm := startReliabilityMetrics(ctx, parameters)
-	pm := startProcessMetrics(ctx, parameters)
-	return rm || pm
+	subCtx, cancel := context.WithCancel(ctx)
+	metricsRoutine := &recovery.RecoverableRoutine{
+		Routine:             updateMetricsCollectors,
+		RoutineArg:          updateMetricsCollectorsArgs{procCtx: subCtx, procCancel: cancel, parameters: parameters},
+		ErrorCode:           usagemetrics.CollectMetricsRoutineFailure,
+		UsageLogger:         *usagemetrics.Logger,
+		ExpectedMinDuration: time.Minute,
+	}
+	metricsRoutine.StartRoutine(ctx)
+	return true
 }
 
 /*
@@ -210,11 +225,6 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 	}
 
 	sapInstances := instancesWithCredentials(ctx, &parameters)
-	if len(sapInstances.GetInstances()) == 0 {
-		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start process metrics collection.")
-		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
-		return false
-	}
 	// Log usagemetric if hdbuserstore key is configured.
 	if parameters.Config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHdbuserstoreKey() != "" {
 		usagemetrics.Action(usagemetrics.HDBUserstoreKeyConfigured)
@@ -230,7 +240,6 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		ExpectedMinDuration: 24 * time.Hour,
 	}
 	dailyMetricsRoutine.StartRoutine(ctx)
-
 	p := createProcessCollectors(ctx, parameters, mc, sapInstances)
 	collectAndSendFastMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
@@ -262,13 +271,44 @@ func startProcessMetrics(ctx context.Context, parameters Parameters) bool {
 		ExpectedMinDuration: time.Minute,
 	}
 	slowMetricsRoutine.StartRoutine(ctx)
-
 	return true
 }
 
 // NewMetricClient is the production version that calls cloud monitoring API.
 func NewMetricClient(ctx context.Context, opts ...option.ClientOption) (cloudmonitoring.TimeSeriesCreator, error) {
 	return monitoring.NewMetricClient(ctx, opts...)
+}
+
+func updateMetricsCollectors(ctx context.Context, a any) {
+	var args updateMetricsCollectorsArgs
+	var ok bool
+	if args, ok = a.(updateMetricsCollectorsArgs); !ok {
+		log.CtxLogger(ctx).Warn("args is not of type updateMetricsCollectorsArgs")
+		return
+	}
+	updateTicker := time.NewTicker(args.parameters.Config.GetDiscoveryConfiguration().GetSapInstancesUpdateFrequency().AsDuration())
+	var lastInstances *sapb.SAPInstances
+	for {
+		newInstances := args.parameters.Discovery.GetSAPInstances()
+		if !proto.Equal(lastInstances, newInstances) {
+			log.CtxLogger(ctx).Info("Updating metrics collectors.")
+			args.procCancel()
+			log.CtxLogger(ctx).Info("Cancelled the slow and fast moving metrics collectors, waiting for the process metrics frequency before starting the collectors again.")
+			// Wait for the process metrics frequency before starting the collectors again.
+			time.Sleep(time.Duration(args.parameters.Config.GetCollectionConfiguration().GetProcessMetricsFrequency()) * time.Second)
+			args.procCtx, args.procCancel = context.WithCancel(ctx)
+			startProcessMetrics(args.procCtx, args.parameters)
+			startReliabilityMetrics(args.procCtx, args.parameters)
+		}
+		lastInstances = newInstances
+		select {
+		case <-ctx.Done():
+			log.CtxLogger(ctx).Info("Metrics collectors update cancellation requested")
+			return
+		case <-updateTicker.C:
+			continue
+		}
+	}
 }
 
 // createProcessCollectors sets up the processmetrics properties and metric collectors for SAP Instances.
@@ -602,11 +642,6 @@ Return false if the config option is not enabled.
 */
 func startReliabilityMetrics(ctx context.Context, parameters Parameters) bool {
 	sapInstances := instancesWithCredentials(ctx, &parameters)
-	if len(sapInstances.GetInstances()) == 0 {
-		log.CtxLogger(ctx).Error("No SAP Instances found. Cannot start reliability metrics collection.")
-		usagemetrics.Error(usagemetrics.NoSAPInstancesFound) // NO SAP instances found
-		return false
-	}
 
 	dailyMetricsRoutine = &recovery.RecoverableRoutine{
 		Routine:             func(context.Context, any) { usagemetrics.LogActionDaily(usagemetrics.CollectReliabilityMetrics) },
