@@ -934,7 +934,7 @@ func TestSetBackintConfig(t *testing.T) {
 				BackintConfigFile: "/tmp/param_file.json",
 			},
 			read: func(string) ([]byte, error) {
-				fileContent := `{"bucket": "test_bucket"}`
+				fileContent := `{"bucket": "test_bucket", "threads": 64}`
 				return []byte(fileContent), nil
 			},
 			wantConfig: &bpb.BackintConfiguration{
@@ -949,7 +949,7 @@ func TestSetBackintConfig(t *testing.T) {
 				Retries:                 5,
 				SendMetricsToMonitoring: &wpb.BoolValue{Value: true},
 				DiagnoseFileMaxSizeGb:   1,
-				Threads:                 int64(runtime.NumCPU()),
+				Threads:                 64,
 			},
 		},
 	}
