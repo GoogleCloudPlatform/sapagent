@@ -25,7 +25,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
-
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -55,7 +55,9 @@ func (ps *PubSubActions) Start(ctx context.Context) (err error) {
 	LogCollectionRoutine := &recovery.RecoverableRoutine{
 		Routine: func(ctx context.Context, a any) {
 			if _, ok := a.(LogCollectionParameters); ok {
-				lc.LogCollectionHandler(ctx, lcParams.ActionsSubID, lcParams.TopicID, createClient)
+				if err = lc.LogCollectionHandler(ctx, lcParams.ActionsSubID, lcParams.TopicID, createClient); err != nil {
+					log.CtxLogger(ctx).Errorw("LogCollectionHandler failed", "error", err)
+				}
 			}
 		},
 		RoutineArg:          lcParams,
