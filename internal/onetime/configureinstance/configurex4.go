@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
@@ -38,6 +39,10 @@ var (
 	logindConf       = []string{"UserTasksMax="}
 	modprobeConf     = []byte("blacklist idxd\nblacklist hpilo\nblacklist acpi_cpufreq\nblacklist qat_4xxx\nblacklist intel_qat\n")
 	grubLinuxDefault = `GRUB_CMDLINE_LINUX_DEFAULT="tsc=nowatchdog add_efi_memmap udev.children-max=512 nmi_watchdog=0 watchdog_thresh=60 workqueue.watchdog_thresh=120 mce=2 console=ttyS0,115200 earlyprintk=ttyS0,115200 uv_nmi.action=kdump bau=0 pci=nobar transparent_hugepage=never numa_balancing=disable clocksource=tsc"`
+
+	versionRegex      = regexp.MustCompile(`VERSION_ID="([^"]*)"`)
+	slesMinVersionTHP = semver.MustParse("15.5")
+	rhelMinVersionTHP = semver.MustParse("9.2")
 )
 
 // configureX4 checks and applies OS settings on X4.
@@ -65,6 +70,9 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 	if c.HyperThreading == hyperThreadingOff && c.Apply {
 		log.CtxLogger(ctx).Infow("Hyper threading disabled, appending 'nosmt' to 'GRUB_CMDLINE_LINUX_DEFAULT'.", "machineType", c.MachineType, "hyperThreading", c.HyperThreading)
 		grubLinuxDefault = strings.TrimSuffix(grubLinuxDefault, `"`) + ` nosmt"`
+	}
+	if c.transparentHugePageAdvise(ctx) {
+		grubLinuxDefault = strings.ReplaceAll(grubLinuxDefault, "transparent_hugepage=never", "transparent_hugepage=madvise")
 	}
 	rebootGrub, err := c.checkAndRegenerateLines(ctx, "/etc/default/grub", []string{grubLinuxDefault})
 	if err != nil {
@@ -99,6 +107,31 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("general X4 configurations completed, OS specific configurations failed: %v", err)
 	}
 	return rebootSLES || rebootRHEL || rebootSystemdSystem || rebootSystemdLogin || rebootModprobe || rebootGrub, nil
+}
+
+// transparentHugePageAdvise checks if the OS version is compatible with transparent huge page.
+// Returns true if transparent huge page is set to advise, false if it is set to never.
+func (c *ConfigureInstance) transparentHugePageAdvise(ctx context.Context) bool {
+	osRelease, err := c.ReadFile("/etc/os-release")
+	if err != nil {
+		return false
+	}
+	matches := versionRegex.FindStringSubmatch(string(osRelease))
+	if len(matches) != 2 || matches[1] == "" {
+		return false
+	}
+	version, err := semver.NewVersion(matches[1])
+	if err != nil {
+		return false
+	}
+
+	if strings.Contains(string(osRelease), "SLES") {
+		return version.GreaterThanEqual(slesMinVersionTHP)
+	}
+	if strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
+		return version.GreaterThanEqual(rhelMinVersionTHP)
+	}
+	return false
 }
 
 // configureX4SLES checks and applies OS settings for X4 running on SLES.

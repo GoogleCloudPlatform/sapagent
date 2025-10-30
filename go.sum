@@ -45,6 +45,8 @@ github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-2025
 github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20250912122010-e00b74940f44/go.mod h1:WrwTr9HFkp+nbHba/tv36eCLkjKAeCx7mqiG/wL3PNU=
 github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250912122010-e00b74940f44 h1:FrAq6nq+qkx8Z3KmxyBvihx54OEyFWIFP0d6bWL5cvw=
 github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250912122010-e00b74940f44/go.mod h1:8Ea8vdBuPsWhhwzL9sNK7BFQE9qbkPLZUHxcucWHXaM=
+github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
+github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/SAP/go-hdb v1.12.12 h1:pZtsnUU7VNNobksc13F5pGr7W3abiJq/W4v7g7GZpKk=
 github.com/SAP/go-hdb v1.12.12/go.mod h1:R6RDbzvPk9gTraxYbzfNcy3XRp3vXFGd5vEopvzr0zQ=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=

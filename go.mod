@@ -9,7 +9,6 @@ replace github.com/GoogleCloudPlatform/sapagent/shared => ./shared
 replace github.com/GoogleCloudPlatform/sapagent/protos => ./protos
 
 require (
-  cloud.google.com/go/aiplatform v1.70.0
   cloud.google.com/go/artifactregistry v1.16.1
   cloud.google.com/go/iam v1.3.1
   cloud.google.com/go/logging v1.13.0
@@ -22,6 +21,7 @@ require (
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
   github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20250912122010-e00b74940f44
+  github.com/Masterminds/semver/v3 v3.4.0
   github.com/SAP/go-hdb v1.12.12
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.52.1
@@ -47,13 +47,17 @@ require (
 )
 
 require (
+  cloud.google.com/go/pubsub v1.45.3
+  go.uber.org/multierr v1.10.0
+)
+
+require (
   cel.dev/expr v0.19.1 // indirect
   cloud.google.com/go v0.118.0 // indirect
   cloud.google.com/go/auth v0.14.1 // indirect
   cloud.google.com/go/auth/oauth2adapt v0.2.7 // indirect
   cloud.google.com/go/compute/metadata v0.6.0 // indirect
   cloud.google.com/go/longrunning v0.6.4 // indirect
-  cloud.google.com/go/pubsub v1.45.3 // indirect
   github.com/GoogleCloudPlatform/agentcommunication_client v0.0.0-20250227185639-b70667e4a927 // indirect
   github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.25.0 // indirect
   github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.49.0 // indirect
@@ -96,7 +100,6 @@ require (
   go.opentelemetry.io/otel/sdk v1.34.0 // indirect
   go.opentelemetry.io/otel/sdk/metric v1.33.0 // indirect
   go.opentelemetry.io/otel/trace v1.34.0 // indirect
-  go.uber.org/multierr v1.10.0 // indirect
   golang.org/x/crypto v0.32.0 // indirect
   golang.org/x/mod v0.22.0 // indirect
   golang.org/x/net v0.34.0 // indirect

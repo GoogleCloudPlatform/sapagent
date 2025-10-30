@@ -68,7 +68,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateModprobe",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
 				WriteFile:   defaultWriteFile(3),
 				MkdirAll:    defaultMkdirAll(3),
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
@@ -80,7 +80,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRunDracut",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil}, []string{"Name=RHEL", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
 				WriteFile:   defaultWriteFile(4),
 				MkdirAll:    defaultMkdirAll(4),
@@ -92,7 +92,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRegenerateGrub",
 			c: ConfigureInstance{
-				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
 				WriteFile:      defaultWriteFile(5),
 				MkdirAll:       defaultMkdirAll(5),
@@ -106,7 +106,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRemoveNosmt",
 			c: ConfigureInstance{
-				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
 				WriteFile:      defaultWriteFile(5),
 				MkdirAll:       defaultMkdirAll(5),
@@ -119,7 +119,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
@@ -131,7 +131,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
@@ -149,6 +149,86 @@ func TestConfigureX4(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("configureX4(%v) = %v, want: %v", tc.c, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTransparentHugePageAdvise(t *testing.T) {
+	tests := []struct {
+		name string
+		c    ConfigureInstance
+		want bool
+	}{
+		{
+			name: "FailedToReadReleaseFile",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{fmt.Errorf("failed to read")}, []string{""}),
+			},
+			want: false,
+		},
+		{
+			name: "RHEL92",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="Red Hat Enterprise Linux"\nVERSION_ID="9.2"`}),
+			},
+			want: true,
+		},
+		{
+			name: "RHEL91",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="Red Hat Enterprise Linux"\nVERSION_ID="9.1"`}),
+			},
+			want: false,
+		},
+		{
+			name: "RHEL82",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="Red Hat Enterprise Linux"\nVERSION_ID="8.2"`}),
+			},
+			want: false,
+		},
+		{
+			name: "SLES12SP5",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="SLES"\nVERSION_ID="12.5"`}),
+			},
+			want: false,
+		},
+		{
+			name: "SLES15SP5",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="SLES"\nVERSION_ID="15.5"`}),
+			},
+			want: true,
+		},
+		{
+			name: "SLES15SP4",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="SLES"\nVERSION_ID="15.4"`}),
+			},
+			want: false,
+		},
+		{
+			name: "NotSLESOrRHEL",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="SHEL"\nVERSION_ID="15.5"`}),
+			},
+			want: false,
+		},
+		{
+			name: "BadVersion",
+			c: ConfigureInstance{
+				ReadFile: defaultReadFile([]error{nil}, []string{`NAME="SLES"\nVERSION_ID="15.4.asdf.123.a"`}),
+			},
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.c.transparentHugePageAdvise(context.Background())
+			if got != tc.want {
+				t.Errorf("transparentHugePageAdvise(%v) = %v, want: %v", tc.c, got, tc.want)
 			}
 		})
 	}
