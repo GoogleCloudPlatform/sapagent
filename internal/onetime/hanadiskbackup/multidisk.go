@@ -237,8 +237,8 @@ func (s *Snapshot) convertISGInstantSnapshots(ctx context.Context, cp *ipb.Cloud
 		return nil, err
 	}
 
-	errors := []error{}
-	ssOps := []*snapshotOp{}
+	var errors []error
+	var ssOps []*snapshotOp
 	for _, is := range instantSnapshots {
 		if err := s.createGroupBackup(ctx, is, &ssOps); err != nil {
 			errors = append(errors, err)
@@ -320,7 +320,7 @@ func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
 		"description":                s.Description,
 		"labels":                     labels,
 	}
-	log.CtxLogger(ctx).Infow("Snapshot group to be created: %v", snapshotGroup)
+	log.CtxLogger(ctx).Infow("Snapshot group to be created", "snapshotGroup", snapshotGroup)
 
 	data, err := json.Marshal(snapshotGroup)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
 	if err := s.sgService.WaitForSGCreationWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Infow("Snapshot group is ready.")
+	log.CtxLogger(ctx).Info("Snapshot group is ready.")
 	return nil
 }
 
@@ -354,7 +354,7 @@ func (s *Snapshot) createSnapshotName(instantSnapshotName string, timestamp stri
 
 // validateDisksBelongToCG validates that the disks belong to the same consistency group.
 func (s *Snapshot) validateDisksBelongToCG(ctx context.Context, disks []string) error {
-	disksTraversed := []string{}
+	var disksTraversed []string
 	for _, d := range disks {
 		cg, err := s.readConsistencyGroup(ctx, d)
 		if err != nil {
@@ -426,7 +426,7 @@ func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, erro
 
 // generateSHA generates a SHA-224 hash of labels starting with "goog-sapagent".
 func generateSHA(labels map[string]string) string {
-	keys := []string{}
+	var keys []string
 	for k := range labels {
 		if strings.HasPrefix(k, "goog-sapagent") {
 			keys = append(keys, k)
