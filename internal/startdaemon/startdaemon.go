@@ -161,7 +161,7 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	d.lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, d.config.GetCloudProperties().GetProjectId(), configuration.UserAgent())
 	if d.lp.CloudLoggingClient != nil {
-		defer d.lp.CloudLoggingClient.Close()
+		defer log.FlushCloudLog()
 	}
 	if d.config.GetCollectionConfiguration().GetMetricEventsLogDelaySeconds() > 0 {
 		metricevents.SetLogDelay(time.Duration(d.config.GetCollectionConfiguration().GetMetricEventsLogDelaySeconds()) * time.Second)
