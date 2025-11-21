@@ -533,6 +533,11 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 	if !allGranted {
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
+
+	// Ensure usr/sap has executable permissions.
+	if err := checkFilePermissions(ctx, "/usr/sap", 0111, s.stat); err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "/usr/sap needs to be executable. Run 'sudo chmod +x /usr/sap'", spb.State_FAILURE_STATE)
+	}
 	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
 }

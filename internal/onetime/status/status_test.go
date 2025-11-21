@@ -856,6 +856,50 @@ func TestProcessMetricsStatus(t *testing.T) {
 			},
 		},
 		{
+			name: "UsrSapNotExecutable",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					ProcessMetricsFrequency:     10,
+					ProcessMetricsToSkip:        []string{"test1", "test2"},
+					SlowProcessMetricsFrequency: 20,
+				},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0100}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Process Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "true", IsDefault: false},
+					{Name: "process_metrics_frequency", Value: "10", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[test1 test2]", IsDefault: false},
+					{Name: "slow_process_metrics_frequency", Value: "20", IsDefault: false},
+				},
+				ErrorMessage: "/usr/sap needs to be executable. Run 'sudo chmod +x /usr/sap'",
+			},
+		},
+		{
 			name: "ProcessMetricsEnabled",
 			config: &cpb.Configuration{
 				CollectionConfiguration: &cpb.CollectionConfiguration{
@@ -871,6 +915,9 @@ func TestProcessMetricsStatus(t *testing.T) {
 					return map[string]bool{
 						"monitoring.timeSeries.create": true,
 					}, nil
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0111}, nil
 				},
 				CloudProps: &iipb.CloudProperties{
 					ProjectId: "test-project",
@@ -1513,7 +1560,7 @@ func TestStatusHandler(t *testing.T) {
 					Zone:         "zone-id",
 				},
 				stat: func(name string) (os.FileInfo, error) {
-					return &mockFileInfo{perm: 0700}, nil
+					return &mockFileInfo{perm: 0711}, nil
 				},
 				readDir: func(dirname string) ([]fs.FileInfo, error) {
 					return []fs.FileInfo{
