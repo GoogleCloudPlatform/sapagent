@@ -693,7 +693,11 @@ func (s *Snapshot) portValue() string {
 }
 
 func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
-	rows, err := h.Query(ctx, q, commandlineexecutor.ExecuteCommand)
+	execWithTimeout := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		params.Timeout = 150
+		return commandlineexecutor.ExecuteCommand(ctx, params)
+	}
+	rows, err := h.Query(ctx, q, execWithTimeout)
 	if err != nil {
 		return "", err
 	}
