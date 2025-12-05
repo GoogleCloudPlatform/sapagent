@@ -21,8 +21,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"cloud.google.com/go/logging"
 	"golang.org/x/exp/slices"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/appsdiscovery"
@@ -76,6 +79,7 @@ type Discovery struct {
 	sapMu                   sync.Mutex
 	sapInstancesRoutine     *recovery.RecoverableRoutine
 	systemDiscoveryRoutine  *recovery.RecoverableRoutine
+	writeInsightCancelFunc  context.CancelFunc
 }
 
 // GetSAPSystems returns the current list of SAP Systems discovered on the current host.
@@ -270,61 +274,8 @@ func runDiscovery(ctx context.Context, a any) {
 		sapSystems := args.d.discoverSAPSystems(ctx, cp, args.config)
 		log.CtxLogger(ctx).Debugw("Discovered SAP Systems", "systems", sapSystems)
 
-		locationParts := strings.Split(cp.GetZone(), "-")
-		region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
-
-		// Write SAP system discovery data only if sap_system_discovery is enabled.
 		if args.config.GetDiscoveryConfiguration().GetEnableDiscovery().GetValue() {
-			log.CtxLogger(ctx).Info("Sending systems to WLM API")
-			for _, sys := range sapSystems {
-				sys.ProjectNumber = cp.GetNumericProjectId()
-				sys.UpdateTime = timestamppb.Now()
-				// Remove fields only used for local discovery:
-				// resource.instanceProperties.diskDeviceNames
-				var comps []*spb.SapDiscovery_Component
-				if sys.ApplicationLayer != nil {
-					comps = append(comps, sys.ApplicationLayer)
-				}
-				if sys.DatabaseLayer != nil {
-					comps = append(comps, sys.DatabaseLayer)
-				}
-				for len(comps) > 0 {
-					comp := comps[len(comps)-1]
-					comps = comps[:len(comps)-1]
-					if comp.ReplicationSites != nil {
-						for _, site := range comp.ReplicationSites {
-							comps = append(comps, site.Component)
-						}
-					}
-					for _, res := range comp.GetResources() {
-						if res.GetInstanceProperties() != nil {
-							res.InstanceProperties.DiskDeviceNames = nil
-						}
-					}
-				}
-				log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
-				// Send System to DW API
-				insightRequest := &dwpb.WriteInsightRequest{
-					Insight: &dwpb.Insight{
-						SapDiscovery: sys,
-						InstanceId:   cp.GetInstanceId(),
-					},
-				}
-				insightRequest.AgentVersion = configuration.AgentVersion
-
-				err := args.d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
-				if err != nil {
-					log.CtxLogger(ctx).Infow("Encountered error writing to WLM", "error", err)
-				}
-
-				if args.d.CloudLogInterface == nil {
-					continue
-				}
-				err = args.d.writeToCloudLogging(sys)
-				if err != nil {
-					log.CtxLogger(ctx).Infow("Encountered error writing to cloud logging", "error", err)
-				}
-			}
+			args.d.sendSystemsToWLM(ctx, cp, sapSystems)
 		}
 
 		log.CtxLogger(ctx).Info("Done SAP System Discovery")
@@ -338,7 +289,98 @@ func runDiscovery(ctx context.Context, a any) {
 			log.CtxLogger(ctx).Info("SAP Discovery cancellation requested")
 			return
 		case <-updateTicker.C:
+			if args.d.writeInsightCancelFunc != nil {
+				args.d.writeInsightCancelFunc()
+				args.d.writeInsightCancelFunc = nil
+			}
 			continue
+		}
+	}
+}
+
+func (d *Discovery) sendSystemsToWLM(ctx context.Context, cp *ipb.CloudProperties, sapSystems []*spb.SapDiscovery) {
+	locationParts := strings.Split(cp.GetZone(), "-")
+	region := strings.Join([]string{locationParts[0], locationParts[1]}, "-")
+
+	// Write SAP system discovery data only if sap_system_discovery is enabled.
+	log.CtxLogger(ctx).Info("Sending systems to WLM API")
+	for _, sys := range sapSystems {
+		sys.ProjectNumber = cp.GetNumericProjectId()
+		sys.UpdateTime = timestamppb.Now()
+		// Remove fields only used for local discovery:
+		// resource.instanceProperties.diskDeviceNames
+		var comps []*spb.SapDiscovery_Component
+		if sys.ApplicationLayer != nil {
+			comps = append(comps, sys.ApplicationLayer)
+		}
+		if sys.DatabaseLayer != nil {
+			comps = append(comps, sys.DatabaseLayer)
+		}
+		for len(comps) > 0 {
+			comp := comps[len(comps)-1]
+			comps = comps[:len(comps)-1]
+			if comp.ReplicationSites != nil {
+				for _, site := range comp.ReplicationSites {
+					comps = append(comps, site.Component)
+				}
+			}
+			for _, res := range comp.GetResources() {
+				if res.GetInstanceProperties() != nil {
+					res.InstanceProperties.DiskDeviceNames = nil
+				}
+			}
+		}
+		log.CtxLogger(ctx).Debugw("System to send to WLM", "system", sys)
+		// Send System to DW API
+		insightRequest := &dwpb.WriteInsightRequest{
+			Insight: &dwpb.Insight{
+				SapDiscovery: sys,
+				InstanceId:   cp.GetInstanceId(),
+			},
+		}
+		insightRequest.AgentVersion = configuration.AgentVersion
+
+		err := d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("Encountered error writing to WLM", "error", err)
+			var gerr *googleapi.Error
+			if errors.As(err, &gerr) && gerr.Code == http.StatusForbidden {
+				log.CtxLogger(ctx).Info("Encountered forbidden error writing to WLM, retrying")
+				dataCtx, cancel := context.WithCancel(ctx)
+				go func() {
+					ticker := time.NewTicker(2 * time.Minute)
+					for {
+						select {
+						case <-dataCtx.Done():
+							log.CtxLogger(ctx).Debug("Data submission retry context cancelled")
+							return
+						case <-ticker.C:
+							log.CtxLogger(ctx).Debug("Retrying discovery data submission")
+							err := d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
+							if err == nil {
+								log.CtxLogger(ctx).Info("Successfully submitted data to WLM")
+								cancel()
+								return
+							} else if errors.As(err, &gerr) && gerr.Code == http.StatusForbidden {
+								log.CtxLogger(ctx).Debug("Encountered forbidden error writing to WLM, retrying")
+								continue
+							}
+							log.CtxLogger(ctx).Debugw("Encountered other error writing to WLM, will not retry", "error", err)
+							cancel()
+							return
+						}
+					}
+				}()
+				d.writeInsightCancelFunc = cancel
+			}
+		}
+
+		if d.CloudLogInterface == nil {
+			continue
+		}
+		err = d.writeToCloudLogging(sys)
+		if err != nil {
+			log.CtxLogger(ctx).Infow("Encountered error writing to cloud logging", "error", err)
 		}
 	}
 }
