@@ -352,20 +352,20 @@ func (d *Discovery) sendSystemsToWLM(ctx context.Context, cp *ipb.CloudPropertie
 					for {
 						select {
 						case <-dataCtx.Done():
-							log.CtxLogger(ctx).Debug("Data submission retry context cancelled")
+							log.CtxLogger(dataCtx).Debug("Data submission retry context cancelled")
 							return
 						case <-ticker.C:
-							log.CtxLogger(ctx).Debug("Retrying discovery data submission")
+							log.CtxLogger(dataCtx).Debug("Retrying discovery data submission")
 							err := d.WlmService.WriteInsight(cp.ProjectId, region, insightRequest)
 							if err == nil {
-								log.CtxLogger(ctx).Info("Successfully submitted data to WLM")
+								log.CtxLogger(dataCtx).Info("Successfully submitted data to WLM")
 								cancel()
 								return
 							} else if errors.As(err, &gerr) && gerr.Code == http.StatusForbidden {
-								log.CtxLogger(ctx).Debug("Encountered forbidden error writing to WLM, retrying")
+								log.CtxLogger(dataCtx).Debug("Encountered forbidden error writing to WLM, retrying")
 								continue
 							}
-							log.CtxLogger(ctx).Debugw("Encountered other error writing to WLM, will not retry", "error", err)
+							log.CtxLogger(dataCtx).Debugw("Encountered other error writing to WLM, will not retry", "error", err)
 							cancel()
 							return
 						}
