@@ -355,7 +355,7 @@ func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	if strings.Contains(s.Feature, sapDiscovery) {
 		agentStatus.Services = append(agentStatus.Services, s.systemDiscoveryStatus(ctx, config))
 	}
-	if strings.Contains(s.Feature, backint) {
+	if strings.Contains(s.Feature, backint) && s.BackintParametersPath != "" {
 		agentStatus.Services = append(agentStatus.Services, s.backintStatus(ctx))
 	}
 	if strings.Contains(s.Feature, diskSnapshot) {
@@ -653,13 +653,12 @@ func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configur
 }
 
 func (s *Status) backintStatus(ctx context.Context) *spb.ServiceStatus {
+	if s.BackintParametersPath == "" {
+		return nil
+	}
 	status := &spb.ServiceStatus{
 		Name:  "Backint",
 		State: spb.State_UNSPECIFIED_STATE,
-	}
-	if s.BackintParametersPath == "" {
-		status.UnspecifiedStateMessage = "Backint parameters file not specified / Disabled"
-		return status
 	}
 	p := backintconfiguration.Parameters{
 		User:      "Status OTE",

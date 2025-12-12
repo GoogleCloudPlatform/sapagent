@@ -1465,12 +1465,6 @@ func TestStatusHandler(t *testing.T) {
 						},
 					},
 					{
-						Name:                    "Backint",
-						State:                   spb.State_UNSPECIFIED_STATE,
-						UnspecifiedStateMessage: "Backint parameters file not specified / Disabled",
-						ConfigValues:            []*spb.ConfigValue{},
-					},
-					{
 						Name:            "Disk Snapshot",
 						State:           spb.State_SUCCESS_STATE,
 						FullyFunctional: spb.State_SUCCESS_STATE,
@@ -1792,12 +1786,7 @@ func TestBackintStatusFailures(t *testing.T) {
 					return nil, nil
 				},
 			},
-			want: &spb.ServiceStatus{
-				Name:                    "Backint",
-				State:                   spb.State_UNSPECIFIED_STATE,
-				UnspecifiedStateMessage: "Backint parameters file not specified / Disabled",
-				ConfigValues:            []*spb.ConfigValue{},
-			},
+			want: nil,
 		},
 		{
 			name: "FailedToParseBackintParametersFile",
