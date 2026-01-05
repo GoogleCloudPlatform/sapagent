@@ -125,13 +125,13 @@
             "label": "gsutil"
           },
           "os_vendor": "ALL",
-          "command": "gsutil",
+          "command": "gcloud",
           "args": ["-v"],
           "and_eval_rules": {
             "eval_rules": [
               {
                 "output_source": "STDOUT",
-                "output_contains": "gsutil version"
+                "output_contains": "Google Cloud SDK"
               }
             ],
             "if_true": {
