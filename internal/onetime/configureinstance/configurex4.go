@@ -43,6 +43,7 @@ var (
 	versionRegex      = regexp.MustCompile(`VERSION_ID="([^"]*)"`)
 	slesMinVersionTHP = semver.MustParse("15.5")
 	rhelMinVersionTHP = semver.MustParse("9.2")
+	rhelMinVersionBLS = semver.MustParse("9.0")
 )
 
 // configureX4 checks and applies OS settings on X4.
@@ -91,8 +92,13 @@ func (c *ConfigureInstance) configureX4(ctx context.Context) (bool, error) {
 			log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to regenerate grub.")
 		} else {
 			log.CtxLogger(ctx).Info("Regenerating grub by running 'grub2-mkconfig'.")
-			if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: "-o /boot/grub2/grub.cfg", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-				return false, fmt.Errorf("'grub2-mkconfig -o /boot/grub2/grub.cfg' failed, code: %d, stderr: %s", res.ExitCode, res.StdErr)
+			grubArgs := "-o /boot/grub2/grub.cfg"
+			if c.grubBootLoader(ctx) {
+				log.CtxLogger(ctx).Info("Updating boot loader specification (BLS) by running 'grub2-mkconfig --update-bls-cmdline'.")
+				grubArgs = grubArgs + " --update-bls-cmdline"
+			}
+			if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "grub2-mkconfig", ArgsToSplit: grubArgs, Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+				return false, fmt.Errorf("'grub2-mkconfig %s' failed, code: %d, stderr: %s", grubArgs, res.ExitCode, res.StdErr)
 			}
 		}
 	}
@@ -130,6 +136,30 @@ func (c *ConfigureInstance) transparentHugePageAdvise(ctx context.Context) bool 
 	}
 	if strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
 		return version.GreaterThanEqual(rhelMinVersionTHP)
+	}
+	return false
+}
+
+// grubBootLoader checks if boot loader specification (BLS) needs to update.
+// Returns true if grub should update the BLS, false if not.
+func (c *ConfigureInstance) grubBootLoader(ctx context.Context) bool {
+	osRelease, err := c.ReadFile("/etc/os-release")
+	log.CtxLogger(ctx).Infof("osRelease: %s", string(osRelease))
+	if err != nil {
+		return false
+	}
+	matches := versionRegex.FindStringSubmatch(string(osRelease))
+	if len(matches) != 2 || matches[1] == "" {
+		return false
+	}
+	version, err := semver.NewVersion(matches[1])
+	if err != nil {
+		return false
+	}
+
+	// This is only needed for RHEL 9.0 and higher.
+	if strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
+		return version.GreaterThanEqual(rhelMinVersionBLS)
 	}
 	return false
 }

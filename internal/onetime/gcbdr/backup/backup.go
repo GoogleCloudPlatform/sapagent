@@ -284,7 +284,7 @@ func (b *Backup) logbackupHandler(ctx context.Context, exec commandlineexecutor.
 	}
 }
 
-// TODO: b/404203493 - Set the payload fields based on the script output. Also make sure parameters match the script's expectations.
+// TODO: Set the payload fields based on the script output. Also make sure parameters match the script's expectations.
 // logbackuppostHandler executes the GCBDR CoreAPP script for logbackuppost operation.
 func (b *Backup) logbackuppostHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
 	scriptCMD := fmt.Sprintf("%s %s -d %s -u %s -j %s", scriptPath, b.OperationType, b.SID, b.HDBUserstoreKey, b.JobName)

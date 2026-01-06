@@ -81,6 +81,7 @@ func defaultExecute(exitCodes []int, stdOuts []string) func(context.Context, com
 		if i >= len(exitCodes) || i >= len(stdOuts) {
 			i = 0
 		}
+		log.CtxLogger(context.Background()).Infof("i: %d, exitCodes: %v, stdOuts: %v", i, exitCodes[i], stdOuts[i])
 		result := commandlineexecutor.Result{ExitCode: exitCodes[i], StdOut: stdOuts[i]}
 		i++
 		return result

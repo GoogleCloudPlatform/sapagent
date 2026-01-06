@@ -106,7 +106,7 @@ func TestConfigureX4(t *testing.T) {
 		{
 			name: "FailRemoveNosmt",
 			c: ConfigureInstance{
-				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", "", ""}),
+				ReadFile:       defaultReadFile([]error{nil, nil, nil, nil, nil, fmt.Errorf("failed to read")}, []string{"Name=RHEL", "", "", "", "", ""}),
 				ExecuteFunc:    defaultExecute([]int{0}, []string{""}),
 				WriteFile:      defaultWriteFile(5),
 				MkdirAll:       defaultMkdirAll(5),
@@ -120,18 +120,30 @@ func TestConfigureX4(t *testing.T) {
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", ""}),
-				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
 				Apply:       true,
 			},
-			want:    true,
-			wantErr: nil,
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailGrub2MkconfigWithBLS",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", "Name=Red Hat Enterprise Linux\nVERSION_ID=\"9.2\""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "", ""}),
+				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
+				Apply:       true,
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "Success",
 			c: ConfigureInstance{
-				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", ""}),
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", "Name=Red Hat Enterprise Linux\nVERSION_ID=\"8.2\""}),
 				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
