@@ -1798,7 +1798,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		testSapDiscovery: &appsdiscoveryfake.SapDiscovery{
 			DiscoverSapAppsResp: [][]appsdiscovery.SapSystemDetails{{{
 				DBComponent: &syspb.SapDiscovery_Component{
-					Sid: "ABC",
+					Sid:          "ABC",
+					TopologyType: syspb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 				},
 				DBOnHost: true,
 				DBInstance: &sappb.SAPInstance{
@@ -1890,7 +1891,8 @@ func TestDiscoverSAPSystems(t *testing.T) {
 		},
 		want: []*syspb.SapDiscovery{{
 			DatabaseLayer: &syspb.SapDiscovery_Component{
-				Sid: "ABC",
+				Sid:          "ABC",
+				TopologyType: syspb.SapDiscovery_Component_TOPOLOGY_SCALE_UP,
 				Resources: []*syspb.SapDiscovery_Resource{{
 					ResourceKind: syspb.SapDiscovery_Resource_RESOURCE_KIND_INSTANCE,
 					ResourceType: syspb.SapDiscovery_Resource_RESOURCE_TYPE_COMPUTE,

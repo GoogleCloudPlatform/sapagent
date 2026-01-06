@@ -585,6 +585,9 @@ func (d *Discovery) discoverSAPSystems(ctx context.Context, cp *ipb.CloudPropert
 				log.CtxLogger(ctx).Debug("Discovering cloud resources for database replication sites")
 				primarySite := d.discoverReplicationSite(ctx, s.DBInstance.HanaReplicationTree, s.DBComponent.GetSid(), instanceResource, instanceNetwork, lbGroups, cp)
 				primarySite.Component.Properties = s.DBComponent.Properties
+				primarySite.Component.HostProject = s.DBComponent.HostProject
+				primarySite.Component.TopologyType = s.DBComponent.TopologyType
+				primarySite.Component.Sid = s.DBComponent.Sid
 				s.DBComponent = primarySite.Component
 
 				// Find the site this instance belongs to.
