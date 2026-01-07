@@ -109,10 +109,11 @@ var (
 
 // Daemon has args for startdaemon subcommand.
 type Daemon struct {
-	configFilePath string
-	lp             log.Parameters
-	config         *cpb.Configuration
-	cloudProps     *iipb.CloudProperties
+	configFilePath            string
+	lp                        log.Parameters
+	config                    *cpb.Configuration
+	cloudProps                *iipb.CloudProperties
+	noDiskSnapshotStatusCheck bool
 }
 
 // Name implements the subcommand interface for startdaemon.
@@ -123,13 +124,14 @@ func (*Daemon) Synopsis() string { return "start daemon mode of the agent" }
 
 // Usage implements the subcommand interface for startdaemon.
 func (*Daemon) Usage() string {
-	return "Usage: startdaemon [-config <path-to-config-file>] \n"
+	return "Usage: startdaemon [-config <path-to-config-file>] [-no_disk_snapshot_status_check]\n"
 }
 
 // SetFlags implements the subcommand interface for startdaemon.
 func (d *Daemon) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&d.configFilePath, "config", "", "configuration path for startdaemon mode")
 	fs.StringVar(&d.configFilePath, "c", "", "configuration path for startdaemon mode")
+	fs.BoolVar(&d.noDiskSnapshotStatusCheck, "no_disk_snapshot_status_check", false, "suppress disk_snapshot status checks in daemon mode")
 }
 
 // Execute implements the subcommand interface for startdaemon.
@@ -483,9 +485,10 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	// Start Status Collection
 	statusCtx := log.SetCtx(ctx, "context", "Status")
 	sp := StatusParams{&status.Status{
-		ConfigFilePath: d.configFilePath,
-		CloudProps:     d.cloudProps,
-		WLMService:     wlmService}, healthMonitor}
+		ConfigFilePath:            d.configFilePath,
+		CloudProps:                d.cloudProps,
+		WLMService:                wlmService,
+		NoDiskSnapshotStatusCheck: d.noDiskSnapshotStatusCheck}, healthMonitor}
 	sp.startCollection(statusCtx)
 
 	waitForShutdown(ctx, shutdownch, cancel, restarting)

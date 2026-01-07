@@ -42,6 +42,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
+	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
 	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
 	"github.com/GoogleCloudPlatform/sapagent/shared/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -310,9 +311,10 @@ func TestStartStatusCollection(t *testing.T) {
 
 func TestCollectAndSendStatus(t *testing.T) {
 	tests := []struct {
-		name string
-		s    Status
-		want error
+		name                          string
+		s                             Status
+		want                          error
+		wantDiskSnapshotInFeatureFlag bool
 	}{
 		{
 			name: "SuccessEmptyConfig",
@@ -339,6 +341,7 @@ func TestCollectAndSendStatus(t *testing.T) {
 					Zone:   "us-central1-a",
 					Region: "test-region",
 				},
+				HeartbeatSpec:  &heartbeat.Spec{BeatFunc: func() {}},
 				httpGet:        httpGetSuccess,
 				createDBHandle: dbConnectorSuccess,
 				iamService:     &iam.IAM{},
@@ -353,7 +356,8 @@ func TestCollectAndSendStatus(t *testing.T) {
 					WriteInsightErrs: []error{nil},
 				},
 			},
-			want: nil,
+			want:                          nil,
+			wantDiskSnapshotInFeatureFlag: true, // Default behavior
 		},
 		{
 			name: "SuccessAllEnabled",
@@ -405,6 +409,7 @@ func TestCollectAndSendStatus(t *testing.T) {
 					Zone:   "us-central1-a",
 					Region: "test-region",
 				},
+				HeartbeatSpec: &heartbeat.Spec{BeatFunc: func() {}},
 				stat: func(name string) (os.FileInfo, error) {
 					return &mockFileInfo{perm: 0400}, nil
 				},
@@ -429,11 +434,12 @@ func TestCollectAndSendStatus(t *testing.T) {
 					WriteInsightErrs: []error{nil},
 				},
 			},
-			want: nil,
+			want:                          nil,
+			wantDiskSnapshotInFeatureFlag: true, // Default behavior
 		},
 		{
 			name: "StatusStructNotInitialized",
-			s:    Status{},
+			s:    Status{HeartbeatSpec: &heartbeat.Spec{BeatFunc: func() {}}},
 			want: cmpopts.AnyError,
 		},
 		{
@@ -461,6 +467,7 @@ func TestCollectAndSendStatus(t *testing.T) {
 					Zone:   "us-central1-a",
 					Region: "test-region",
 				},
+				HeartbeatSpec:  &heartbeat.Spec{BeatFunc: func() {}},
 				httpGet:        httpGetSuccess,
 				createDBHandle: dbConnectorSuccess,
 				iamService:     &iam.IAM{},
@@ -475,15 +482,50 @@ func TestCollectAndSendStatus(t *testing.T) {
 					WriteInsightErrs: []error{cmpopts.AnyError},
 				},
 			},
-			want: cmpopts.AnyError,
+			want:                          cmpopts.AnyError,
+			wantDiskSnapshotInFeatureFlag: true,
+		},
+		{
+			name: "DiskSnapshotCheckDisabledByFlag",
+			s: Status{
+				NoDiskSnapshotStatusCheck: true, // Disable disk snapshot status check
+				readFile:                  func(string) ([]byte, error) { return nil, nil },
+				exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "enabled", ExitCode: 0}
+				},
+				CloudProps:    &iipb.CloudProperties{Scopes: []string{requiredScope}, Zone: "us-central1-a", Region: "test-region"},
+				HeartbeatSpec: &heartbeat.Spec{BeatFunc: func() {}},
+				iamService:    &iam.IAM{},
+				arClient:      fakeArtifactRegistryClient([]string{""}),
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{"monitoring.timeSeries.create": true}, nil
+				},
+				WLMService: &fake.TestWLM{WriteInsightErrs: []error{nil}},
+				// Add other necessary mocks if statusHandler call depends on them
+				httpGet:        httpGetSuccess,
+				createDBHandle: dbConnectorSuccess,
+				stat:           func(name string) (os.FileInfo, error) { return &mockFileInfo{perm: 0777}, nil },
+				readDir:        func(dirname string) ([]fs.FileInfo, error) { return []fs.FileInfo{&mockFileInfo{perm: 0777}}, nil },
+			},
+			want:                          nil,
+			wantDiskSnapshotInFeatureFlag: false, // Expect disk_snapshot to be removed
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			test.s.Feature = allFeatures
 			got := test.s.collectAndSendStatus(context.Background())
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
-				t.Errorf("statusHandler()=%v want %v", got, test.want)
+				t.Errorf("collectAndSendStatus()=%v want %v", got, test.want)
+			}
+
+			if test.want == nil {
+				var featuresSeenByHandler string = test.s.Feature
+				hasDiskSnapshot := strings.Contains(featuresSeenByHandler, diskSnapshot)
+				if hasDiskSnapshot != test.wantDiskSnapshotInFeatureFlag {
+					t.Errorf("collectAndSendStatus() features string: %q, contains disk_snapshot: %v, want: %v", featuresSeenByHandler, hasDiskSnapshot, test.wantDiskSnapshotInFeatureFlag)
+				}
 			}
 		})
 	}
