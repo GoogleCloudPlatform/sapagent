@@ -116,12 +116,13 @@ type (
 
 // Status stores the status subcommand parameters.
 type Status struct {
-	ConfigFilePath        string
-	BackintParametersPath string
-	Feature               string
-	CloudProps            *iipb.CloudProperties
-	HeartbeatSpec         *heartbeat.Spec
-	WLMService            WLMInterface
+	ConfigFilePath            string
+	BackintParametersPath     string
+	Feature                   string
+	CloudProps                *iipb.CloudProperties
+	HeartbeatSpec             *heartbeat.Spec
+	WLMService                WLMInterface
+	NoDiskSnapshotStatusCheck bool
 
 	compact           bool
 	help              bool
@@ -295,8 +296,28 @@ func start(ctx context.Context, a any) {
 	}
 }
 
+// Creates a new string from given comma separated string without the specified element.
+func removeStringElement(str string, elementToRemove string) string {
+	slice := strings.Split(str, ",")
+	var result []string
+	for _, item := range slice {
+		if item != elementToRemove {
+			result = append(result, item)
+		}
+	}
+	return strings.Join(result, ",")
+}
+
 func (s *Status) collectAndSendStatus(ctx context.Context) error {
 	s.HeartbeatSpec.Beat()
+
+	// If the disk snapshot status check is disabled, remove the disk snapshot feature from the list
+	// of features to check.
+	if s.NoDiskSnapshotStatusCheck {
+		s.Feature = removeStringElement(allFeatures, diskSnapshot)
+		log.CtxLogger(ctx).Debug("Disk snapshot status check DISABLED for daemon")
+	}
+
 	agentStatus, err := s.statusHandler(ctx)
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not get agent status", "error", err)
