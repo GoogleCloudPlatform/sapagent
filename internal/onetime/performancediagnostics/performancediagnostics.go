@@ -887,7 +887,6 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 		targetBucket = opts.config.GetBucket()
 	}
 	cmd := "sudo"
-	// NOTE: gsutil perfdiag is not supported in gcloud storage and has not been migrated.
 	args := []string{
 		fmt.Sprintf("gsutil perfdiag -n 12 -c 12 -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p.json gs://%s", targetPath, targetBucket),
 		fmt.Sprintf("gsutil perfdiag -n 12 -c 12 -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p.json gs://%s", targetPath, targetBucket),
