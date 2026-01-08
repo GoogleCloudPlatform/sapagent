@@ -485,7 +485,9 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 	sp := StatusParams{&status.Status{
 		ConfigFilePath: d.configFilePath,
 		CloudProps:     d.cloudProps,
-		WLMService:     wlmService}, healthMonitor}
+		WLMService:     wlmService,
+		Feature:        d.config.GetCollectionConfiguration().GetStatusFeatures()},
+		healthMonitor}
 	sp.startCollection(statusCtx)
 
 	waitForShutdown(ctx, shutdownch, cancel, restarting)

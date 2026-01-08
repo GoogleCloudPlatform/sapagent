@@ -79,6 +79,8 @@ message CollectionConfiguration {
       [deprecated = true];
   int64 reliability_metrics_frequency = 22 [deprecated = true];
   int64 metric_events_log_delay_seconds = 23;
+  string status_features = 24;  // Comma separated list of features to check
+                                // Ex: "process_metrics,workload_manager".
 }
 
 

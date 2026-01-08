@@ -135,7 +135,7 @@ func (r *Restore) Run(ctx context.Context, exec commandlineexecutor.Execute, run
 }
 
 func (r *Restore) preflightHandler(ctx context.Context, exec commandlineexecutor.Execute) *gpb.CommandResult {
-	// TODO: Implement preflight handler.
+	// TODO: (b/290725500) - Implement preflight handler.
 	return &gpb.CommandResult{
 		ExitCode: 0,
 		Stdout:   "GCBDR CoreAPP script for preflight operation executed successfully",
