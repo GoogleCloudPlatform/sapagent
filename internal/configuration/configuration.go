@@ -74,7 +74,7 @@ const (
 	
 
 	// AgentVersion is the version of the agent.
-	AgentVersion = `3.10`
+	AgentVersion = `3.11`
 	
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
@@ -123,7 +123,7 @@ func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 // Write writes the contents of a configuration proto to a file at the given path.
 func Write(config *cpb.Configuration, path string, write WriteConfigFile) error {
 	content, err := protojson.MarshalOptions{
-		Multiline: true,
+		Multiline:     true,
 		UseProtoNames: true,
 	}.Marshal(config)
 	if err != nil {
