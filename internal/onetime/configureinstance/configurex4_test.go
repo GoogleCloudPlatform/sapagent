@@ -558,7 +558,7 @@ func TestConfigureX4RHEL(t *testing.T) {
 			name: "Success",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil}, []string{`NAME="Red Hat Enterprise Linux"`, string(googleX4Conf)}),
-				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0}, []string{"", "", "", "", "Current active profile: google-x4"}),
 				WriteFile:   defaultWriteFile(1),
 				MkdirAll:    defaultMkdirAll(1),
 			},
@@ -672,7 +672,7 @@ func TestTunedReapply(t *testing.T) {
 			tunedReapply: true,
 			c: ConfigureInstance{
 				Apply:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", "Current active profile: google-x4"}),
 			},
 		},
 	}
