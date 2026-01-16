@@ -303,6 +303,12 @@ func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
+	log.CtxLogger(ctx).Info("Tuned re-apply set the active profile to google-x4, verifying tuned settings.")
+	tunedVerify := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "verify", Timeout: c.TimeoutSec})
+	if tunedVerify.ExitCode != 0 {
+		return false, fmt.Errorf("'tuned-adm verify' failed, current system settings differ from the preset profile. Reboot the system after running 'configureinstance -apply' to ensure the changes have taken effect")
+	}
+
 	log.CtxLogger(ctx).Info("RHEL specific configurations complete.")
 	return tunedReapply, nil
 }
@@ -337,7 +343,7 @@ func (c *ConfigureInstance) tunedReapply(ctx context.Context, tunedReapply bool)
 	}
 	if c.Check {
 		log.CtxLogger(ctx).Info("Run 'configureinstance -apply' to execute Tuned re-apply.")
-		return nil
+		return fmt.Errorf("tuned re-apply is required, run 'configureinstance -apply' to execute Tuned re-apply")
 	}
 	log.CtxLogger(ctx).Info("Executing Tuned re-apply.")
 	if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "profile google-x4", Timeout: c.TimeoutSec}); res.ExitCode != 0 {

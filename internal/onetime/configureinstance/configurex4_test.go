@@ -555,6 +555,17 @@ func TestConfigureX4RHEL(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "FailedTunedVerify",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{`NAME="Red Hat Enterprise Linux"`, string(googleX4TunedConf)}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "Current active profile: google-x4", ""}),
+				WriteFile:   defaultWriteFile(1),
+				MkdirAll:    defaultMkdirAll(1),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "Success",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil}, []string{`NAME="Red Hat Enterprise Linux"`, string(googleX4Conf)}),
@@ -643,11 +654,19 @@ func TestTunedReapply(t *testing.T) {
 			tunedReapply: false,
 		},
 		{
-			name:         "CheckMode",
+			name:         "CheckModeReapplyNotRequired",
+			tunedReapply: false,
+			c: ConfigureInstance{
+				Check: true,
+			},
+		},
+		{
+			name:         "CheckModeReapplyRequired",
 			tunedReapply: true,
 			c: ConfigureInstance{
 				Check: true,
 			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name:         "FailProfile",
