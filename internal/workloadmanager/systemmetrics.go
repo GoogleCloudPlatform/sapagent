@@ -190,16 +190,17 @@ func osSettings(ctx context.Context, params Parameters) string {
 		return ""
 	}
 	status, msg := ci.Run(ctx, onetime.CreateRunOptions(params.Config.GetCloudProperties(), true))
+	result := ""
 	switch status {
 	case subcommands.ExitSuccess:
-		return "pass"
+		result = "pass"
 	case subcommands.ExitFailure:
-		log.CtxLogger(ctx).Debugw("Failure detected in checking os_settings via configureinstance", "error", msg)
-		return "fail"
+		result = "fail"
 	default:
 		log.CtxLogger(ctx).Debugw("Unexpected exit status detected in checking os_settings via configureinstance", "exitStatus", status, "error", msg)
-		return ""
 	}
+	log.CtxLogger(ctx).Infow("Completed check of system configuration settings via ConfigureInstance.", "result", result)
+	return result
 }
 
 // networkIPAddrs parses the network interface addresses from the system.
@@ -209,7 +210,7 @@ func networkIPAddrs(ctx context.Context, params Parameters) string {
 		log.CtxLogger(ctx).Debugw("Could not get network interface addresses", "error", err)
 		return ""
 	}
-	v := []string{}
+	var v []string
 	for _, ipaddr := range addrs {
 		v = append(v, ipaddr.String())
 	}
