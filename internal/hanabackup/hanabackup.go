@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/safetext/shsprintf"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -282,6 +283,37 @@ func StopHANA(ctx context.Context, force bool, user, sid string, exec commandlin
 		Timeout:     300,
 	})
 	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failure stopping HANA", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
+		if strings.Contains(result.StdErr, "No such process") {
+			cmd, err := shsprintf.Sprintf("-c 'ps -U %sadm -o comm | grep -E \"hdbdaemon|hdb.sap\" | grep -v defunct'", strings.ToLower(sid))
+			if err != nil {
+				log.CtxLogger(ctx).Errorw("Failure generating ps command", "error", err)
+				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+			}
+			checkResult := exec(ctx, commandlineexecutor.Params{
+				User:        user,
+				Executable:  "bash",
+				ArgsToSplit: cmd,
+				Timeout:     300,
+			})
+			// If StdOut is non-empty, it means HANA is still running.
+			if len(checkResult.StdOut) > 0 {
+				log.CtxLogger(ctx).Errorw("HANA still running", "stdout", checkResult.StdOut)
+				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+			}
+			// If StdErr is non-empty, it means the ps command failed. Error is always non-nil, whether
+			// the grep failed in grabbing the process name or the command itself failed.
+			if checkResult.StdErr != "" {
+				log.CtxLogger(ctx).Errorw("HANA still running", "stdout", checkResult.StdOut, "stderr", checkResult.StdErr)
+				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+			}
+
+			// If both StdOut and StdErr are empty, it means the ps command succeeded but HANA is not
+			// running.
+			log.CtxLogger(ctx).Infow("HANA stopped successfully", "sid", sid)
+			return nil
+		}
+
 		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("StopHANA", "stdout", result.StdOut, "stderr", result.StdErr)
