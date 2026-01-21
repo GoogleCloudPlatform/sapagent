@@ -304,6 +304,12 @@ func (c *ConfigureInstance) configureX4RHEL(ctx context.Context) (bool, error) {
 	}
 
 	log.CtxLogger(ctx).Info("Tuned re-apply set the active profile to google-x4, verifying tuned settings.")
+	if c.Apply {
+		tunedRestart := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "restart tuned", Timeout: c.TimeoutSec})
+		if tunedRestart.ExitCode != 0 {
+			return false, fmt.Errorf("tuned service could not be re-started, code: %d, stderr: %s, stdout: %s", tunedRestart.ExitCode, tunedRestart.StdErr, tunedRestart.StdOut)
+		}
+	}
 	tunedVerify := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "verify", Timeout: c.TimeoutSec})
 	if tunedVerify.ExitCode != 0 {
 		return false, fmt.Errorf("'tuned-adm verify' failed, current system settings differ from the preset profile. Reboot the system after running 'configureinstance -apply' to ensure the changes have taken effect")
