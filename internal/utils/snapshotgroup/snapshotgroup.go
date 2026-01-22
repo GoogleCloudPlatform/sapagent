@@ -500,3 +500,96 @@ func (s *SGService) ListDisksFromSnapshot(ctx context.Context, project, zone, sn
 
 	return disks, nil
 }
+
+// sgExists checks if the given snapshot group exists.
+func (s *SGService) sgExists(ctx context.Context, opLink string) error {
+	bodyBytes, err := s.GetResponse(ctx, "GET", opLink, nil)
+	log.CtxLogger(ctx).Debugw("sgExists", "baseURL", s.baseURL, "bodyBytes", string(bodyBytes))
+	if err != nil {
+		s.baseURL = ""
+		return fmt.Errorf("failed to delete Snapshot Group, err: %w", err)
+	}
+	s.baseURL = ""
+
+	op := compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, &op); err != nil {
+		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("isgExists Error", "op", op)
+		return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+	}
+
+	log.CtxLogger(ctx).Debugw("Operation", "status", op.Status, "op", op)
+	if op.Status != "DONE" {
+		return fmt.Errorf("Snapshot Group deletion in progress")
+	}
+	return nil
+}
+
+// DeleteSG deletes a snapshot group.
+func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error {
+	// Wait for the snapshot group upload to complete before deletion.
+	// Deletion while upload is in progress results in a failed operation.
+	if err := s.WaitForSGUploadCompletionWithRetry(ctx, project, sgName); err != nil {
+		return err
+	}
+	if s.baseURL == "" {
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
+	}
+
+	bo := &backoff.ExponentialBackOff{
+		InitialInterval:     s.backoff.InitialInterval,
+		RandomizationFactor: s.backoff.RandomizationFactor,
+		Multiplier:          s.backoff.Multiplier,
+		MaxInterval:         s.backoff.MaxInterval,
+		MaxElapsedTime:      s.backoff.MaxElapsedTime,
+		Clock:               backoff.SystemClock,
+	}
+	bo.Reset()
+
+	var i int
+	var bodyBytes []byte
+	if err := backoff.Retry(func() error {
+		var getResponseErr error
+		bodyBytes, getResponseErr = s.GetResponse(ctx, "DELETE", s.baseURL, nil)
+		if getResponseErr != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
+			return getResponseErr
+		}
+
+		return nil
+	}, bo); err != nil {
+		s.baseURL = ""
+		return fmt.Errorf("failed to initiate deletion of Snapshot Group, err: %w", err)
+	}
+	s.baseURL = ""
+	log.CtxLogger(ctx).Debugw("DeleteSG Response", "response", string(bodyBytes))
+
+	op := compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, &op); err != nil {
+		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
+	}
+
+	if op.Error != nil {
+		log.CtxLogger(ctx).Errorw("DeleteSG Error", "op.Error", op.Error)
+		return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+	}
+
+	bo.Reset()
+	i = 0
+	return backoff.Retry(func() error {
+		if err := s.sgExists(ctx, op.SelfLink); err != nil {
+			i++
+			if i == s.maxRetries {
+				return backoff.Permanent(s.sgExists(ctx, op.SelfLink))
+			}
+			return err
+		}
+
+		return nil
+	}, bo)
+}

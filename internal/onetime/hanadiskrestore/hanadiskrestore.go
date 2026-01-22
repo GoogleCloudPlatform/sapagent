@@ -76,7 +76,7 @@ type (
 		ListSnapshots(ctx context.Context, project string) (*compute.SnapshotList, error)
 		AddResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
 		RemoveResourcePolicies(ctx context.Context, project, zone, diskName string, resourcePolicies []string) (*compute.Operation, error)
-		SetLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error)
+		UpdateLabels(ctx context.Context, project, zone, diskName, labelFingerprint string, labels map[string]string) (*compute.Operation, error)
 	}
 
 	// SGInterface is the testable equivalent for snapshotgroup.SGService.
@@ -830,7 +830,7 @@ func (r *Restorer) appendLabelsToDetachedDisk(ctx context.Context, diskName stri
 		return err
 	}
 
-	op, err := r.gceService.SetLabels(ctx, r.Project, r.DataDiskZone, diskName, labelFingerprint, labels)
+	op, err := r.gceService.UpdateLabels(ctx, r.Project, r.DataDiskZone, diskName, labelFingerprint, labels)
 	if err != nil {
 		return fmt.Errorf("failed to set labels on detached disk: %v", err)
 	}

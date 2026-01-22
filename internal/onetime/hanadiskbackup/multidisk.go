@@ -117,6 +117,9 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		if err := s.sgService.WaitForSGUploadCompletionWithRetry(ctx, s.Project, s.groupSnapshotName); err != nil {
 			return err
 		}
+		if err := s.updateLabelsForSnapshotGroup(ctx, s.groupSnapshotName); err != nil {
+			return err
+		}
 		log.CtxLogger(ctx).Info("Snapshot group created, marking HANA snapshot as successful.")
 	} else {
 		var ssOps []*snapshotOp
@@ -152,10 +155,10 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		}
 		log.CtxLogger(ctx).Info(fmt.Sprintf("Instant snapshot group and %s equivalents created, marking HANA snapshot as successful.", strings.ToLower(s.SnapshotType)))
 	}
+
 	if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "error deleting instant snapshot group, but disk snapshots are successful", err)
 	}
-
 	if !s.ConfirmDataSnapshotAfterCreate {
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
 			return err
@@ -169,8 +172,13 @@ func (s *Snapshot) confirmDataSnapshotAfterCreate(ctx context.Context, run query
 	if s.ConfirmDataSnapshotAfterCreate {
 		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshots are created but not yet uploaded.")
 		if err := s.markSnapshotAsSuccessful(ctx, run, snapshotID); err != nil {
-			if err := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); err != nil {
-				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), err)
+			if deleteErr := s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, s.groupSnapshotName); deleteErr != nil {
+				s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created instant snapshot group"), deleteErr)
+			}
+			if s.UseSnapshotGroupWorkflow {
+				if deleteErr := s.sgService.DeleteSG(ctx, s.Project, s.groupSnapshotName); deleteErr != nil {
+					s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("error deleting created snapshot group"), deleteErr)
+				}
 			}
 			return err
 		}
@@ -310,15 +318,10 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 }
 
 func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
-	labels, err := s.createGroupBackupLabels("")
-	if err != nil {
-		return err
-	}
 	snapshotGroup := map[string]any{
 		"name":                       s.groupSnapshotName,
 		"sourceInstantSnapshotGroup": fmt.Sprintf("projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.groupSnapshotName),
 		"description":                s.Description,
-		"labels":                     labels,
 	}
 	log.CtxLogger(ctx).Infow("Snapshot group to be created", "snapshotGroup", snapshotGroup)
 
@@ -335,6 +338,28 @@ func (s *Snapshot) createSnapshotGroupFromISG(ctx context.Context) error {
 		return err
 	}
 	log.CtxLogger(ctx).Info("Snapshot group is ready.")
+	return nil
+}
+
+func (s *Snapshot) updateLabelsForSnapshotGroup(ctx context.Context, snapshotGroup string) error {
+	snapshots, err := s.sgService.ListSnapshotsFromSG(ctx, s.Project, snapshotGroup)
+	if err != nil {
+		return err
+	}
+	if len(snapshots) == 0 {
+		return fmt.Errorf("no snapshots found in snapshot group %s", s.groupSnapshotName)
+	}
+	for _, snapshot := range snapshots {
+		parts := strings.Split(snapshot.SourceDisk, "/")
+		diskName := parts[len(parts)-1]
+		labels, err := s.parseLabels(diskName)
+		if err != nil {
+			return err
+		}
+		if err := s.gceService.UpdateSnapshotLabels(ctx, s.Project, snapshot.Name, labels); err != nil {
+			return fmt.Errorf("failed to set labels for snapshot %s: %w", snapshot.Name, err)
+		}
+	}
 	return nil
 }
 

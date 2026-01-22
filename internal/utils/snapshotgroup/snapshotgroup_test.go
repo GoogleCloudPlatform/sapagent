@@ -899,3 +899,151 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 		})
 	}
 }
+
+func TestSgExists(t *testing.T) {
+	tests := []struct {
+		name          string
+		opLink        string
+		httpResponses map[string]map[string][]httpResponse
+		expectedError bool
+	}{
+		{
+			name:   "Success",
+			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"DONE"}`}}},
+			},
+			expectedError: false,
+		},
+		{
+			name:   "InProgress",
+			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:   "GetResponseError",
+			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:   "UnmarshalError",
+			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `invalid_json`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:   "OperationError",
+			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed"}]}}`}}},
+			},
+			expectedError: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+
+			err := sgService.sgExists(ctx, test.opLink)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("sgExists() error = %v, wantErr %v", err, test.expectedError)
+			}
+		})
+	}
+}
+
+func TestDeleteSG(t *testing.T) {
+	tests := []struct {
+		name          string
+		project       string
+		sgName        string
+		httpResponses map[string]map[string][]httpResponse
+		expectedError bool
+	}{
+		{
+			name:    "Success",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"DONE"}`}},
+				},
+				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123"}`}}},
+			},
+		},
+		{
+			name:    "WaitBeforeDeleteFails",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "DeleteReturnsHTTPError",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET":    {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "DeleteReturnsOpError",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET":    {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "error": {"errors": [{"message": "failed"}]}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "WaitAfterDeleteFails",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
+					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING"}`}},
+				},
+				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123"}`}}},
+			},
+			expectedError: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			sgService := &SGService{}
+			sgService.NewService()
+			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
+			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+			sgService.maxRetries = 2
+			sgService.backoff.InitialInterval = 1 * time.Millisecond
+			sgService.backoff.MaxElapsedTime = 100 * time.Millisecond
+
+			err := sgService.DeleteSG(ctx, test.project, test.sgName)
+
+			if (err != nil) != test.expectedError {
+				t.Errorf("DeleteSG() error = %v, wantErr %v", err, test.expectedError)
+			}
+		})
+	}
+}

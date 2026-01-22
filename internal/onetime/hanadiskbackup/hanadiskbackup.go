@@ -88,6 +88,7 @@ type (
 		WaitForSnapshotUploadCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		WaitForInstantSnapshotConversionCompletionWithRetry(ctx context.Context, op *compute.Operation, project, diskZone, snapshotName string) error
 		CreateSnapshot(ctx context.Context, project string, snapshotReq *compute.Snapshot) (*compute.Operation, error)
+		UpdateSnapshotLabels(ctx context.Context, project, snapshotName string, labels map[string]string) error
 	}
 
 	// ISGInterface is the testable equivalent for ISGService for ISG operations.
@@ -106,6 +107,8 @@ type (
 		CreateSG(ctx context.Context, project string, data []byte) error
 		WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error
 		WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error
+		DeleteSG(ctx context.Context, project, sgName string) error
+		ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error)
 	}
 
 	snapshotOp struct {

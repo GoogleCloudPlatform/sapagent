@@ -28,6 +28,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 )
@@ -57,6 +58,9 @@ type mockSGService struct {
 	createSGErr                           error
 	waitForSGUploadCompletionWithRetryErr error
 	waitForSGCreationWithRetryErr         error
+	deleteSGErr                           error
+	listSnapshotsFromSGErr                error
+	listSnapshotsFromSGResp               []snapshotgroup.SnapshotItem
 }
 
 func (m *mockSGService) NewService() error {
@@ -65,6 +69,14 @@ func (m *mockSGService) NewService() error {
 
 func (m *mockSGService) CreateSG(ctx context.Context, project string, data []byte) error {
 	return m.createSGErr
+}
+
+func (m *mockSGService) DeleteSG(ctx context.Context, project, sgName string) error {
+	return m.deleteSGErr
+}
+
+func (m *mockSGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]snapshotgroup.SnapshotItem, error) {
+	return m.listSnapshotsFromSGResp, m.listSnapshotsFromSGErr
 }
 
 func (m *mockSGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
@@ -1139,6 +1151,76 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 			gotErr := tc.s.createSnapshotGroupFromISG(context.Background())
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("createSnapshotGroupFromISG() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       *Snapshot
+		wantErr error
+	}{
+		{
+			name: "ListSnapshotsFromSGFailure",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoSnapshotsInSG",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UpdateSnapshotLabelsFailure",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						snapshotgroup.SnapshotItem{
+							Name:       "snapshot-1",
+							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					UpdateSnapshotLabelsErr: cmpopts.AnyError,
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{
+							Name:       "snapshot-1",
+							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					UpdateSnapshotLabelsErr: nil,
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.s.updateLabelsForSnapshotGroup(context.Background(), "test-sg")
+			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("updateLabelsForSnapshotGroup() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

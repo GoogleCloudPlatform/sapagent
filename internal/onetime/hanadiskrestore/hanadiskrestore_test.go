@@ -1940,7 +1940,7 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 			wantErr:  cmpopts.AnyError,
 		},
 		{
-			name: "setLabelsErr",
+			name: "updateLabelsErr",
 			r: &Restorer{
 				gceService: &fake.TestGCE{
 					GetDiskResp: []*compute.Disk{
@@ -1950,8 +1950,8 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 						},
 					},
 					GetDiskErr:   []error{nil},
-					SetLabelsOp:  &compute.Operation{Status: "DONE"},
-					SetLabelsErr: cmpopts.AnyError,
+					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
+					UpdateLabelsErr: cmpopts.AnyError,
 				},
 				labelsOnDetachedDisk: "key1=value1, key2=value2",
 			},
@@ -1969,8 +1969,8 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 						},
 					},
 					GetDiskErr:   []error{nil},
-					SetLabelsOp:  &compute.Operation{Status: "DONE"},
-					SetLabelsErr: nil,
+					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
+					UpdateLabelsErr: nil,
 					DiskOpErr:    cmpopts.AnyError,
 				},
 				labelsOnDetachedDisk: "key1=value1, key2=value2",
@@ -1988,8 +1988,8 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 						},
 					},
 					GetDiskErr:   []error{nil},
-					SetLabelsOp:  &compute.Operation{Status: "DONE"},
-					SetLabelsErr: nil,
+					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
+					UpdateLabelsErr: nil,
 					DiskOpErr:    nil,
 				},
 				labelsOnDetachedDisk: "key1=value1, key2=value2",
