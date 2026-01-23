@@ -2146,6 +2146,109 @@ func TestVerifyStriping(t *testing.T) {
 	}
 }
 
+func TestUpdateSnapshotName(t *testing.T) {
+	tests := []struct {
+		name                   string
+		s                      *Snapshot
+		wantSnapshotName       string
+		wantGroupSnapshotName  string
+		snapshotNameRegex      string
+		groupSnapshotNameRegex string
+	}{
+		{
+			name: "snapshotNameExists",
+			s: &Snapshot{
+				SnapshotName: "snapshot-name",
+			},
+			wantSnapshotName: "snapshot-name",
+		},
+		{
+			name: "groupSnapshotNameExists",
+			s: &Snapshot{
+				groupSnapshot:     true,
+				GroupSnapshotName: "group-snapshot-name",
+			},
+			wantGroupSnapshotName: "group-snapshot-name",
+		},
+		{
+			name: "generateSnapshotName",
+			s: &Snapshot{
+				Disk: "disk",
+			},
+			snapshotNameRegex: "^snapshot-\\d{8}-\\d{6}utc-disk$",
+		},
+		{
+			name: "generateGroupSnapshotName",
+			s: &Snapshot{
+				groupSnapshot: true,
+				cgName:        "cg-name",
+			},
+			groupSnapshotNameRegex: "^group-snapshot-\\d{8}-\\d{6}utc-cg-name$",
+		},
+		{
+			name: "generateSnapshotNameWithPrefix",
+			s: &Snapshot{
+				Disk:           "disk",
+				SnapshotPrefix: "prefix",
+			},
+			snapshotNameRegex: "^prefix-\\d{8}-\\d{6}utc-disk$",
+		},
+		{
+			name: "generateGroupSnapshotNameWithPrefix",
+			s: &Snapshot{
+				groupSnapshot:  true,
+				cgName:         "cg-name",
+				SnapshotPrefix: "prefix",
+			},
+			groupSnapshotNameRegex: "^prefix-\\d{8}-\\d{6}utc-cg-name$",
+		},
+		{
+			name: "generateSnapshotNameTruncated",
+			s: &Snapshot{
+				Disk: "disk-name-that-is-very-long-and-will-cause-truncation-of-the-snapshot-name",
+			},
+			snapshotNameRegex: "^snapshot-\\d{8}-\\d{6}utc-disk-name-that-is-very-long-and-wil$",
+		},
+		{
+			name: "generateGroupSnapshotNameTruncated",
+			s: &Snapshot{
+				groupSnapshot: true,
+				cgName:        "cg-name-that-is-very-long-and-will-cause-truncation-of-the-snapshot-name",
+			},
+			groupSnapshotNameRegex: "^group-snapshot-\\d{8}-\\d{6}utc-cg-name-that-is-very-long-and$",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.updateSnapshotName()
+			if tc.wantSnapshotName != "" && tc.s.SnapshotName != tc.wantSnapshotName {
+				t.Errorf("updateSnapshotName() snapshotName got %q, want %q", tc.s.SnapshotName, tc.wantSnapshotName)
+			}
+			if tc.wantGroupSnapshotName != "" && tc.s.GroupSnapshotName != tc.wantGroupSnapshotName {
+				t.Errorf("updateSnapshotName() groupSnapshotName got %q, want %q", tc.s.GroupSnapshotName, tc.wantGroupSnapshotName)
+			}
+			if tc.snapshotNameRegex != "" {
+				match, err := regexp.MatchString(tc.snapshotNameRegex, tc.s.SnapshotName)
+				if err != nil {
+					t.Fatalf("regexp.MatchString(%q, %q) returned an unexpected error: %v", tc.snapshotNameRegex, tc.s.SnapshotName, err)
+				}
+				if !match {
+					t.Errorf("updateSnapshotName() snapshotName got %q, want match with %q", tc.s.SnapshotName, tc.snapshotNameRegex)
+				}
+			}
+			if tc.groupSnapshotNameRegex != "" {
+				match, err := regexp.MatchString(tc.groupSnapshotNameRegex, tc.s.GroupSnapshotName)
+				if err != nil {
+					t.Fatalf("regexp.MatchString(%q, %q) returned an unexpected error: %v", tc.groupSnapshotNameRegex, tc.s.GroupSnapshotName, err)
+				}
+				if !match {
+					t.Errorf("updateSnapshotName() groupSnapshotName got %q, want match with %q", tc.s.GroupSnapshotName, tc.groupSnapshotNameRegex)
+				}
+			}
+		})
+	}
+}
+
 func TestReadDiskMapping(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -2215,60 +2318,13 @@ func TestReadDiskMapping(t *testing.T) {
 			},
 			want: nil,
 		},
-		{
-			name: "SuccessDefaultSnapshotName",
-			snapshot: Snapshot{
-				physicalDataPath: "unknown",
-				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-								{
-									Name: "disk-device-name",
-									Type: "/some/path/device-type",
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil},
-				},
-			},
-			want: nil,
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			oldSnapshot := test.snapshot.SnapshotName
 			test.snapshot.oteLogger = defaultOTELogger
 			got := test.snapshot.readDiskMapping(context.Background(), defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("readDiskMapping()=%v, want=%v", got, test.want)
-			}
-			if oldSnapshot == "" {
-				pattern := "^snapshot-disk-name-\\d{4}\\d{2}\\d{2}-\\d{2}\\d{2}\\d{2}$"
-				regex, _ := regexp.Compile(pattern)
-				if !regex.MatchString(test.snapshot.SnapshotName) {
-					t.Errorf("readDiskMapping(), default snapshot created does not match, got=%v, want=%v", test.snapshot.SnapshotName, pattern)
-				}
 			}
 		})
 	}
@@ -2300,7 +2356,7 @@ func TestParseLabels(t *testing.T) {
 		{
 			name: "GroupSnapshotSuccess",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				groupSnapshot:     true,
 				DiskZone:          "my-region-1",
 				cgName:            "my-cg",
@@ -2636,6 +2692,30 @@ func TestValidateParameters(t *testing.T) {
 				Sid:          "HDB",
 				SnapshotName: "snapshot-time-stamp",
 			},
+		},
+		{
+			name: "InvalidSnapshotName",
+			snapshot: Snapshot{
+				Port:         "123",
+				Sid:          "HDB",
+				HanaDBUser:   "system",
+				Password:     "password",
+				SnapshotName: "INVALID-SNAPSHOT-NAME",
+				SnapshotType: "STANDARD",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidGroupSnapshotName",
+			snapshot: Snapshot{
+				Port:              "123",
+				Sid:               "HDB",
+				HanaDBUser:        "system",
+				Password:          "password",
+				GroupSnapshotName: "INVALID-GROUP-SNAPSHOT-NAME",
+				SnapshotType:      "STANDARD",
+			},
+			wantErr: cmpopts.AnyError,
 		},
 		{
 			name: "InvalidSnapshotType",
@@ -3077,7 +3157,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 		{
 			name: "CreateSnapshotFailure",
 			snapshot: Snapshot{
-				groupSnapshotName: "sample-group-snapshot",
+				GroupSnapshotName: "sample-group-snapshot",
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
 				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT") {

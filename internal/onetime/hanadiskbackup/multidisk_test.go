@@ -566,7 +566,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 		{
 			name: "FreezeFS",
 			s: &Snapshot{
-				groupSnapshotName: "test-group-snapshot",
+				GroupSnapshotName: "test-group-snapshot",
 				DiskZone:          "europe-west1-b",
 				cgName:            "test-snapshot-success",
 				FreezeFileSystem:  true,
@@ -587,7 +587,7 @@ func TestCreateInstantGroupSnapshot(t *testing.T) {
 		{
 			name: "createISGSuccess",
 			s: &Snapshot{
-				groupSnapshotName: "test-group-snapshot",
+				GroupSnapshotName: "test-group-snapshot",
 				DiskZone:          "europe-west1-b",
 				cgName:            "test-snapshot-success",
 				isgService: &mockISGService{
@@ -628,7 +628,7 @@ func TestConvertISGtoSS(t *testing.T) {
 		{
 			name: "createGroupBackupFailure",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp:  nil,
 					CreateSnapshotErr: cmpopts.AnyError,
@@ -650,7 +650,7 @@ func TestConvertISGtoSS(t *testing.T) {
 		{
 			name: "Success",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
@@ -706,7 +706,7 @@ func TestCreateGroupBackup(t *testing.T) {
 		{
 			name: "CreateSnapshotFailure",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp:  nil,
 					CreateSnapshotErr: cmpopts.AnyError,
@@ -724,7 +724,7 @@ func TestCreateGroupBackup(t *testing.T) {
 		{
 			name: "WaitForSnapshotCreationFailure",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
@@ -745,7 +745,7 @@ func TestCreateGroupBackup(t *testing.T) {
 		{
 			name: "Success",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp: &compute.Operation{
 						Status: "DONE",
@@ -1016,7 +1016,7 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 		{
 			name: "GroupSnapshotSuccess",
 			s: &Snapshot{
-				groupSnapshotName: "group-snapshot-name",
+				GroupSnapshotName: "group-snapshot-name",
 				groupSnapshot:     true,
 				DiskZone:          "my-region-1",
 				cgName:            "my-cg",
@@ -1104,7 +1104,7 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 		{
 			name: "Success",
 			s: &Snapshot{
-				groupSnapshotName: "test-sg",
+				GroupSnapshotName: "test-sg",
 				Project:           "test-project",
 				DiskZone:          "test-zone",
 				Description:       "test-description",
@@ -1119,7 +1119,7 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 		{
 			name: "CreateSGFailure",
 			s: &Snapshot{
-				groupSnapshotName: "test-sg",
+				GroupSnapshotName: "test-sg",
 				Project:           "test-project",
 				DiskZone:          "test-zone",
 				Description:       "test-description",
@@ -1133,7 +1133,7 @@ func TestCreateSnapshotGroupFromISG(t *testing.T) {
 		{
 			name: "WaitForSGCreationFailure",
 			s: &Snapshot{
-				groupSnapshotName: "test-sg",
+				GroupSnapshotName: "test-sg",
 				Project:           "test-project",
 				DiskZone:          "test-zone",
 				Description:       "test-description",

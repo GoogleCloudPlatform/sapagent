@@ -26,8 +26,8 @@ import (
 
 func (s *Snapshot) markSnapshotAsSuccessful(ctx context.Context, run queryFunc, snapshotID string) error {
 	snapshotName := s.SnapshotName
-	if snapshotName == "" {
-		snapshotName = s.groupSnapshotName
+	if s.groupSnapshot {
+		snapshotName = s.GroupSnapshotName
 	}
 	if _, err := run(ctx, s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, snapshotName)); err != nil {
 		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
@@ -46,8 +46,8 @@ func (s *Snapshot) abandonHANASnapshot(ctx context.Context, run queryFunc, snaps
 // createNewHANASnapshot creates a new HANA snapshot with the given name and return its ID.
 func (s *Snapshot) createNewHANASnapshot(ctx context.Context, run queryFunc) (snapshotID string, err error) {
 	snapshotName := s.SnapshotName
-	if snapshotName == "" {
-		snapshotName = s.groupSnapshotName
+	if s.groupSnapshot {
+		snapshotName = s.GroupSnapshotName
 	}
 	log.Logger.Infow("Creating new HANA snapshot", "comment", snapshotName)
 	_, err = run(ctx, s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT '%s'", snapshotName))

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -124,6 +125,7 @@ const (
 
 var (
 	dbFreezeStartTime, workflowStartTime time.Time
+	snapshotNameRegex                    = regexp.MustCompile("^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$")
 )
 
 // compareVersions returns true if version1 is less than version2.
@@ -195,7 +197,8 @@ type Snapshot struct {
 	SendToMonitoring                       bool   `json:"send-metrics-to-monitoring,string"`
 	FreezeFileSystem                       bool   `json:"freeze-file-system,string"`
 	ConfirmDataSnapshotAfterCreate         bool   `json:"confirm-data-snapshot-after-create,string"`
-	groupSnapshotName                      string
+	SnapshotPrefix                         string `json:"snapshot-prefix,string"`
+	GroupSnapshotName                      string `json:"group-snapshot-name,string"`
 	disks                                  []string
 	db                                     *databaseconnector.DBHandle
 	gceService                             gceInterface
@@ -238,7 +241,7 @@ func (*Snapshot) Usage() string {
 	[-send-metrics-to-monitoring]=<true|false>] [-source-disk-key-file=<path-to-key-file>]
 	[-storage-location=<storage-location>] [-snapshot-description=<description>]
 	[-snapshot-name=<snapshot-name>] [-snapshot-type=<snapshot-type>] [-group-snapshot-name=<group-snapshot-name>]
-	[-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
+	[-snapshot-prefix=<snapshot-prefix>] [-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
 	[-instance-id=<instance-id>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
@@ -273,7 +276,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.AbandonPrepared, "abandon-prepared", false, "Abandon any prepared HANA snapshot that is in progress, (optional) Default: false)")
 	fs.BoolVar(&s.SkipDBSnapshotForChangeDiskType, "skip-db-snapshot-for-change-disk-type", false, "Skip DB snapshot for change disk type, (optional) Default: false")
 	fs.BoolVar(&s.ConfirmDataSnapshotAfterCreate, "confirm-data-snapshot-after-create", true, "Confirm HANA data snapshot after disk snapshot create and then wait for upload. (optional) Default: true")
-	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - defaults to 'snapshot-diskname-yyyymmdd-hhmmss'.)")
+	fs.StringVar(&s.SnapshotName, "snapshot-name", "", "Snapshot name override.(Optional - defaults to 'snapshot-timestampinutc-diskname'. Snapshot names have a 63 character limit. If this parameter is not provided, and the default snapshot name is over 63 characters, it will be truncated.)")
 	fs.StringVar(&s.SnapshotType, "snapshot-type", "STANDARD", "Snapshot type override.(Optional - defaults to 'STANDARD', use 'ARCHIVE' for archive snapshots.)")
 	fs.StringVar(&s.DiskKeyFile, "source-disk-key-file", "", `Path to the customer-supplied encryption key of the source disk. (optional)\n (required if the source disk is protected by a customer-supplied encryption key.)`)
 	fs.StringVar(&s.StorageLocation, "storage-location", "", "Cloud Storage multi-region or the region where you want to store your snapshot. (optional) Default: nearby regional or multi-regional location automatically chosen.")
@@ -283,7 +286,8 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&s.help, "h", false, "Displays help")
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level")
 	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
-	fs.StringVar(&s.groupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to '<consistency-group-name>-yyyymmdd-hhmmss'.)")
+	fs.StringVar(&s.GroupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to 'group-snapshot-timestampinutc-consistencygroupname'.)")
+	fs.StringVar(&s.SnapshotPrefix, "snapshot-prefix", "", "Prefix for the snapshot name. Eg: if snapshot-prefix is 'myprefix', the snapshot name will be 'myprefix-timestampinutc-diskname'. Snapshot names have a 63 character limit, and if the generated name exceeds this limit, it will be truncated.")
 }
 
 // Execute executes the subcommand interface for hanadiskbackup.
@@ -368,7 +372,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		return msg, exitStatus
 	}
 
-	if s.groupSnapshotName != "" {
+	if s.GroupSnapshotName != "" {
 		snapshotList, err := s.gceService.ListSnapshots(ctx, s.Project)
 		if err != nil {
 			errMessage := "ERROR: Failed to check if group snapshot exists"
@@ -377,13 +381,14 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		}
 
 		for _, snapshot := range snapshotList.Items {
-			if snapshot.Labels["goog-sapagent-isg"] == s.groupSnapshotName {
+			if snapshot.Labels["goog-sapagent-isg"] == s.GroupSnapshotName {
 				errMessage := "ERROR: Group snapshot with given name already exists"
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("group snapshot with given name already exists"))
 				return errMessage, subcommands.ExitFailure
 			}
 		}
 	}
+	s.updateSnapshotName()
 
 	log.CtxLogger(ctx).Infow("Starting disk snapshot for HANA", "sid", s.Sid)
 	s.oteLogger.LogUsageAction(usagemetrics.HANADiskSnapshot)
@@ -440,7 +445,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	snapshotName := s.SnapshotName
 	var successMessage string
 	if s.groupSnapshot {
-		snapshotName = s.groupSnapshotName
+		snapshotName = s.GroupSnapshotName
 		successMessage = fmt.Sprintf("SUCCESS: HANA backup and group disk snapshot creation successful. Group Backup Name: %s", snapshotName)
 		s.oteLogger.LogMessageToConsole(successMessage)
 		s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupSucceeded)
@@ -634,13 +639,38 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 		}
 	}
 
-	if s.SnapshotName == "" {
-		t := time.Now()
-		log.CtxLogger(ctx).Debug("disk: ", s.Disk)
-		s.SnapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
-			s.Disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
-	}
 	return nil
+}
+
+func (s *Snapshot) updateSnapshotName() {
+	if (s.groupSnapshot && s.GroupSnapshotName != "") || (!s.groupSnapshot && s.SnapshotName != "") {
+		return
+	}
+	prefix := "snapshot"
+	if s.groupSnapshot {
+		prefix = "group-snapshot"
+	}
+	if s.SnapshotPrefix != "" {
+		prefix = s.SnapshotPrefix
+	}
+	timestamp := time.Now().UTC().Format("20060102-150405utc")
+
+	var suffix string
+	if !s.groupSnapshot {
+		suffix = s.Disk
+	} else {
+		suffix = s.cgName
+	}
+
+	snapshotName := strings.ToLower(fmt.Sprintf("%s-%s-%s", prefix, timestamp, suffix))
+	if len(snapshotName) > 63 {
+		snapshotName = snapshotName[:63]
+	}
+	if s.groupSnapshot {
+		s.GroupSnapshotName = strings.TrimSuffix(snapshotName, "-")
+	} else {
+		s.SnapshotName = strings.TrimSuffix(snapshotName, "-")
+	}
 }
 
 func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error {
@@ -678,11 +708,17 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 	}
 	s.Port = s.portValue()
 
-	if s.SnapshotName == "" && s.Disk != "" {
-		t := time.Now()
-		s.SnapshotName = fmt.Sprintf("snapshot-%s-%d%02d%02d-%02d%02d%02d",
-			s.Disk, t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second())
+	if s.SnapshotName != "" {
+		if !snapshotNameRegex.MatchString(s.SnapshotName) {
+			return fmt.Errorf("snapshot-name must follow the pattern [a-z](?:[-a-z0-9]{0,61}[a-z0-9])?")
+		}
 	}
+	if s.GroupSnapshotName != "" {
+		if !snapshotNameRegex.MatchString(s.GroupSnapshotName) {
+			return fmt.Errorf("group-snapshot-name must follow the pattern [a-z](?:[-a-z0-9]{0,61}[a-z0-9])?")
+		}
+	}
+
 	log.Logger.Debug("Parameter validation successful.")
 	return nil
 }
