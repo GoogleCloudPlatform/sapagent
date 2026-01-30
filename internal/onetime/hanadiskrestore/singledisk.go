@@ -43,7 +43,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		snapShotKey = key
 	}
 
-	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), snapShotKey, r.NewdiskName, r.SourceSnapshot); err != nil {
+	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), snapShotKey, r.NewDiskName, r.SourceSnapshot); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
@@ -52,12 +52,12 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		return err
 	}
 
-	dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
+	dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewDiskName)
 	if r.DataDiskVG != "" {
-		if err := r.renameLVM(ctx, exec, cp, dev, r.NewdiskName); err != nil {
+		if err := r.renameLVM(ctx, exec, cp, dev, r.NewDiskName); err != nil {
 			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
-			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewdiskName)
-			if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.NewdiskName, dev); detachErr != nil {
+			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewDiskName)
+			if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.NewDiskName, dev); detachErr != nil {
 				log.CtxLogger(ctx).Errorw("failed to detach newly attached restored disk", "err", detachErr)
 			}
 			if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {

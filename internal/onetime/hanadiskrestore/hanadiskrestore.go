@@ -20,6 +20,7 @@ package hanadiskrestore
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -68,6 +69,7 @@ type (
 		ListZoneOperations(project, zone, filter string, maxResults int64) (*compute.OperationList, error)
 		GetDisk(project, zone, name string) (*compute.Disk, error)
 		ListDisks(project, zone, filter string) (*compute.DiskList, error)
+		DeleteDisk(project, zone, disk string) (*compute.Operation, error)
 
 		DiskAttachedToInstance(projectID, zone, instanceName, diskName string) (string, bool, error)
 		AttachDisk(ctx context.Context, diskName string, instanceName, project, dataDiskZone string) error
@@ -96,6 +98,7 @@ const (
 
 var (
 	workflowStartTime time.Time
+	suffixRegex       = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
 )
 
 // compareVersions returns true if version1 is less than version2.
@@ -165,8 +168,8 @@ type (
 		ForceStopHANA                                              bool
 		isGroupSnapshot                                            bool
 		isScaleout                                                 bool
-		NewdiskName                                                string
-		NewDiskPrefix                                              string
+		NewDiskName                                                string
+		NewDiskSuffix                                              string
 		CSEKKeyFile                                                string
 		ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
 		IIOTEParams                                                *onetime.InternallyInvokedOTE
@@ -211,8 +214,8 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.SourceDisks, "source-disks", "", "Comma separated list of disks to be restored. (optional) Default: empty. Accepts comma separated disk names, like \"disk1,disk2,disk3\"")
 	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.GroupSnapshot, "group-snapshot-name", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
-	fs.StringVar(&r.NewdiskName, "new-disk-name", "", "New disk name. (required) must be less than 63 characters long")
-	fs.StringVar(&r.NewDiskPrefix, "new-disk-prefix", "", "Prefix for the new disks created for multi-disk restore. (optional) must be less than 61 characters long")
+	fs.StringVar(&r.NewDiskName, "new-disk-name", "", "New disk name, ONLY for single disk restore. (required) must be less than 63 characters long")
+	fs.StringVar(&r.NewDiskSuffix, "new-disk-suffix", "", "Suffix to be appended to the new disk name, ONLY for multi-disk restore. (optional) Default: empty, full name of disk has to be less than 63 characters.")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
 	fs.StringVar(&r.HanaSidAdm, "hana-sidadm", "", "HANA sidadm username. (optional) Default: <sid>adm")
@@ -273,21 +276,23 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 
 	// Checking if sufficient arguments are passed for either group snapshot or single snapshot.
 	// Only SID is required for restoring from groupSnapshot.
-	// DataDiskName and NewdiskNames are fetched and respectively created
+	// DataDiskName and NewDiskNames are fetched and respectively created
 	// from individual snapshots mapped to groupSnapshot.
 	restoreFromGroupSnapshot := !(r.Sid == "" || r.GroupSnapshot == "")
-	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewdiskName == "")
+	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewDiskName == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
 		return fmt.Errorf("either source-snapshot or group-snapshot-name must be provided, not both. Usage: %s", r.Usage())
 	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
-	if len(r.NewdiskName) > 63 {
+	if len(r.NewDiskName) > 63 {
 		return fmt.Errorf("the new-disk-name is longer than 63 chars which is not supported, please provide a shorter name")
 	}
-	if len(r.NewDiskPrefix) > 61 {
-		return fmt.Errorf("the new-disk-prefix is longer than 61 chars which is not supported, please provide a shorter prefix")
+	if r.NewDiskSuffix != "" {
+		if !suffixRegex.MatchString(r.NewDiskSuffix) {
+			return fmt.Errorf("the new-disk-suffix contains invalid characters, only lowercase letters, numbers, and hyphens are supported. Usage: %s", r.Usage())
+		}
 	}
 
 	if r.Project == "" {
@@ -655,16 +660,6 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 	// Verify the snapshot is present.
 	if err := r.verifySnapshotPresence(ctx); err != nil {
 		return err
-	}
-
-	if r.isGroupSnapshot && r.NewDiskPrefix != "" {
-		for diskNum := range len(r.disks) {
-			newDiskName := fmt.Sprintf("%s-%s", r.NewDiskPrefix, fmt.Sprintf("%d", diskNum+1))
-			disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, newDiskName)
-			if disk != nil && err == nil {
-				return fmt.Errorf("disk with name %v already exists, please choose a different prefix", newDiskName)
-			}
-		}
 	}
 
 	if r.NewDiskType == "" {

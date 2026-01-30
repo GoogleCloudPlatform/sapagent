@@ -51,7 +51,7 @@ func TestDiskRestore(t *testing.T) {
 			name: "SingleSnapshotRestoreError",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
-				NewdiskName:    "test-new-disk-name",
+				NewDiskName:    "test-new-disk-name",
 				computeService: nil,
 				gceService: &fake.TestGCE{
 					DiskAttachedToInstanceDeviceName: "",

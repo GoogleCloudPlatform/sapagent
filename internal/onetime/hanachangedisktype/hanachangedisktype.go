@@ -189,7 +189,7 @@ func (c *HanaChangeDiskType) changeDiskTypeHandler(ctx context.Context, f *flag.
 		Sid:                             c.sid,
 		HanaSidAdm:                      c.hanaSidAdm,
 		NewDiskType:                     c.newDiskType,
-		NewdiskName:                     c.newdiskName,
+		NewDiskName:                     c.newdiskName,
 		DiskSizeGb:                      c.diskSizeGb,
 		ProvisionedIops:                 c.provisionedIops,
 		ProvisionedThroughput:           c.provisionedThroughput,

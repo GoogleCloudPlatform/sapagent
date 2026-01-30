@@ -18,6 +18,8 @@ package hanadiskrestore
 
 import (
 	"context"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -237,7 +239,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			name: "RestoreFromSnapshotErr",
 			r: &Restorer{
 				GroupSnapshot: "test-group-snapshot",
-				NewDiskPrefix: "test-prefix",
+				NewDiskSuffix: "test-suffix",
 				disks: []*multiDisks{
 					&multiDisks{
 						disk: &ipb.Disk{
@@ -253,6 +255,44 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 								SourceDisk: "test-disk-1",
 								Labels: map[string]string{
 									"goog-sapagent-isg": "test-group-snapshot",
+								},
+							},
+						},
+					},
+					SnapshotListErr: nil,
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:          defaultCloudProperties,
+			snapshotKey: "test-snapshot-key",
+			want:        cmpopts.AnyError,
+		},
+		{
+			name: "RestoreFromSnapshotErrWithDiskNameLabel",
+			r: &Restorer{
+				GroupSnapshot: "test-group-snapshot",
+				NewDiskSuffix: "test-prefix",
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName: "test-disk-1",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Name:       "test-snapshot-1",
+								SourceDisk: "https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/disks/test-disk-1",
+								Labels: map[string]string{
+									"goog-sapagent-isg":       "test-group-snapshot",
+									"goog-sapagent-disk-name": "test-disk-1",
 								},
 							},
 						},
@@ -343,6 +383,108 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 			got := tc.r.restoreFromGroupSnapshot(ctx, tc.exec, tc.cp, tc.snapshotKey)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("restoreFromGroupSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestTruncateName(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name               string
+		diskName           string
+		suffix             string
+		wantPrefix         string
+		wantSuffixUTC      bool
+		wantTimestampRegex string
+	}{
+		{
+			name:               "44_no_suffix",
+			diskName:           strings.Repeat("a", 44),
+			suffix:             "",
+			wantPrefix:         strings.Repeat("a", 44) + "-",
+			wantSuffixUTC:      true,
+			wantTimestampRegex: `^\d{8}-\d{6}utc$`,
+		},
+		{
+			name:               "45_no_suffix",
+			diskName:           strings.Repeat("b", 45),
+			suffix:             "",
+			wantPrefix:         strings.Repeat("b", 45) + "-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+		{
+			name:               "52_no_suffix",
+			diskName:           strings.Repeat("c", 52),
+			suffix:             "",
+			wantPrefix:         strings.Repeat("c", 52) + "-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+		{
+			name:               "53_no_suffix",
+			diskName:           strings.Repeat("d", 53),
+			suffix:             "",
+			wantPrefix:         strings.Repeat("d", 52) + "-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+		{
+			name:               "35_with_suffix_utc",
+			diskName:           strings.Repeat("a", 35),
+			suffix:             "-mysuffix",
+			wantPrefix:         strings.Repeat("a", 35) + "-mysuffix-",
+			wantSuffixUTC:      true,
+			wantTimestampRegex: `^\d{8}-\d{6}utc$`,
+		},
+		{
+			name:               "36_with_suffix_unix",
+			diskName:           strings.Repeat("b", 36),
+			suffix:             "-mysuffix",
+			wantPrefix:         strings.Repeat("b", 36) + "-mysuffix-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+		{
+			name:               "45_with_suffix_unix_truncated",
+			diskName:           strings.Repeat("c", 45),
+			suffix:             "-mysuffix",
+			wantPrefix:         strings.Repeat("c", 43) + "-mysuffix-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+		{
+			name:               "diskname_ends_with_hyphen_after_truncation",
+			diskName:           strings.Repeat("a", 42) + "-abc",
+			suffix:             "-mysuffix",
+			wantPrefix:         strings.Repeat("a", 42) + "-mysuffix-",
+			wantSuffixUTC:      false,
+			wantTimestampRegex: `^\d{10}$`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := truncateName(ctx, tc.diskName, tc.suffix)
+			if err != nil {
+				t.Fatalf("truncateName(%q, %q) returned an unexpected error: %v", tc.diskName, tc.suffix, err)
+			}
+			if !strings.HasPrefix(got, tc.wantPrefix) {
+				t.Errorf("truncateName(%q, %q) = %q, want prefix=%q", tc.diskName, tc.suffix, got, tc.wantPrefix)
+			}
+			if tc.wantSuffixUTC && !strings.HasSuffix(got, "utc") {
+				t.Errorf("truncateName(%q, %q) = %q, want suffix=utc", tc.diskName, tc.suffix, got)
+			}
+			if !tc.wantSuffixUTC && strings.HasSuffix(got, "utc") {
+				t.Errorf("truncateName(%q, %q) = %q, want no suffix utc", tc.diskName, tc.suffix, got)
+			}
+			timestampPart := got[len(tc.wantPrefix):]
+			match, err := regexp.MatchString(tc.wantTimestampRegex, timestampPart)
+			if err != nil {
+				t.Fatalf("Error matching regex: %v", err)
+			}
+			if !match {
+				t.Errorf("truncateName(%q, %q) timestamp part %q does not match regex %q", tc.diskName, tc.suffix, timestampPart, tc.wantTimestampRegex)
 			}
 		})
 	}
@@ -1287,40 +1429,154 @@ func TestGroupRestoreWithSGWorkflow(t *testing.T) {
 			},
 			wantErr: cmpopts.AnyError,
 		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.groupRestoreWithSGWorkflow(context.Background(), commandlineexecutor.ExecuteCommand, defaultCloudProperties, "")
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFetchLatestDisk(t *testing.T) {
+	ctx := context.Background()
+	timeNow := time.Now()
+	tests := []struct {
+		name      string
+		snapshot  snapshotgroup.SnapshotItem
+		sgService SGInterface
+		want      *snapshotgroup.DiskItem
+		wantErr   error
+	}{
 		{
-			name: "Success",
-			r: &Restorer{
-				snapshotItems: []snapshotgroup.SnapshotItem{
-					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
-				},
-				disks: []*multiDisks{
-					{disk: &ipb.Disk{DiskName: "source-disk-1"}, instanceName: "instance-1"},
-				},
-				sgService: &fakeSGService{
-					GetSGResp: &snapshotgroup.SGItem{},
-					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
-						return []snapshotgroup.DiskItem{
-							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
-						}, nil
-					},
-				},
-				gceService: &fake.TestGCE{
-					DiskOpErr:                 nil,
-					AttachDiskErr:             nil,
-					IsDiskAttached:            true,
-					DiskAttachedToInstanceErr: nil,
-					AddResourcePoliciesErr:    nil,
+			name:     "ListDisksFails",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return nil, cmpopts.AnyError
 				},
 			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:     "NoDisksFound",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return nil, nil
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:     "EmptyDisksFound",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return []snapshotgroup.DiskItem{}, nil
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:     "OneDiskFound",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return []snapshotgroup.DiskItem{
+						{Name: "disk-1", CreationTimestamp: timeNow.Format(time.RFC3339)},
+					}, nil
+				},
+			},
+			want:    &snapshotgroup.DiskItem{Name: "disk-1", CreationTimestamp: timeNow.Format(time.RFC3339)},
+			wantErr: nil,
+		},
+		{
+			name:     "MultipleDisksFound",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return []snapshotgroup.DiskItem{
+						{Name: "disk-1", CreationTimestamp: timeNow.Add(-1 * time.Hour).Format(time.RFC3339)},
+						{Name: "disk-2", CreationTimestamp: timeNow.Format(time.RFC3339)},
+						{Name: "disk-3", CreationTimestamp: timeNow.Add(-2 * time.Hour).Format(time.RFC3339)},
+					}, nil
+				},
+			},
+			want:    &snapshotgroup.DiskItem{Name: "disk-2", CreationTimestamp: timeNow.Format(time.RFC3339)},
+			wantErr: nil,
+		},
+		{
+			name:     "MultipleDisksWithInvalidTimestamp",
+			snapshot: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sgService: &fakeSGService{
+				ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+					return []snapshotgroup.DiskItem{
+						{Name: "disk-1", CreationTimestamp: timeNow.Add(-1 * time.Hour).Format(time.RFC3339)},
+						{Name: "disk-2", CreationTimestamp: "invalid-timestamp"},
+						{Name: "disk-3", CreationTimestamp: timeNow.Format(time.RFC3339)},
+					}, nil
+				},
+			},
+			want:    &snapshotgroup.DiskItem{Name: "disk-3", CreationTimestamp: timeNow.Format(time.RFC3339)},
 			wantErr: nil,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.groupRestoreWithSGWorkflow(context.Background(), commandlineexecutor.ExecuteCommand, defaultCloudProperties)
+			r := &Restorer{sgService: tc.sgService}
+			got, err := r.fetchLatestDisk(ctx, tc.snapshot)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)
+				t.Errorf("fetchLatestDisk(%v) returned diff (-want +got):\n%s", tc.snapshot, diff)
+			}
+			if tc.wantErr == nil {
+				if diff := cmp.Diff(got, tc.want); diff != "" {
+					t.Errorf("fetchLatestDisk(%v) returned diff (-want +got):\n%s", tc.snapshot, diff)
+				}
+			}
+		})
+	}
+}
+
+func TestRecreateDisk(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name         string
+		r            *Restorer
+		snapshotItem snapshotgroup.SnapshotItem
+		sourceDisk   string
+		instanceName string
+		snapshotKey  string
+		wantErr      error
+	}{
+		{
+			name: "TruncateNameError",
+			r: &Restorer{
+				NewDiskSuffix: strings.Repeat("a", 60),
+			},
+			sourceDisk: "disk-1",
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name: "RestoreFromSnapshotError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{},
+			},
+			snapshotItem: snapshotgroup.SnapshotItem{Name: "snapshot-1"},
+			sourceDisk:   "disk-1",
+			instanceName: "instance-1",
+			wantErr:      cmpopts.AnyError,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.r.recreateDisk(ctx, scaleupExec, tc.snapshotItem, tc.sourceDisk, tc.instanceName, tc.snapshotKey)
+			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("recreateDisk() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}

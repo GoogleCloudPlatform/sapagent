@@ -184,7 +184,7 @@ var (
 		DataDiskZone:   "data-zone",
 		NewDiskType:    "pd-ssd",
 		SourceSnapshot: "my-snapshot",
-		NewdiskName:    "new-data-disk",
+		NewDiskName:    "new-data-disk",
 		SourceDisks:    "data-disk",
 		disks:          []*multiDisks{&multiDisks{disk: &ipb.Disk{DiskName: "data-disk", DeviceName: "pd-balanced", Type: "PERSISTENT"}}},
 	}
@@ -255,7 +255,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskName:                    "data-disk",
 				DataDiskZone:                    "data-zone",
 				SourceSnapshot:                  "snapshot",
-				NewdiskName:                     "new-disk",
+				NewDiskName:                     "new-disk",
 				NewDiskType:                     "pd-ssd",
 				SkipDBSnapshotForChangeDiskType: true,
 			},
@@ -325,7 +325,7 @@ func TestValidateParameters(t *testing.T) {
 				HanaSidAdm:     "my-user",
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
-				NewdiskName:    "new-disk",
+				NewDiskName:    "new-disk",
 				SourceSnapshot: "snapshot",
 				NewDiskType:    "pd-ssd",
 			},
@@ -337,7 +337,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
-				NewdiskName:    "new-disk",
+				NewDiskName:    "new-disk",
 				NewDiskType:    "pd-ssd",
 			},
 		},
@@ -349,7 +349,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
-				NewdiskName:    "new-disk",
+				NewDiskName:    "new-disk",
 				NewDiskType:    "pd-ssd",
 			},
 		},
@@ -374,7 +374,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
-				NewdiskName:    "new-disk",
+				NewDiskName:    "new-disk",
 			},
 			want: cmpopts.AnyError,
 		},
@@ -386,7 +386,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskName:   "data-disk",
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
-				NewdiskName:    "new-disk",
+				NewDiskName:    "new-disk",
 			},
 			want: cmpopts.AnyError,
 		},
@@ -400,12 +400,12 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
 				NewDiskType:    "pd-ssd",
-				NewdiskName:    "new-disk-name-which-is-much-much-longer-than-sixty-three-charecters",
+				NewDiskName:    "new-disk-name-which-is-much-much-longer-than-sixty-three-charecters",
 			},
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "InvalidNewDiskPrefix",
+			name: "InvalidNewDiskSuffixHyphenSuffix",
 			restorer: Restorer{
 				Project:        "my-project",
 				Sid:            "tst",
@@ -414,8 +414,53 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
 				NewDiskType:    "pd-ssd",
-				NewdiskName:    "new-disk-name",
-				NewDiskPrefix:  "invalid-new-disk-prefix-which-is-much-much-longer-than-sixty-one-charecters",
+				NewDiskName:    "new-disk-name",
+				NewDiskSuffix:  "invalid-",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidNewDiskSuffixHyphenPrefix",
+			restorer: Restorer{
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewDiskName:    "new-disk-name",
+				NewDiskSuffix:  "-invalid",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidNewDiskSuffixUnderscore",
+			restorer: Restorer{
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewDiskName:    "new-disk-name",
+				NewDiskSuffix:  "invalid_suffix",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "InvalidNewDiskSuffixUppercase",
+			restorer: Restorer{
+				Project:        "my-project",
+				Sid:            "tst",
+				HanaSidAdm:     "my-user",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "data-zone",
+				SourceSnapshot: "snapshot",
+				NewDiskType:    "pd-ssd",
+				NewDiskName:    "new-disk-name",
+				NewDiskSuffix:  "invalidSuffix",
 			},
 			want: cmpopts.AnyError,
 		},
@@ -429,8 +474,8 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
 				NewDiskType:    "pd-ssd",
-				NewdiskName:    "new-disk-name",
-				NewDiskPrefix:  "new-disk-prefix",
+				NewDiskName:    "new-disk-name",
+				NewDiskSuffix:  "new-disk-suffix",
 			},
 			want: nil,
 		},
@@ -511,7 +556,7 @@ func TestDefaultValues(t *testing.T) {
 		SourceSnapshot: "source-snapshot",
 		DataDiskName:   "data-disk-name",
 		DataDiskZone:   "data-disk-zone",
-		NewdiskName:    "new-disk-name",
+		NewDiskName:    "new-disk-name",
 		NewDiskType:    "new-disk-type",
 		Project:        "",
 	}
@@ -885,7 +930,7 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
-			name: "GroupSnapshotNewDiskPrefixPresent",
+			name: "GroupSnapshotNewDiskSuffixPresent",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
@@ -894,7 +939,7 @@ func TestCheckPreConditions(t *testing.T) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
-				NewDiskPrefix: "test-prefix",
+				NewDiskSuffix: "test-suffix",
 				disks: []*multiDisks{
 					&multiDisks{
 						disk: &ipb.Disk{
@@ -1839,7 +1884,7 @@ func TestSynopsisForRestorer(t *testing.T) {
 func TestSetFlagsForSnapshot(t *testing.T) {
 	snapshot := Restorer{}
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
-	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot-name", "new-disk-prefix"}
+	flags := []string{"sid", "source-snapshot", "data-disk-name", "data-disk-zone", "project", "new-disk-type", "source-snapshot", "hana-sidadm", "force-stop-hana", "group-snapshot-name", "new-disk-suffix"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
@@ -1949,7 +1994,7 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 							LabelFingerprint: "test-label-fingerprint",
 						},
 					},
-					GetDiskErr:   []error{nil},
+					GetDiskErr:      []error{nil},
 					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
 					UpdateLabelsErr: cmpopts.AnyError,
 				},
@@ -1968,10 +2013,10 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 							LabelFingerprint: "test-label-fingerprint",
 						},
 					},
-					GetDiskErr:   []error{nil},
+					GetDiskErr:      []error{nil},
 					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
 					UpdateLabelsErr: nil,
-					DiskOpErr:    cmpopts.AnyError,
+					DiskOpErr:       cmpopts.AnyError,
 				},
 				labelsOnDetachedDisk: "key1=value1, key2=value2",
 			},
@@ -1987,10 +2032,10 @@ func TestAppendLabelsToDetachedDisk(t *testing.T) {
 							LabelFingerprint: "test-label-fingerprint",
 						},
 					},
-					GetDiskErr:   []error{nil},
+					GetDiskErr:      []error{nil},
 					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
 					UpdateLabelsErr: nil,
-					DiskOpErr:    nil,
+					DiskOpErr:       nil,
 				},
 				labelsOnDetachedDisk: "key1=value1, key2=value2",
 			},
