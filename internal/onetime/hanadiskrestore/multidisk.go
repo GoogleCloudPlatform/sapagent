@@ -193,13 +193,6 @@ func (r *Restorer) deleteOldDisk(ctx context.Context, diskName string) error {
 // attachAndConfigureDisks attaches restored disks to required instances, adds them to consistency
 // group and configures LVM.
 func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
-	// Creating a map of disk names to their respective instances.
-	// This map is used to retrieve the instance name to which the original disk was attached.
-	diskToInstanceMap := make(map[string]string)
-	for _, d := range r.disks {
-		diskToInstanceMap[d.disk.DiskName] = d.instanceName
-	}
-
 	var newDisks []multiDisks
 	for _, snapshotItem := range r.snapshotItems {
 		latestRestoredDisk, err := r.fetchLatestDisk(ctx, snapshotItem)
@@ -213,10 +206,9 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 		uriParts := strings.Split(sourceDiskURI, "/")
 		sourceDiskName := uriParts[len(uriParts)-1]
-
-		instanceName, ok := diskToInstanceMap[sourceDiskName]
-		if !ok {
-			return fmt.Errorf("could not find instance for original disk: %s", sourceDiskName)
+		instanceName := snapshotItem.Labels["goog-sapagent-instance-name"]
+		if instanceName == "" {
+			return fmt.Errorf("instance name is empty for snapshot %s", snapshotItem.Name)
 		}
 
 		newDiskName, err := r.recreateDisk(ctx, exec, snapshotItem, sourceDiskName, instanceName, snapshotKey)
@@ -269,12 +261,6 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 		return err
 	}
 
-	// Creating a map of disk names to their respective instances.
-	diskToInstanceMap := make(map[string]string)
-	for _, d := range r.disks {
-		diskToInstanceMap[d.disk.DiskName] = d.instanceName
-	}
-
 	var newDisks []multiDisks
 	var numOfDisksRestored int
 	for _, snapshot := range snapshotList.Items {
@@ -300,7 +286,10 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 			}
 
 			log.CtxLogger(ctx).Debugw("Restoring snapshot", "new Disk", newDiskName, "source disk", snapshot.Labels["goog-sapagent-disk-name"])
-			instanceName := diskToInstanceMap[snapshot.Labels["goog-sapagent-disk-name"]]
+			instanceName := snapshot.Labels["goog-sapagent-instance-name"]
+			if instanceName == "" {
+				return fmt.Errorf("instance name is empty for snapshot %s", snapshot.Name)
+			}
 			if err := r.restoreFromSnapshot(ctx, exec, instanceName, snapshotKey, newDiskName, snapshot.Name); err != nil {
 				return err
 			}
@@ -567,7 +556,7 @@ func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.
 		return nil
 	}
 
-	leftoverDisks := []string{}
+	var leftoverDisks []string
 	for disk := range currentNodeDisks {
 		leftoverDisks = append(leftoverDisks, disk)
 	}

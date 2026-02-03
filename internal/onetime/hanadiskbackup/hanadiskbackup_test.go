@@ -2332,10 +2332,11 @@ func TestReadDiskMapping(t *testing.T) {
 
 func TestParseLabels(t *testing.T) {
 	tests := []struct {
-		name       string
-		s          *Snapshot
-		wantLabels map[string]string
-		wantErr    error
+		name         string
+		instanceName string
+		s            *Snapshot
+		wantLabels   map[string]string
+		wantErr      error
 	}{
 		{
 			name: "Invalidlabel",
@@ -2354,7 +2355,8 @@ func TestParseLabels(t *testing.T) {
 			wantLabels: map[string]string{"label1": "value1", "label2": "value2"},
 		},
 		{
-			name: "GroupSnapshotSuccess",
+			name:         "GroupSnapshotSuccess",
+			instanceName: "my-instance",
 			s: &Snapshot{
 				GroupSnapshotName: "group-snapshot-name",
 				groupSnapshot:     true,
@@ -2373,19 +2375,20 @@ func TestParseLabels(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				"goog-sapagent-isg":       "group-snapshot-name",
-				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
-				"goog-sapagent-cgpath":    "my-region-my-cg",
-				"goog-sapagent-disk-name": "pd-1",
-				"label1":                  "value1",
-				"label2":                  "value2",
+				"goog-sapagent-isg":           "group-snapshot-name",
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        "my-region-my-cg",
+				"goog-sapagent-disk-name":     "pd-1",
+				"goog-sapagent-instance-name": "my-instance",
+				"label1":                      "value1",
+				"label2":                      "value2",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.s.parseLabels(test.s.Disk)
+			got, err := test.s.parseLabels(test.s.Disk, test.instanceName)
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
 			})

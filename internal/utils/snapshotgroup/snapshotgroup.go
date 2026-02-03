@@ -81,27 +81,28 @@ type (
 
 	// SnapshotItem represents a single snapshot item in the list.
 	SnapshotItem struct {
-		Kind                      string   `json:"kind"`
-		ID                        string   `json:"id"`
-		CreationTimestamp         string   `json:"creationTimestamp"`
-		Name                      string   `json:"name"`
-		Status                    string   `json:"status"`
-		SourceDisk                string   `json:"sourceDisk"`
-		SourceDiskID              string   `json:"sourceDiskID"`
-		DiskSizeGb                string   `json:"diskSizeGb"`
-		StorageBytes              string   `json:"storageBytes"`
-		StorageBytesStatus        string   `json:"storageBytesStatus"`
-		SelfLink                  string   `json:"selfLink"`
-		SelfLinkWithID            string   `json:"selfLinkWithID"`
-		LabelFingerprint          string   `json:"labelFingerprint"`
-		StorageLocations          []string `json:"storageLocations"`
-		DownloadBytes             string   `json:"downloadBytes"`
-		SourceInstantSnapshot     string   `json:"sourceInstantSnapshot"`
-		SourceInstantSnapshotID   string   `json:"sourceInstantSnapshotID"`
-		CreationSizeBytes         string   `json:"creationSizeBytes"`
-		EnableConfidentialCompute bool     `json:"enableConfidentialCompute"`
-		SnapshotGroupName         string   `json:"snapshotGroupName"`
-		SnapshotGroupID           string   `json:"snapshotGroupID"`
+		Kind                      string            `json:"kind"`
+		ID                        string            `json:"id"`
+		CreationTimestamp         string            `json:"creationTimestamp"`
+		Name                      string            `json:"name"`
+		Status                    string            `json:"status"`
+		SourceDisk                string            `json:"sourceDisk"`
+		SourceDiskID              string            `json:"sourceDiskID"`
+		DiskSizeGB                string            `json:"diskSizeGb"`
+		StorageBytes              string            `json:"storageBytes"`
+		StorageBytesStatus        string            `json:"storageBytesStatus"`
+		SelfLink                  string            `json:"selfLink"`
+		SelfLinkWithID            string            `json:"selfLinkWithID"`
+		LabelFingerprint          string            `json:"labelFingerprint"`
+		Labels                    map[string]string `json:"labels"`
+		StorageLocations          []string          `json:"storageLocations"`
+		DownloadBytes             string            `json:"downloadBytes"`
+		SourceInstantSnapshot     string            `json:"sourceInstantSnapshot"`
+		SourceInstantSnapshotID   string            `json:"sourceInstantSnapshotID"`
+		CreationSizeBytes         string            `json:"creationSizeBytes"`
+		EnableConfidentialCompute bool              `json:"enableConfidentialCompute"`
+		SnapshotGroupName         string            `json:"snapshotGroupName"`
+		SnapshotGroupID           string            `json:"snapshotGroupID"`
 	}
 
 	// SnapshotListResponse represents the response of a list snapshots request.

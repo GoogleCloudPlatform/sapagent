@@ -766,7 +766,7 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnaps
 	if !ok {
 		return fmt.Errorf("source-disk=%v is not attached to the instance", s.Disk)
 	}
-	op, err := s.createDiskSnapshot(ctx, createSnapshot)
+	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
@@ -799,9 +799,9 @@ func (s *Snapshot) prepareForChangeDiskTypeWorkflow(ctx context.Context, exec co
 	return nil
 }
 
-func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc) (*compute.Operation, error) {
-	log.CtxLogger(ctx).Infow("Creating disk snapshot", "sourcedisk", s.Disk, "sourcediskzone", s.DiskZone, "snapshotname", s.SnapshotName)
-	labels, err := s.parseLabels(s.Disk)
+func (s *Snapshot) createDiskSnapshot(ctx context.Context, createSnapshot diskSnapshotFunc, instanceName string) (*compute.Operation, error) {
+	log.CtxLogger(ctx).Infow("Creating disk snapshot", "sourcedisk", s.Disk, "sourcediskzone", s.DiskZone, "snapshotname", s.SnapshotName, "instanceName", instanceName)
+	labels, err := s.parseLabels(s.Disk, instanceName)
 	if err != nil {
 		return nil, err
 	}
@@ -853,8 +853,8 @@ func (s *Snapshot) createBackup(ctx context.Context, snapshot *compute.Snapshot,
 	return op, nil
 }
 
-func (s *Snapshot) parseLabels(disk string) (labels map[string]string, err error) {
-	labels, err = s.createGroupBackupLabels(disk)
+func (s *Snapshot) parseLabels(disk, instanceName string) (labels map[string]string, err error) {
+	labels, err = s.createGroupBackupLabels(disk, instanceName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create group backup labels: %w", err)
 	}

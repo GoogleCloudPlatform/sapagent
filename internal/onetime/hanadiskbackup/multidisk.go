@@ -274,7 +274,19 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 	// - zones/my-zone/disks/my-disk
 	parts := strings.Split(instantSnapshot.SourceDisk, "/")
 	diskName := parts[len(parts)-1]
-	labels, err := s.parseLabels(diskName)
+
+	disk, err := s.gceService.GetDisk(s.Project, s.DiskZone, diskName)
+	if err != nil {
+		return err
+	}
+	if len(disk.Users) == 0 {
+		return fmt.Errorf("disk %q is not attached to any instance", diskName)
+	}
+	instanceURI := disk.Users[0]
+	parts = strings.Split(instanceURI, "/")
+	instanceName := parts[len(parts)-1]
+
+	labels, err := s.parseLabels(diskName, instanceName)
 	if err != nil {
 		return err
 	}
@@ -350,7 +362,21 @@ func (s *Snapshot) updateLabelsForSnapshotGroup(ctx context.Context, snapshotGro
 	for _, snapshot := range snapshots {
 		parts := strings.Split(snapshot.SourceDisk, "/")
 		diskName := parts[len(parts)-1]
-		labels, err := s.parseLabels(diskName)
+
+		// Get the disk to parse the instance name from the disk.
+		// This is needed to ascertain the instance that the disk belongs to when the snapshot was taken.
+		disk, err := s.gceService.GetDisk(s.Project, s.DiskZone, diskName)
+		if err != nil {
+			return err
+		}
+		if len(disk.Users) == 0 {
+			return fmt.Errorf("disk %q is not attached to any instance", diskName)
+		}
+		instanceURI := disk.Users[0]
+		parts = strings.Split(instanceURI, "/")
+		instanceName := parts[len(parts)-1]
+
+		labels, err := s.parseLabels(diskName, instanceName)
 		if err != nil {
 			return err
 		}
@@ -420,7 +446,7 @@ func cgPath(policies []string) string {
 }
 
 // createGroupBackupLabels returns the labels to be added for the group snapshot.
-func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, error) {
+func (s *Snapshot) createGroupBackupLabels(disk, instanceName string) (map[string]string, error) {
 	labels := map[string]string{}
 	if !s.groupSnapshot {
 		if s.provisionedIops != 0 {
@@ -439,6 +465,9 @@ func (s *Snapshot) createGroupBackupLabels(disk string) (map[string]string, erro
 	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
 	if disk != "" {
 		labels["goog-sapagent-disk-name"] = disk
+	}
+	if instanceName != "" {
+		labels["goog-sapagent-instance-name"] = instanceName
 	}
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)

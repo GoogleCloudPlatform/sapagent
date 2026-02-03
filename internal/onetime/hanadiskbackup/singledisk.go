@@ -45,7 +45,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 		return err
 	}
 
-	op, err := s.createDiskSnapshot(ctx, createSnapshot)
+	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
 		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)

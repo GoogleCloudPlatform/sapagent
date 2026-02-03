@@ -350,6 +350,17 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					CreateSnapshotErr:     nil,
 					CreationCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -391,6 +402,17 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					CreateSnapshotErr:     nil,
 					CreationCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -431,6 +453,13 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateSnapshotErr:                      nil,
 					CreationCompletionErr:                  nil,
 					InstantSnapshotConversionCompletionErr: cmpopts.AnyError,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -467,6 +496,13 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateSnapshotErr:                      nil,
 					CreationCompletionErr:                  nil,
 					InstantSnapshotConversionCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -506,6 +542,13 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					CreateSnapshotErr:                      nil,
 					CreationCompletionErr:                  nil,
 					InstantSnapshotConversionCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 				computeService: &compute.Service{},
 				cgName:         "test-cg-success",
@@ -632,6 +675,13 @@ func TestConvertISGtoSS(t *testing.T) {
 				gceService: &fake.TestGCE{
 					CreateSnapshotOp:  nil,
 					CreateSnapshotErr: cmpopts.AnyError,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 				isgService: &mockISGService{
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
@@ -657,6 +707,13 @@ func TestConvertISGtoSS(t *testing.T) {
 					},
 					CreateSnapshotErr:     nil,
 					CreationCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
 				},
 				isgService: &mockISGService{
 					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
@@ -735,6 +792,22 @@ func TestCreateGroupBackup(t *testing.T) {
 						{
 							Name:  "disk-name",
 							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "DiskNotAttached",
+			s: &Snapshot{
+				GroupSnapshotName: "group-snapshot-name",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{},
 						},
 					},
 					GetDiskErr: []error{nil},
@@ -995,10 +1068,11 @@ func TestCGPath(t *testing.T) {
 
 func TestCreateGroupBackupLabels(t *testing.T) {
 	tests := []struct {
-		name       string
-		s          *Snapshot
-		wantLabels map[string]string
-		wantErr    error
+		name         string
+		s            *Snapshot
+		instanceName string
+		wantLabels   map[string]string
+		wantErr      error
 	}{
 		{
 			name: "DiskSnapshot",
@@ -1031,18 +1105,20 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 					GetDiskErr: []error{nil},
 				},
 			},
+			instanceName: "my-instance",
 			wantLabels: map[string]string{
-				"goog-sapagent-isg":       "group-snapshot-name",
-				"goog-sapagent-version":   strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
-				"goog-sapagent-cgpath":    "my-region-my-cg",
-				"goog-sapagent-disk-name": "my-disk",
+				"goog-sapagent-isg":           "group-snapshot-name",
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        "my-region-my-cg",
+				"goog-sapagent-disk-name":     "my-disk",
+				"goog-sapagent-instance-name": "my-instance",
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := tc.s.createGroupBackupLabels(tc.s.Disk)
+			got, err := tc.s.createGroupBackupLabels(tc.s.Disk, tc.instanceName)
 			opts := cmpopts.IgnoreMapEntries(func(key string, _ string) bool {
 				return key == "goog-sapagent-timestamp" || key == "goog-sapagent-sha224"
 			})
@@ -1181,6 +1257,48 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "GetDiskErr",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						snapshotgroup.SnapshotItem{
+							Name:       "snapshot-1",
+							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{},
+					},
+					GetDiskErr: []error{cmpopts.AnyError},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DiskNotAttached",
+			s: &Snapshot{
+				sgService: &mockSGService{
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						snapshotgroup.SnapshotItem{
+							Name:       "snapshot-1",
+							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Users: []string{},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "UpdateSnapshotLabelsFailure",
 			s: &Snapshot{
 				sgService: &mockSGService{
@@ -1192,6 +1310,12 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 					},
 				},
 				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr:              []error{nil},
 					UpdateSnapshotLabelsErr: cmpopts.AnyError,
 				},
 			},
@@ -1209,6 +1333,12 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 					},
 				},
 				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr:              []error{nil},
 					UpdateSnapshotLabelsErr: nil,
 				},
 			},
