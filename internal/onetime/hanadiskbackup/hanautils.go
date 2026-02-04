@@ -30,7 +30,7 @@ func (s *Snapshot) markSnapshotAsSuccessful(ctx context.Context, run queryFunc, 
 		snapshotName = s.GroupSnapshotName
 	}
 	if _, err := run(ctx, s.db, fmt.Sprintf("BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID %s SUCCESSFUL '%s'", snapshotID, snapshotName)); err != nil {
-		log.CtxLogger(ctx).Errorw("Error marking HANA snapshot as SUCCESSFUL")
+		log.CtxLogger(ctx).Error("Error marking HANA snapshot as SUCCESSFUL")
 		s.oteLogger.LogUsageError(usagemetrics.DiskSnapshotDoneDBNotComplete)
 		return err
 	}
@@ -84,6 +84,6 @@ func (s *Snapshot) abandonPreparedSnapshot(ctx context.Context, run queryFunc) e
 	if err = s.abandonHANASnapshot(ctx, run, snapshotID); err != nil {
 		return err
 	}
-	log.Logger.Info("Snapshot abandoned", "snapshotID", snapshotID)
+	log.Logger.Infow("Snapshot abandoned", "snapshotID", snapshotID)
 	return nil
 }

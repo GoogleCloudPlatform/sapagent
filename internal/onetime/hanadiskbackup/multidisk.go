@@ -472,7 +472,7 @@ func (s *Snapshot) createGroupBackupLabels(disk, instanceName string) (map[strin
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
 
-	log.Logger.Debug("Labels: ", labels)
+	log.Logger.Debugw("Labels for snapshot group", "labels", labels)
 	return labels, nil
 }
 

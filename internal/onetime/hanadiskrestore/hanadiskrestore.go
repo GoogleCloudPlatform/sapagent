@@ -456,7 +456,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 	}
 
 	if !r.isGroupSnapshot {
-		log.CtxLogger(ctx).Info("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
+		log.CtxLogger(ctx).Infow("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
 			hanabackup.RescanVolumeGroups(ctx, exec)
@@ -467,7 +467,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 
 		disksDetached := []*multiDisks{}
 		for _, d := range r.disks {
-			log.CtxLogger(ctx).Info("Detaching old data disk", "disk", d.disk.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.disk.GetMapping()))
+			log.CtxLogger(ctx).Infow("Detaching old data disk", "disk", d.disk.DiskName, "physicalDataPath", fmt.Sprintf("/dev/%s", d.disk.GetMapping()))
 			if err := r.gceService.DetachDisk(ctx, d.instanceName, r.Project, r.DataDiskZone, d.disk.DiskName, d.disk.DeviceName); err != nil {
 				log.CtxLogger(ctx).Errorf("failed to detach old data disk: %v", err)
 				// Reattaching detached disks.
@@ -546,7 +546,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	if r.ProvisionedThroughput > 0 {
 		disk.ProvisionedThroughput = r.ProvisionedThroughput
 	}
-	log.Logger.Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
+	log.CtxLogger(ctx).Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
 
 	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
@@ -572,7 +572,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	// Introducing sleep to let symlinks for the new disk to be created.
 	time.Sleep(5 * time.Second)
 
-	log.Logger.Info("New disk created from snapshot successfully attached to the instance.")
+	log.CtxLogger(ctx).Info("New disk created from snapshot successfully attached to the instance.")
 	return nil
 }
 

@@ -428,7 +428,7 @@ func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL str
 	if err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Debug("Snapshot status:", status)
+	log.CtxLogger(ctx).Debugf("Instant Snapshot Group status: %s", status)
 	if status != "READY" {
 		return fmt.Errorf("Instant Snapshot Group upload is still in progress, status: %s", status)
 	}

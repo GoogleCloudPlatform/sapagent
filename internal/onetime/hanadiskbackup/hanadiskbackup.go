@@ -725,7 +725,7 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 
 func (s *Snapshot) portValue() string {
 	if s.Port == "" {
-		log.Logger.Debug("Building port number of the system database from instance ID", "instanceID", s.InstanceID)
+		log.Logger.Debugw("Building port number of the system database from instance ID", "instanceID", s.InstanceID)
 		return fmt.Sprintf("3%s13", s.InstanceID)
 	}
 	return s.Port
@@ -872,7 +872,7 @@ func (s *Snapshot) parseLabels(disk, instanceName string) (labels map[string]str
 func (s *Snapshot) diskSnapshotFailureHandler(ctx context.Context, run queryFunc, snapshotID string) {
 	s.oteLogger.LogUsageError(usagemetrics.DiskSnapshotCreateFailure)
 	if err := s.abandonHANASnapshot(ctx, run, snapshotID); err != nil {
-		log.CtxLogger(ctx).Errorw("Error discarding HANA snapshot")
+		log.CtxLogger(ctx).Error("Error discarding HANA snapshot")
 		s.oteLogger.LogUsageError(usagemetrics.DiskSnapshotFailedDBNotComplete)
 	}
 }

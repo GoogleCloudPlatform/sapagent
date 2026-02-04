@@ -368,7 +368,7 @@ func (s *SGService) WaitForSGUploadCompletion(ctx context.Context, project, sgNa
 	if err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Debug("Snapshot group status:", sg.Status)
+	log.CtxLogger(ctx).Debugf("Snapshot group status: %s", sg.Status)
 	if sg.Status != "READY" {
 		return fmt.Errorf("snapshot group upload is still in progress, status: %s", sg.Status)
 	}
@@ -400,7 +400,7 @@ func (s *SGService) WaitForSGCreation(ctx context.Context, project, sgName strin
 	if err != nil {
 		return err
 	}
-	log.CtxLogger(ctx).Debug("Snapshot group status:", sg.Status)
+	log.CtxLogger(ctx).Debugf("Snapshot group status: %s", sg.Status)
 	if sg.Status == "CREATING" {
 		return fmt.Errorf("snapshot group creation is still in progress, status: %s", sg.Status)
 	}

@@ -110,7 +110,7 @@ func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
 	}
 
 	// Wait for bulk insert operation to complete
-	log.CtxLogger(ctx).Debugw("Waiting for bulk insert operation to complete")
+	log.CtxLogger(ctx).Debug("Waiting for bulk insert operation to complete")
 	if err = r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (r *Restorer) fetchLatestDisk(ctx context.Context, snapshot snapshotgroup.S
 		for _, disk := range disks {
 			currentTimestamp, err := time.Parse(time.RFC3339, disk.CreationTimestamp)
 			if err != nil {
-				log.CtxLogger(ctx).Warnw("failed to parse timestamp for disk %s, skipping this disk", disk.Name)
+				log.CtxLogger(ctx).Warnf("failed to parse timestamp for disk %s, skipping this disk", disk.Name)
 				continue // Skip this disk and try the next one
 			}
 
@@ -539,7 +539,7 @@ func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.
 			}
 			parts := strings.Split(disk.Users[0], "/")
 			instanceName := parts[len(parts)-1]
-			log.CtxLogger(ctx).Debugw("Disk %v is attached to instance %v", d, instanceName)
+			log.CtxLogger(ctx).Debugf("Disk %v is attached to instance %v", d, instanceName)
 
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, d)
 			r.disks = append(r.disks, &multiDisks{
