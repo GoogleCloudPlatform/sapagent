@@ -17,6 +17,7 @@ limitations under the License.
 package configuration
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
@@ -107,11 +109,16 @@ func TestWrite(t *testing.T) {
 }
 
 func TestReadFromFile(t *testing.T) {
+	origFetchParameter := fetchParameter
+	defer func() { fetchParameter = origFetchParameter }()
 	tests := []struct {
-		name     string
-		path     string
-		readFunc ReadConfigFile
-		want     *cpb.Configuration
+		name          string
+		path          string
+		readFunc      ReadConfigFile
+		want          *cpb.Configuration
+		wantPMVersion string
+		pmResource    *parametermanager.Resource
+		pmErr         error
 	}{
 		{
 			name: "FileReadError",
@@ -219,14 +226,71 @@ func TestReadFromFile(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "PMSuccess",
+			readFunc: func(p string) ([]byte, error) {
+				fileContent := `{"provide_sap_host_agent_metrics": true, "log_to_cloud": true, "parameter_manager_config": {"project":"p", "location":"l", "parameter_name":"n"}}`
+				return []byte(fileContent), nil
+			},
+			pmResource: &parametermanager.Resource{
+				Data:    `{"log_to_cloud": false}`,
+				Version: "v1",
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+				LogToCloud:                 &wpb.BoolValue{Value: true},
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project: "p", Location: "l", ParameterName: "n",
+				},
+			},
+			wantPMVersion: "v1",
+		},
+		{
+			name: "PMFetchError",
+			readFunc: func(p string) ([]byte, error) {
+				fileContent := `{"provide_sap_host_agent_metrics": true, "log_to_cloud": true, "parameter_manager_config": {"project":"p", "location":"l", "parameter_name":"n"}}`
+				return []byte(fileContent), nil
+			},
+			pmErr: errors.New("PM fetch error"),
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+				LogToCloud:                 &wpb.BoolValue{Value: true},
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project: "p", Location: "l", ParameterName: "n",
+				},
+			},
+		},
+		{
+			name: "PMInvalidJSON",
+			readFunc: func(p string) ([]byte, error) {
+				fileContent := `{"provide_sap_host_agent_metrics": true, "log_to_cloud": true, "parameter_manager_config": {"project":"p", "location":"l", "parameter_name":"n"}}`
+				return []byte(fileContent), nil
+			},
+			pmResource: &parametermanager.Resource{
+				Data: `{"log_to_cloud": false`,
+			},
+			want: &cpb.Configuration{
+				ProvideSapHostAgentMetrics: &wpb.BoolValue{Value: true},
+				LogToCloud:                 &wpb.BoolValue{Value: true},
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project: "p", Location: "l", ParameterName: "n",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			fetchParameter = func(ctx context.Context, client *parametermanager.Client, projectID, location, parameterName, version string) (*parametermanager.Resource, error) {
+				return test.pmResource, test.pmErr
+			}
 			defaultHMQueriesContent = sampleHANAMonitoringConfigQueriesJSON
-			got, _ := ReadFromFile(test.path, test.readFunc)
+			got, gotPMVersion, _ := ReadFromFile(test.path, test.readFunc, nil)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("ReadFromFile() for path: %s\n(-want +got):\n%s", test.path, diff)
+			}
+			if gotPMVersion != test.wantPMVersion {
+				t.Errorf("ReadFromFile() for path: %s\n(-want +got):\n%s", test.path, cmp.Diff(test.wantPMVersion, gotPMVersion))
 			}
 		})
 	}
