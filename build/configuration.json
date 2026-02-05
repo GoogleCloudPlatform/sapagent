@@ -11,5 +11,6 @@
   },
   "hana_monitoring_configuration": {
     "enabled": false
-  }
+  },
+  "parameter_manager_config": null
 }

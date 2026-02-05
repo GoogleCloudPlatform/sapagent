@@ -69,6 +69,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/metricevents"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 
 	cdpb "github.com/GoogleCloudPlatform/sapagent/protos/collectiondefinition"
@@ -113,6 +114,8 @@ type Daemon struct {
 	lp             log.Parameters
 	config         *cpb.Configuration
 	cloudProps     *iipb.CloudProperties
+	pmClient       *parametermanager.Client
+	pmVersion      string
 }
 
 // Name implements the subcommand interface for startdaemon.
@@ -152,7 +155,8 @@ func (d *Daemon) Execute(ctx context.Context, f *flag.FlagSet, args ...any) subc
 	d.createLogDir()
 	log.SetupLogging(d.lp)
 	ctx, cancel := context.WithCancel(ctx)
-	d.config, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+	d.pmClient, _ = parametermanager.NewClient(ctx)
+	d.config, d.pmVersion, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile, d.pmClient)
 	if d.config.GetBareMetal() && d.config.GetCloudProperties() == nil {
 		log.Logger.Error("Bare metal instance detected without cloud properties set. Manually set cloud properties in the configuration file to continue.")
 		usagemetrics.Error(usagemetrics.BareMetalCloudPropertiesNotSet)
@@ -211,7 +215,7 @@ func (d *Daemon) createLogDir() {
 func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFunc, restarting bool) subcommands.ExitStatus {
 	// Daemon mode operation
 	if restarting {
-		d.config, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile)
+		d.config, d.pmVersion, _ = configuration.ReadFromFile(d.configFilePath, os.ReadFile, d.pmClient)
 		d.config = configuration.ApplyDefaults(d.config, d.cloudProps)
 	}
 	d.lp.LogToCloud = d.config.GetLogToCloud().GetValue()
@@ -657,8 +661,13 @@ func waitForShutdown(ctx context.Context, ch <-chan os.Signal, cancel context.Ca
 }
 
 func (d *Daemon) pollConfigFile(ctx context.Context, cancel context.CancelFunc) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	// fileTicker polls for changes in the local configuration file every 30 seconds.
+	fileTicker := time.NewTicker(30 * time.Second)
+	defer fileTicker.Stop()
+	// pmTicker polls for changes in the Parameter Manager configuration every 5 minutes.
+	pmTicker := time.NewTicker(5 * time.Minute)
+	defer pmTicker.Stop()
+
 	prev, err := d.lastModifiedTime(ctx)
 	shutdownch := make(chan os.Signal, 1)
 	signal.Notify(shutdownch, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
@@ -671,7 +680,7 @@ func (d *Daemon) pollConfigFile(ctx context.Context, cancel context.CancelFunc) 
 		case <-shutdownch:
 			log.CtxLogger(ctx).Info("Shutdown signal observed, exiting the config poller")
 			return
-		case <-ticker.C:
+		case <-fileTicker.C:
 			log.CtxLogger(ctx).Debug("Polling config file")
 			res, err := d.lastModifiedTime(ctx)
 			if err != nil {
@@ -682,6 +691,19 @@ func (d *Daemon) pollConfigFile(ctx context.Context, cancel context.CancelFunc) 
 				log.CtxLogger(ctx).Infow("Config file changed, restarting daemon", "configFile", d.configFilePath)
 				cancel = d.Restart(cancel)
 				prev = res
+			}
+		case <-pmTicker.C:
+			pmUpdated := false
+			if d.config.GetParameterManagerConfig() != nil {
+				resource, err := parametermanager.FetchParameter(ctx, d.pmClient, d.config.GetParameterManagerConfig().GetProject(), d.config.GetParameterManagerConfig().GetLocation(), d.config.GetParameterManagerConfig().GetParameterName(), "")
+				if err == nil && resource.Version != d.pmVersion {
+					pmUpdated = true
+					log.CtxLogger(ctx).Infow("Parameter Manager config changed", "oldVersion", d.pmVersion, "newVersion", resource.Version)
+				}
+			}
+			if pmUpdated {
+				log.CtxLogger(ctx).Infow("Config changed, restarting daemon", "configFile", d.configFilePath, "pmUpdated", pmUpdated)
+				cancel = d.Restart(cancel)
 			}
 		}
 	}
