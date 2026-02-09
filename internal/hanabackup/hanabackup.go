@@ -193,13 +193,18 @@ func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec
 	})
 	log.CtxLogger(ctx).Debugw("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	if result.Error != nil || result.StdErr != "" {
-		return false, fmt.Errorf("failure checking if data device is striped, stderr: %s, err: %s", result.StdErr, result.Error)
-	} else if result.ExitCode == 0 {
+	// grep returns exit code 0 if a match is found, 1 if no match is found, and >1 for errors.
+	switch result.ExitCode {
+	case 0:
+		// grep found "Stripes".
 		return true, nil
+	case 1:
+		// grep found no matches. This is not considered an error in this context.
+		return false, nil
+	default:
+		// For any other exit code (e.g., 2 for grep command error), it's considered a failure.
+		return false, fmt.Errorf("failure checking if data device is striped, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
-
-	return false, nil
 }
 
 // ReadDataDirMountPath reads the data directory mount path.
