@@ -771,9 +771,9 @@ func TestValidateDisks(t *testing.T) {
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
-					StdErr:   "",
-					Error:    cmpopts.AnyError,
-					ExitCode: 1,
+					StdErr:   "lvdisplay failed",
+					Error:    errors.New("lvdisplay failed"),
+					ExitCode: 2,
 				}
 			},
 			wantMessage: "ERROR: Failed to check if data device is striped",
@@ -1528,9 +1528,9 @@ func TestValidateScaleupDisks(t *testing.T) {
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
-					StdErr:   "",
-					Error:    cmpopts.AnyError,
-					ExitCode: 1,
+					StdErr:   "lvdisplay failed",
+					Error:    errors.New("lvdisplay failed"),
+					ExitCode: 2,
 				}
 			},
 			wantMessage: "ERROR: Failed to check if data device is striped",
@@ -1877,9 +1877,9 @@ func TestVerifyStriping(t *testing.T) {
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
-					StdErr:   "",
-					Error:    cmpopts.AnyError,
-					ExitCode: 1,
+					StdErr:   "lvdisplay failed",
+					Error:    errors.New("lvdisplay failed"),
+					ExitCode: 2,
 				}
 			},
 			wantMessage: "ERROR: Failed to check if data device is striped",
