@@ -55,7 +55,7 @@ if [ "${COMPILE_PROTOS}" == "TRUE" ] && [ ! -d "workloadagentplatform" ]; then
     cd workloadagentplatform
     # this is the hash of the workloadagentplatform submodule
     # get the hash by running: go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform@main
-    git checkout d848a87cf4746c4e3aeaa4198e4abff8c6ddd837
+    git checkout d9a9b45e4977c3237989311ee6b5e7103796f677
     cd ..
     # replace the proto imports in the platform that reference the platform
     find workloadagentplatform/sharedprotos -type f -exec sed -i 's|"sharedprotos|"workloadagentplatform/sharedprotos|g' {} +

@@ -17,10 +17,10 @@ require (
         cloud.google.com/go/storage v1.50.0
         // Get the version by running:
         // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries@main
-        github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260130111648-d848a87cf474
+        github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260210113035-d9a9b45e4977
         // Get the version by running:
         // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-        github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260130111648-d848a87cf474
+        github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260210113035-d9a9b45e4977
         github.com/Masterminds/semver/v3 v3.4.0
         github.com/SAP/go-hdb v1.12.12
         github.com/cenkalti/backoff/v4 v4.3.0

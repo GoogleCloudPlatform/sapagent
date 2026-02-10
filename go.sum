@@ -41,10 +41,10 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.49.0/go.mod h1:l2fIqmwB+FKSfvn3bAD/0i+AXAxhIZjTK2svT/mgUXs=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0 h1:GYUJLfvd++4DMuMhCFLgLXvFwofIxh/qOwoGuS/LTew=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.49.0/go.mod h1:wRbFgBQUVm1YXrvWKofAEmq9HNJTDphbAaJSSX01KUI=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260130111648-d848a87cf474 h1:LXMLTf2mKxX5o+hHrC1kjFLZXCwcF5uThxuAQvufVzQ=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260130111648-d848a87cf474/go.mod h1:WrwTr9HFkp+nbHba/tv36eCLkjKAeCx7mqiG/wL3PNU=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260130111648-d848a87cf474 h1:UqCDKYK2qQqoXSEtHrcl3gDrdj4l77BgOrcT3OYwJJU=
-github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260130111648-d848a87cf474/go.mod h1:8Ea8vdBuPsWhhwzL9sNK7BFQE9qbkPLZUHxcucWHXaM=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260210113035-d9a9b45e4977 h1:JASGFUSUyokxrLa0IF976rAYNzWa+ghElbfduJNw3nI=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260210113035-d9a9b45e4977/go.mod h1:WrwTr9HFkp+nbHba/tv36eCLkjKAeCx7mqiG/wL3PNU=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260210113035-d9a9b45e4977 h1:rB+/TfujURA7dJ2kHaU2H2ou/cxRriT46YWmve7jYYM=
+github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260210113035-d9a9b45e4977/go.mod h1:8Ea8vdBuPsWhhwzL9sNK7BFQE9qbkPLZUHxcucWHXaM=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/SAP/go-hdb v1.12.12 h1:pZtsnUU7VNNobksc13F5pGr7W3abiJq/W4v7g7GZpKk=
