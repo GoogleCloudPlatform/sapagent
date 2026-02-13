@@ -32,7 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 )
 
-const defaultMaxRetries = 8
+const defaultMaxRetries = 180
 
 type (
 	// SGService is a struct that provides operations for managing snapshot groups.
@@ -40,8 +40,7 @@ type (
 	SGService struct {
 		rest       *rest.Rest
 		baseURL    string
-		backoff    *backoff.ExponentialBackOff
-		maxRetries int
+		maxRetries uint64
 	}
 
 	errorResponse struct {
@@ -139,22 +138,8 @@ type (
 	}
 )
 
-func setupBackoff() *backoff.ExponentialBackOff {
-	b := &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         1 * time.Hour,
-		MaxElapsedTime:      30 * time.Minute,
-		Clock:               backoff.SystemClock,
-	}
-	b.Reset()
-	return b
-}
-
 // NewService initializes the SGService with a new http client.
 func (s *SGService) NewService() error {
-	s.backoff = setupBackoff()
 	s.maxRetries = defaultMaxRetries
 
 	s.rest = &rest.Rest{}
@@ -195,16 +180,11 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) error {
 	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	var err error
 	if err = backoff.Retry(func() error {
@@ -250,16 +230,11 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 func (s *SGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
 	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks/bulkInsert", project, zone)
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	var err error
 	if err = backoff.Retry(func() error {
@@ -378,14 +353,9 @@ func (s *SGService) WaitForSGUploadCompletion(ctx context.Context, project, sgNa
 // WaitForSGUploadCompletionWithRetry waits for the given snapshot group creation operation
 // to complete with constant backoff retries.
 func (s *SGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
 	operation := func() error {
 		return s.WaitForSGUploadCompletion(ctx, project, sgName)
@@ -410,14 +380,9 @@ func (s *SGService) WaitForSGCreation(ctx context.Context, project, sgName strin
 // WaitForSGCreationWithRetry waits for the given snapshot group creation to complete with
 // constant backoff retries. The retry will stop once the status is not "CREATING".
 func (s *SGService) WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error {
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
 	operation := func() error {
 		return s.WaitForSGCreation(ctx, project, sgName)
@@ -539,17 +504,11 @@ func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error 
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
 	}
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	if err := backoff.Retry(func() error {
 		var getResponseErr error

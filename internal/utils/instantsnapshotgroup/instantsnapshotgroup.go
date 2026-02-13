@@ -49,8 +49,7 @@ type (
 	ISGService struct {
 		rest       *rest.Rest
 		baseURL    string
-		backoff    *backoff.ExponentialBackOff
-		maxRetries int
+		maxRetries uint64
 	}
 
 	// ISResponse is the response for IS.
@@ -116,6 +115,8 @@ type (
 	}
 )
 
+const defaultMaxRetries = 180
+
 var (
 	defaultNewClient = func(timeout time.Duration, trans *http.Transport) httpClient {
 		return &http.Client{Timeout: timeout, Transport: trans}
@@ -133,23 +134,9 @@ var (
 	}
 )
 
-func setupBackoff() *backoff.ExponentialBackOff {
-	b := &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         1 * time.Hour,
-		MaxElapsedTime:      30 * time.Minute,
-		Clock:               backoff.SystemClock,
-	}
-	b.Reset()
-	return b
-}
-
 // NewService initializes the ISGService with a new http client.
 func (s *ISGService) NewService() error {
-	s.backoff = setupBackoff()
-	s.maxRetries = 8
+	s.maxRetries = defaultMaxRetries
 
 	s.rest = &rest.Rest{}
 	s.rest.NewRest()
@@ -206,17 +193,11 @@ func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data [
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	}
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	var err error
 	if err = backoff.Retry(func() error {
@@ -367,17 +348,11 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
 	}
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	if err := backoff.Retry(func() error {
 		var getResponseErr error
@@ -438,17 +413,11 @@ func (s *ISGService) waitForISGUploadCompletion(ctx context.Context, baseURL str
 // WaitForISGUploadCompletionWithRetry waits for the given snapshot creation operation
 // to complete with constant backoff retries.
 func (s *ISGService) WaitForISGUploadCompletionWithRetry(ctx context.Context, baseURL string) error {
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	bo.Reset()
 
-	var i int
+	var i uint64
 	return backoff.Retry(func() error {
 		if err := s.waitForISGUploadCompletion(ctx, baseURL); err != nil {
 			i++
