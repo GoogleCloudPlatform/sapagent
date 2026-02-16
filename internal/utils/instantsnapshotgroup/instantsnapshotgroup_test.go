@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/oauth2"
@@ -48,18 +47,6 @@ func (m *mockToken) Token() (*oauth2.Token, error) {
 	return m.token, m.err
 }
 
-var exponentialBackoff = func() *backoff.ExponentialBackOff {
-	expBackoff := &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         6 * time.Second,
-		MaxElapsedTime:      10 * time.Second,
-		Clock:               backoff.SystemClock,
-	}
-	return expBackoff
-}
-
 func TestNewService(t *testing.T) {
 	tests := []struct {
 		name string
@@ -79,22 +66,6 @@ func TestNewService(t *testing.T) {
 				t.Errorf("NewService() returned diff (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestSetupBackoff(t *testing.T) {
-	var b backoff.BackOff
-	b = &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         1 * time.Hour,
-		MaxElapsedTime:      30 * time.Minute,
-		Clock:               backoff.SystemClock,
-	}
-	gotB := setupBackoff()
-	if diff := cmp.Diff(b, gotB, cmpopts.IgnoreUnexported(backoff.ExponentialBackOff{})); diff != "" {
-		t.Errorf("setupBackoff() returned diff (-want +got):\n%s", diff)
 	}
 }
 
@@ -401,7 +372,6 @@ func TestCreateISGErrors(t *testing.T) {
 			name: "RequestError",
 			s: &ISGService{
 				baseURL: ts.URL + "/test/error",
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -424,7 +394,6 @@ func TestCreateISGErrors(t *testing.T) {
 			name: "Success",
 			s: &ISGService{
 				baseURL: ts.URL + "/test/success",
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -1016,7 +985,6 @@ func TestDeleteISGErrors(t *testing.T) {
 			name: "RequestError",
 			s: &ISGService{
 				baseURL: ts.URL + "/test/error",
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -1039,7 +1007,6 @@ func TestDeleteISGErrors(t *testing.T) {
 			name: "InvalidJSON",
 			s: &ISGService{
 				baseURL: ts.URL + "/test/invalid_json",
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -1097,7 +1064,6 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Error",
 			s: &ISGService{
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -1117,7 +1083,6 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 		{
 			name: "Success",
 			s: &ISGService{
-				backoff: exponentialBackoff(),
 				rest: &rest.Rest{
 					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
 					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {

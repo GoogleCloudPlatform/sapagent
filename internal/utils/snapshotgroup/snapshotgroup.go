@@ -32,16 +32,19 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 )
 
-const defaultMaxRetries = 8
+const (
+	defaultMaxRetries    = 180
+	defaultRetryInterval = 20 * time.Second
+)
 
 type (
 	// SGService is a struct that provides operations for managing snapshot groups.
 	// It currently serves as a placeholder and will be updated with a more complete implementation.
 	SGService struct {
-		rest       *rest.Rest
-		baseURL    string
-		backoff    *backoff.ExponentialBackOff
-		maxRetries int
+		rest          *rest.Rest
+		baseURL       string
+		retryInterval time.Duration
+		maxRetries    uint64
 	}
 
 	errorResponse struct {
@@ -139,23 +142,10 @@ type (
 	}
 )
 
-func setupBackoff() *backoff.ExponentialBackOff {
-	b := &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         1 * time.Hour,
-		MaxElapsedTime:      30 * time.Minute,
-		Clock:               backoff.SystemClock,
-	}
-	b.Reset()
-	return b
-}
-
 // NewService initializes the SGService with a new http client.
 func (s *SGService) NewService() error {
-	s.backoff = setupBackoff()
 	s.maxRetries = defaultMaxRetries
+	s.retryInterval = defaultRetryInterval
 
 	s.rest = &rest.Rest{}
 	s.rest.NewRest()
@@ -195,31 +185,29 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) error {
 	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	var err error
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
 	if err = backoff.Retry(func() error {
 		var getResponseErr error
 		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
 		if getResponseErr != nil {
-			i++
+			log.CtxLogger(ctx).Debugf("Non-success response for snapshot group creation, retrying with retry count: %d", i)
 			if i == s.maxRetries {
 				return backoff.Permanent(getResponseErr)
 			}
+			i++
 			return getResponseErr
 		}
 
 		return nil
 	}, bo); err != nil {
+		log.CtxLogger(ctx).Debugf("Failed to initiate creation of group snapshot after %d retries", s.maxRetries)
 		return fmt.Errorf("failed to initiate creation of group snapshot, err: %w", err)
 	}
 
@@ -250,31 +238,29 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 func (s *SGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
 	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks/bulkInsert", project, zone)
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
 	var err error
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
 	if err = backoff.Retry(func() error {
 		var getResponseErr error
 		bodyBytes, getResponseErr = s.GetResponse(ctx, "POST", s.baseURL, data)
 		if getResponseErr != nil {
-			i++
+			log.CtxLogger(ctx).Debugf("Non-success response for bulk insert initiation from snapshot group, retrying with retry count: %d", i)
 			if i == s.maxRetries {
 				return backoff.Permanent(getResponseErr)
 			}
+			i++
 			return getResponseErr
 		}
 
 		return nil
 	}, bo); err != nil {
+		log.CtxLogger(ctx).Debugf("Failed to initiate bulk insert from group snapshot after %d retries", s.maxRetries)
 		return nil, fmt.Errorf("failed to initiate bulk insert from group snapshot, err: %w", err)
 	}
 
@@ -378,20 +364,30 @@ func (s *SGService) WaitForSGUploadCompletion(ctx context.Context, project, sgNa
 // WaitForSGUploadCompletionWithRetry waits for the given snapshot group creation operation
 // to complete with constant backoff retries.
 func (s *SGService) WaitForSGUploadCompletionWithRetry(ctx context.Context, project, sgName string) error {
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	operation := func() error {
-		return s.WaitForSGUploadCompletion(ctx, project, sgName)
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
+	var i uint64
+	if err := backoff.Retry(func() error {
+		var getResponseErr error
+		getResponseErr = s.WaitForSGUploadCompletion(ctx, project, sgName)
+		if getResponseErr != nil {
+			log.CtxLogger(ctx).Debugf("Non-success response for snapshot group upload completion, retrying with retry count: %d", i)
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
+			i++
+			return getResponseErr
+		}
+
+		return nil
+	}, bo); err != nil {
+		log.CtxLogger(ctx).Debugf("Failed to wait for snapshot group upload completion after %d retries", s.maxRetries)
+		return fmt.Errorf("failed to wait for snapshot group upload completion, err: %w", err)
 	}
-	backoffWithMaxRetries := backoff.WithMaxRetries(bo, uint64(s.maxRetries-1))
-	return backoff.Retry(operation, backoffWithMaxRetries)
+	return nil
 }
 
 // WaitForSGCreation waits for the given snapshot group to be created.
@@ -410,20 +406,30 @@ func (s *SGService) WaitForSGCreation(ctx context.Context, project, sgName strin
 // WaitForSGCreationWithRetry waits for the given snapshot group creation to complete with
 // constant backoff retries. The retry will stop once the status is not "CREATING".
 func (s *SGService) WaitForSGCreationWithRetry(ctx context.Context, project, sgName string) error {
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
+	bo.Reset()
 
-	operation := func() error {
-		return s.WaitForSGCreation(ctx, project, sgName)
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
+	var i uint64
+	if err := backoff.Retry(func() error {
+		var getResponseErr error
+		getResponseErr = s.WaitForSGCreation(ctx, project, sgName)
+		if getResponseErr != nil {
+			log.CtxLogger(ctx).Debugf("Non-success response for snapshot group creation, retrying with retry count: %d", i)
+			if i == s.maxRetries {
+				return backoff.Permanent(getResponseErr)
+			}
+			i++
+			return getResponseErr
+		}
+
+		return nil
+	}, bo); err != nil {
+		log.CtxLogger(ctx).Debugf("Failed to wait for snapshot group creation after %d retries", s.maxRetries)
+		return fmt.Errorf("failed to wait for snapshot group creation, err: %w", err)
 	}
-	backoffWithMaxRetries := backoff.WithMaxRetries(bo, uint64(s.maxRetries-1))
-	return backoff.Retry(operation, backoffWithMaxRetries)
+	return nil
 }
 
 // ListSnapshotsFromSG lists snapshots for a given snapshot group.
@@ -539,32 +545,29 @@ func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error 
 		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
 	}
 
-	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     s.backoff.InitialInterval,
-		RandomizationFactor: s.backoff.RandomizationFactor,
-		Multiplier:          s.backoff.Multiplier,
-		MaxInterval:         s.backoff.MaxInterval,
-		MaxElapsedTime:      s.backoff.MaxElapsedTime,
-		Clock:               backoff.SystemClock,
-	}
+	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
 	bo.Reset()
 
-	var i int
+	var i uint64
 	var bodyBytes []byte
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
 	if err := backoff.Retry(func() error {
 		var getResponseErr error
 		bodyBytes, getResponseErr = s.GetResponse(ctx, "DELETE", s.baseURL, nil)
 		if getResponseErr != nil {
-			i++
+			log.CtxLogger(ctx).Debugf("Non-success response for snapshot group deletion, retrying with retry count: %d", i)
 			if i == s.maxRetries {
 				return backoff.Permanent(getResponseErr)
 			}
+			i++
 			return getResponseErr
 		}
 
 		return nil
 	}, bo); err != nil {
 		s.baseURL = ""
+		log.CtxLogger(ctx).Debugf("Failed to initiate deletion of Snapshot Group after %d retries", s.maxRetries)
 		return fmt.Errorf("failed to initiate deletion of Snapshot Group, err: %w", err)
 	}
 	s.baseURL = ""
@@ -582,15 +585,21 @@ func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error 
 
 	bo.Reset()
 	i = 0
-	return backoff.Retry(func() error {
-		if err := s.sgExists(ctx, op.SelfLink); err != nil {
-			i++
+	// Retry with constant backoff, 20 seconds between retries, for up to 180 times (1 hour).
+	if err := backoff.Retry(func() error {
+		if sgExistsErr := s.sgExists(ctx, op.SelfLink); sgExistsErr != nil {
+			log.CtxLogger(ctx).Debugf("Non-success response for snapshot group deletion, retrying with retry count: %d", i)
 			if i == s.maxRetries {
-				return backoff.Permanent(s.sgExists(ctx, op.SelfLink))
+				return backoff.Permanent(sgExistsErr)
 			}
-			return err
+			i++
+			return sgExistsErr
 		}
 
 		return nil
-	}, bo)
+	}, bo); err != nil {
+		log.CtxLogger(ctx).Debugf("Failed to delete Snapshot Group after %d retries", s.maxRetries)
+		return fmt.Errorf("failed to delete Snapshot Group, err: %w", err)
+	}
+	return nil
 }

@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/compute/v1"
@@ -117,27 +116,8 @@ func TestNewService(t *testing.T) {
 	if s.rest == nil {
 		t.Error("NewService() did not initialize rest client")
 	}
-	if s.backoff == nil {
-		t.Error("NewService() did not initialize backoff")
-	}
 	if s.maxRetries == 0 {
 		t.Error("NewService() did not initialize maxRetries")
-	}
-}
-
-func TestSetupBackoff(t *testing.T) {
-	var b backoff.BackOff
-	b = &backoff.ExponentialBackOff{
-		InitialInterval:     2 * time.Second,
-		RandomizationFactor: 0,
-		Multiplier:          2,
-		MaxInterval:         1 * time.Hour,
-		MaxElapsedTime:      30 * time.Minute,
-		Clock:               backoff.SystemClock,
-	}
-	gotB := setupBackoff()
-	if diff := cmp.Diff(b, gotB, cmpopts.IgnoreUnexported(backoff.ExponentialBackOff{})); diff != "" {
-		t.Errorf("setupBackoff() returned diff (-want +got):\n%s", diff)
 	}
 }
 
@@ -214,6 +194,8 @@ func TestGetResponse(t *testing.T) {
 			sgService.NewService() // Initialize with default backoff and retries
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
 			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
+			sgService.maxRetries = 1
+			sgService.retryInterval = 1 * time.Second
 
 			body, err := sgService.GetResponse(ctx, test.method, test.url, test.data)
 
@@ -312,6 +294,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			sgService := &SGService{}
 			sgService.NewService()
 			sgService.maxRetries = 1
+			sgService.retryInterval = 1 * time.Second
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
 			sgService.rest.TokenGetter = defaultTokenGetterMock(test.tokenGetterErr)
 
@@ -595,6 +578,7 @@ func TestCreateSG(t *testing.T) {
 			sgService := &SGService{}
 			sgService.NewService()
 			sgService.maxRetries = 1
+			sgService.retryInterval = 1 * time.Second
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
 			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
 
@@ -848,7 +832,6 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 		project       string
 		sgName        string
 		httpResponses map[string]map[string][]httpResponse
-		maxRetries    int
 		expectedError bool
 	}{
 		{
@@ -861,7 +844,6 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 					{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`},
 				}},
 			},
-			maxRetries: 3,
 		},
 		{
 			name:    "RetryExhausted",
@@ -874,7 +856,6 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
 				}},
 			},
-			maxRetries:    3,
 			expectedError: true,
 		},
 	}
@@ -886,10 +867,9 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 			sgService.NewService()
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
 			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
-			sgService.maxRetries = test.maxRetries
+			sgService.maxRetries = 1
+			sgService.retryInterval = 1 * time.Second
 			// Use a fast backoff for testing
-			sgService.backoff.InitialInterval = 1 * time.Millisecond
-			sgService.backoff.MaxElapsedTime = 100 * time.Millisecond
 
 			err := sgService.WaitForSGCreationWithRetry(ctx, test.project, test.sgName)
 
@@ -1035,9 +1015,8 @@ func TestDeleteSG(t *testing.T) {
 			sgService.NewService()
 			sgService.rest.HTTPClient = &mockHTTPClient{responses: test.httpResponses}
 			sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
-			sgService.maxRetries = 2
-			sgService.backoff.InitialInterval = 1 * time.Millisecond
-			sgService.backoff.MaxElapsedTime = 100 * time.Millisecond
+			sgService.maxRetries = 1
+			sgService.retryInterval = 1 * time.Second
 
 			err := sgService.DeleteSG(ctx, test.project, test.sgName)
 
