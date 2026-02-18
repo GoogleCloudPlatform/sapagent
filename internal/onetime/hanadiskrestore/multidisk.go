@@ -457,7 +457,7 @@ func truncateName(ctx context.Context, diskName, suffix string) (string, error) 
 // scaleout or non-scaleout(striped).
 func (r *Restorer) multiDisksAttachedToInstance(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (bool, error) {
 	var err error
-	if r.isScaleout, err = hanabackup.CheckTopology(ctx, exec, r.Sid, false); err != nil {
+	if r.isScaleout, err = hanabackup.CheckTopology(ctx, exec, r.Sid, false, ""); err != nil {
 		return false, fmt.Errorf("failed to check topology: %w", err)
 	} else if r.isScaleout {
 		if len(r.SourceDisks) == 0 {

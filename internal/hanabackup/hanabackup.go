@@ -376,10 +376,14 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 
 // CheckTopology checks if topology of the system this instance belongs to is scaleout or not.
 // If it is scaleout, it returns true, otherwise false.
-func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID string, isSidadmUser bool) (bool, error) {
-	instanceNumber, err := getInstanceNumber(ctx, exec, SID)
-	if err != nil {
-		return false, err
+func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID string, isSidadmUser bool, instanceNumber string) (bool, error) {
+	var err error
+	if instanceNumber == "" {
+		log.CtxLogger(ctx).Debugw("Instance number not provided, fetching it using grep.")
+		instanceNumber, err = getInstanceNumber(ctx, exec, SID)
+		if err != nil {
+			return false, err
+		}
 	}
 	var cmd commandlineexecutor.Params
 	if isSidadmUser {

@@ -790,12 +790,13 @@ func TestReadDataDirMountPath(t *testing.T) {
 
 func TestCheckTopology(t *testing.T) {
 	tests := []struct {
-		name         string
-		exec         commandlineexecutor.Execute
-		SID          string
-		isSidadmUser bool
-		want         bool
-		wantErr      error
+		name           string
+		exec           commandlineexecutor.Execute
+		sid            string
+		isSidadmUser   bool
+		instanceNumber string
+		want           bool
+		wantErr        error
 	}{
 		{
 			name: "InstanceNotFound",
@@ -807,7 +808,7 @@ func TestCheckTopology(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			SID:     "SID",
+			sid:     "SID",
 			want:    false,
 			wantErr: cmpopts.AnyError,
 		},
@@ -829,9 +830,10 @@ func TestCheckTopology(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			SID:     "SID",
-			want:    false,
-			wantErr: cmpopts.AnyError,
+			sid:            "SID",
+			instanceNumber: "00",
+			want:           false,
+			wantErr:        cmpopts.AnyError,
 		},
 		{
 			name: "NoSAPInstancesFound",
@@ -854,7 +856,7 @@ func TestCheckTopology(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			SID:     "SID",
+			sid:     "SID",
 			want:    false,
 			wantErr: cmpopts.AnyError,
 		},
@@ -883,7 +885,7 @@ func TestCheckTopology(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			SID:     "SID",
+			sid:     "SID",
 			want:    true,
 			wantErr: nil,
 		},
@@ -912,7 +914,7 @@ func TestCheckTopology(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			SID:     "SID",
+			sid:     "SID",
 			want:    false,
 			wantErr: nil,
 		},
@@ -921,12 +923,12 @@ func TestCheckTopology(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := CheckTopology(ctx, tc.exec, tc.SID, tc.isSidadmUser)
+			got, err := CheckTopology(ctx, tc.exec, tc.sid, tc.isSidadmUser, tc.instanceNumber)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.SID, err, tc.wantErr)
+				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.sid, err, tc.wantErr)
 			}
 			if got != tc.want {
-				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.SID, got, tc.want)
+				t.Errorf("CheckTopology(%v, %q) = %v, want: %v", tc.exec, tc.sid, got, tc.want)
 			}
 		})
 	}

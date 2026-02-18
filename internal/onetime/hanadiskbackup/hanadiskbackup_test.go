@@ -283,6 +283,13 @@ func TestCompareVersions(t *testing.T) {
 			want:    false,
 			wantErr: true,
 		},
+		{
+			name:    "v1 less than v2 minor with double digits",
+			v1:      "3.10",
+			v2:      "3.11",
+			want:    true,
+			wantErr: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -318,6 +325,34 @@ func TestValidateDisks(t *testing.T) {
 			},
 			wantMessage: "ERROR: Failed to check if topology is scaleout or scaleup",
 			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupWithInvalidPort",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disk:      "disk-name-1",
+				Sid:       "SID",
+				Port:      "123",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   scaleupTopology,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
 		},
 		{
 			name: "ScaleoutNoDisks",
@@ -1171,6 +1206,52 @@ func TestValidateScaleupDisks(t *testing.T) {
 		wantMessage string
 		wantStatus  subcommands.ExitStatus
 	}{
+		{
+			name: "ScaleupWithPort",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disk:      "disk-name-1",
+				Sid:       "SID",
+				Port:      "30113",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{StdErr: "should not call grep", ExitCode: 1, Error: errors.New("grep should not be called")}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   scaleupTopology,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
+		{
+			name: "ScaleupWithInstanceID",
+			s: &Snapshot{
+				oteLogger:  defaultOTELogger,
+				Disk:       "disk-name-1",
+				Sid:        "SID",
+				InstanceID: "02",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{StdErr: "should not call grep", ExitCode: 1, Error: errors.New("grep should not be called")}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   scaleupTopology,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "",
+			wantStatus:  subcommands.ExitSuccess,
+		},
 		{
 			name: "ScaleupNonStripedDiskProvided",
 			s: &Snapshot{

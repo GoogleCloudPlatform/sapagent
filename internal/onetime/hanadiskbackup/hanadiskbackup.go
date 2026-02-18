@@ -260,9 +260,9 @@ func (*Snapshot) Usage() string {
 
 // SetFlags implements the subcommand interface for hanadiskbackup.
 func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
-	fs.StringVar(&s.Port, "port", "", "HANA port. (optional - Either port or instance-id must be provided)")
+	fs.StringVar(&s.Port, "port", "", "HANA port. (optional - Either port or instance-id must be provided, if hdbuserstore-key is not provided)")
 	fs.StringVar(&s.Sid, "sid", "", "HANA sid. (required)")
-	fs.StringVar(&s.InstanceID, "instance-id", "", "HANA instance ID. (optional - Either port or instance-id must be provided)")
+	fs.StringVar(&s.InstanceID, "instance-id", "", "HANA instance ID. (optional - Either port or instance-id must be provided, if hdbuserstore-key is not provided)")
 	fs.StringVar(&s.HanaDBUser, "hana-db-user", "", "HANA DB Username. (optional) when hdbuserstore-key is passed, required for other modes of authentication")
 	fs.StringVar(&s.Password, "password", "", "HANA password. (discouraged - use password-secret or hdbuserstore-key instead)")
 	fs.StringVar(&s.PasswordSecret, "password-secret", "", "Secret Manager secret name that holds HANA password. (optional - either password-secret or hdbuserstore-key must be provided)")
@@ -464,7 +464,19 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 func (s *Snapshot) validateDisks(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	var isScaleout bool
 	var err error
-	if isScaleout, err = hanabackup.CheckTopology(ctx, exec, s.Sid, s.sidadmUser); err != nil {
+	var instanceNumber string
+	if s.InstanceID != "" {
+		instanceNumber = s.InstanceID
+	} else if s.Port != "" {
+		// Port is of type 30013, where 00 is the instance number.
+		if len(s.Port) < 5 {
+			log.CtxLogger(ctx).Warnw("Failed to extract instance number from port, expected a 5 digit number", "port", s.Port)
+		} else {
+			instanceNumber = s.Port[1:3]
+		}
+	}
+
+	if isScaleout, err = hanabackup.CheckTopology(ctx, exec, s.Sid, s.sidadmUser, instanceNumber); err != nil {
 		errMessage := "ERROR: Failed to check if topology is scaleout or scaleup"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
