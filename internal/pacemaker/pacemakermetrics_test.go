@@ -3117,7 +3117,7 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 					},
 				},
 				Clone{
-					ID: "SAPHana",
+					ID: "SAPHanaController",
 					Attributes: ClusterPropertySet{
 						NVPairs: []NVPair{
 							NVPair{Name: "notify", Value: "true"},
@@ -3128,7 +3128,7 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 					},
 					Primitives: []PrimitiveClass{
 						PrimitiveClass{
-							ClassType: "SAPHana",
+							ClassType: "SAPHanaController",
 							InstanceAttributes: ClusterPropertySet{
 								NVPairs: []NVPair{
 									NVPair{Name: "AUTOMATED_REGISTER", Value: "true"},

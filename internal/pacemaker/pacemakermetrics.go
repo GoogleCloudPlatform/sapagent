@@ -1036,7 +1036,7 @@ func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone
 	var metaAttrs []NVPair
 	for _, clone := range cloneResources {
 		for _, p := range clone.Primitives {
-			if p.ClassType == "SAPHana" {
+			if p.ClassType == "SAPHana" || p.ClassType == "SAPHanaController" {
 				instanceAttrs = p.InstanceAttributes.NVPairs
 				// For RHEL, the meta attributes exist within the <primitive> tag.
 				// For SLES, the meta attributes exist at the same level as the <primitive> tag.
