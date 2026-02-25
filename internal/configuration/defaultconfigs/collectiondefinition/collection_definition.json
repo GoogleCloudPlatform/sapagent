@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 34,
+    "version": 35,
     "validation_system": {
       "system_metrics": [
         {
@@ -738,18 +738,32 @@
             "type": "workload.googleapis.com/sap/validation/hana",
             "label": "ha_sr_hook_configured"
           },
-          "and_eval_rules": {
-            "eval_rules": [
+          "or_eval_rules": {
+            "or_eval_rules": [
               {
-                "output_starts_with": "[ha_dr_provider_SAPHanaSR]"
+                "eval_rules": [
+                  {
+                    "output_starts_with": "[ha_dr_provider_SAPHanaSR]"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "yes"
+                }
+              },
+              {
+                "eval_rules": [
+                  {
+                    "output_starts_with": "[ha_dr_provider_susHanaSR]"
+                  }
+                ],
+                "if_true": {
+                  "value_from_literal": "yes"
+                },
+                "if_false": {
+                  "value_from_literal": "no"
+                }
               }
-            ],
-            "if_true": {
-              "value_from_literal": "yes"
-            },
-            "if_false": {
-              "value_from_literal": "no"
-            }
+            ]
           }
         },
         {
