@@ -74,7 +74,7 @@ const (
 	
 
 	// AgentVersion is the version of the agent.
-	AgentVersion = `3.11`
+	AgentVersion = `3.12`
 	
 
 	// LinuxConfigPath is the default path to agent configuration file on linux.
