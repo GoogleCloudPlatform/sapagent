@@ -235,11 +235,12 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
 	return map[string]string{
-		"fence_agent":          "fence_gce",
-		"pcmk_delay_max":       "test-instance-name=45",
-		"pcmk_delay_base":      "",
-		"pcmk_monitor_retries": "5",
-		"pcmk_reboot_timeout":  "200",
+		"fence_agent":              "fence_gce",
+		"pcmk_delay_max":           "test-instance-name=45",
+		"pcmk_delay_base":          "",
+		"pcmk_monitor_retries":     "5",
+		"pcmk_reboot_timeout":      "200",
+		"saphanasr_angi_installed": "false",
 	}
 }
 
@@ -259,6 +260,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ascs_instance":                     "",
 		"ers_instance":                      "",
 		"enqueue_server":                    "",
+		"saphanacontroller_ra_configured":   "false",
 		"saphana_automated_register":        "",
 		"saphana_duplicate_primary_timeout": "",
 		"saphana_prefer_site_takeover":      "",
@@ -336,6 +338,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ascs_instance":                      "",
 		"ers_instance":                       "",
 		"enqueue_server":                     "",
+		"saphanacontroller_ra_configured":    "true",
 		"saphana_automated_register":         "true",
 		"saphana_duplicate_primary_timeout":  "7200",
 		"saphana_prefer_site_takeover":       "true",
@@ -377,6 +380,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"ers_ilb_monitor_timeout":            "",
 		"has_alias_ip":                       "false",
 		"cluster_healthy":                    "true",
+		"saphanasr_angi_installed":           "true",
 	}
 }
 
@@ -426,6 +430,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"op_timeout":                         "600",
 		"stonith_enabled":                    "true",
 		"stonith_timeout":                    "300",
+		"saphanacontroller_ra_configured":    "false",
 		"saphana_automated_register":         "true",
 		"saphana_duplicate_primary_timeout":  "7200",
 		"saphana_prefer_site_takeover":       "true",
@@ -472,6 +477,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ascs_instance":                     "",
 		"ers_instance":                      "",
 		"enqueue_server":                    "",
+		"saphanacontroller_ra_configured":   "false",
 		"saphana_automated_register":        "",
 		"saphana_duplicate_primary_timeout": "",
 		"saphana_prefer_site_takeover":      "",
@@ -1510,8 +1516,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
-
+		name                string
+		osVendorID          string
 		exec                commandlineexecutor.Execute
 		exists              commandlineexecutor.Exists
 		config              *cnfpb.Configuration
@@ -1525,6 +1531,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 	}{
 		{
 			name:                "XMLNotFound",
+			osVendorID:          "rhel",
 			exec:                defaultExec,
 			exists:              func(string) bool { return false },
 			config:              defaultConfiguration,
@@ -1533,7 +1540,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerLabels: wantErrorPacemakerMetrics,
 		},
 		{
-			name: "UnparseableXML",
+			name:       "UnparseableXML",
+			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: "Error: Bad XML",
@@ -1547,8 +1555,12 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerLabels: wantErrorPacemakerMetrics,
 		},
 		{
-			name: "ServiceAccountReadError",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			name:       "ServiceAccountReadError",
+			osVendorID: "sles",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "rpm" {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
 					StdErr: "",
@@ -1562,7 +1574,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerLabels: wantServiceAccountErrorPacemakerMetrics,
 		},
 		{
-			name: "ServiceAccountReadSuccess",
+			name:       "ServiceAccountReadSuccess",
+			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerServiceAccountXML,
@@ -1579,13 +1592,17 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "false",
 		},
 		{
-			name: "CustomWorkloadConfig",
+			name:       "CustomWorkloadConfig",
+			osVendorID: "sles",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "cibadmin" {
 					return commandlineexecutor.Result{
 						StdOut: pacemakerServiceAccountXML,
 						StdErr: "",
 					}
+				}
+				if params.Executable == "rpm" {
+					return commandlineexecutor.Result{}
 				}
 				return commandlineexecutor.Result{
 					StdOut: "foobar",
@@ -1613,7 +1630,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 								Type:  "workload.googleapis.com/sap/validation/corosync",
 								Label: "foo",
 							},
-							OsVendor: cmpb.OSVendor_RHEL,
+							OsVendor: cmpb.OSVendor_SLES,
 							EvalRuleTypes: &cmpb.OSCommandMetric_AndEvalRules{
 								AndEvalRules: &cmpb.EvalMetricRule{
 									EvalRules: []*cmpb.EvalRule{
@@ -1644,7 +1661,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "false",
 		},
 		{
-			name: "ProjectID",
+			name:       "ProjectID",
+			osVendorID: "rhel",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "curl" {
 					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
@@ -1652,7 +1670,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 							StdOut: jsonHealthyResponse,
 							StdErr: "",
 						}
-					} else if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
+					}
+					if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
 						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
 						return commandlineexecutor.Result{
 							StdOut: jsonHealthyResponse,
@@ -1675,8 +1694,12 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "false",
 		},
 		{
-			name: "LocationPref",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			name:       "LocationPref",
+			osVendorID: "sles",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "rpm" {
+					return commandlineexecutor.Result{}
+				}
 				return commandlineexecutor.Result{
 					StdOut: pacemakerClipReferXML,
 					StdErr: "",
@@ -1692,7 +1715,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "true",
 		},
 		{
-			name: "CloneMetrics",
+			name:       "CloneMetrics",
+			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
@@ -1723,7 +1747,8 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "false",
 		},
 		{
-			name: "NilCloudProperties",
+			name:       "NilCloudProperties",
+			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
@@ -1759,7 +1784,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 				DefaultTokenGetter:    test.tokenGetter,
 				JSONCredentialsGetter: test.credGetter,
 				WorkloadConfig:        test.workloadConfig,
-				OSVendorID:            "rhel",
+				OSVendorID:            test.osVendorID,
 			}
 			val, got := CollectPacemakerMetrics(context.Background(), p)
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
@@ -1774,10 +1799,10 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 
 func TestFilterPrimitiveOpsByType(t *testing.T) {
 	tests := []struct {
-		name          string
-		primitives    []PrimitiveClass
-		primitiveType string
-		want          []Op
+		name           string
+		primitives     []PrimitiveClass
+		primitiveTypes []string
+		want           []Op
 	}{
 		{
 			name: "TestFilterPrimitiveOpsByTypeNoMatches",
@@ -1789,8 +1814,8 @@ func TestFilterPrimitiveOpsByType(t *testing.T) {
 					},
 				},
 			},
-			primitiveType: "TestMatch",
-			want:          []Op{},
+			primitiveTypes: []string{"TestMatch"},
+			want:           nil,
 		},
 		{
 			name: "TestFilterPrimitiveOpsByTypeSomeMatches",
@@ -1809,7 +1834,7 @@ func TestFilterPrimitiveOpsByType(t *testing.T) {
 					},
 				},
 			},
-			primitiveType: "TestMatch",
+			primitiveTypes: []string{"TestNoMatch", "TestMatch"},
 			want: []Op{
 				{ID: "1", Interval: "2", Timeout: "3", Name: "4"},
 				{ID: "5", Interval: "6", Timeout: "7", Name: "8"},
@@ -1819,7 +1844,7 @@ func TestFilterPrimitiveOpsByType(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := filterPrimitiveOpsByType(test.primitives, test.primitiveType)
+			got := filterPrimitiveOpsByType(test.primitives, test.primitiveTypes)
 
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("filterPrimitiveOpsByType() returned unexpected diff (-want +got):\n%s", diff)
@@ -3035,6 +3060,7 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 				},
 			},
 			want: map[string]string{
+				"saphanacontroller_ra_configured":   "false",
 				"saphana_automated_register":        "",
 				"saphana_duplicate_primary_timeout": "",
 				"saphana_prefer_site_takeover":      "",
@@ -3088,6 +3114,7 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 				},
 			},
 			want: map[string]string{
+				"saphanacontroller_ra_configured":   "false",
 				"saphana_automated_register":        "true",
 				"saphana_duplicate_primary_timeout": "7200",
 				"saphana_prefer_site_takeover":      "true",
@@ -3129,6 +3156,8 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 					Primitives: []PrimitiveClass{
 						PrimitiveClass{
 							ClassType: "SAPHanaController",
+							Provider:  "suse",
+							Class:     "ocf",
 							InstanceAttributes: ClusterPropertySet{
 								NVPairs: []NVPair{
 									NVPair{Name: "AUTOMATED_REGISTER", Value: "true"},
@@ -3141,6 +3170,7 @@ func TestSetPacemakerHANACloneAttrs(t *testing.T) {
 				},
 			},
 			want: map[string]string{
+				"saphanacontroller_ra_configured":   "true",
 				"saphana_automated_register":        "true",
 				"saphana_duplicate_primary_timeout": "7200",
 				"saphana_prefer_site_takeover":      "true",

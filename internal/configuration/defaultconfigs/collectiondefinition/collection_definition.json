@@ -1,6 +1,6 @@
 {
   "workload_validation": {
-    "version": 35,
+    "version": 36,
     "validation_system": {
       "system_metrics": [
         {
@@ -769,6 +769,25 @@
         {
           "metric_info": {
             "type": "workload.googleapis.com/sap/validation/hana",
+            "label": "saphana_profile_has_angi_hook"
+          },
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_starts_with": "[ha_dr_provider_susHanaSR]"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        },
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/hana",
             "label": "chksrv_hook_configured"
           },
           "or_eval_rules": {
@@ -1340,6 +1359,14 @@
               "min_version": "3.8"
             },
             "value": "CLUSTER_HEALTHY"
+          },
+          {
+            "metric_info": {
+              "type": "workload.googleapis.com/sap/validation/pacemaker",
+              "label": "saphanacontroller_ra_configured",
+              "min_version": "3.12"
+            },
+            "value": "SAPHANACONTROLLER_RA_CONFIGURED"
           }
         ],
         "rsc_location_metrics": [
@@ -1730,7 +1757,31 @@
           "value": "STONITH_TIMEOUT"
         }
       ],
-      "os_command_metrics": []
+      "os_command_metrics": [
+        {
+          "metric_info": {
+            "type": "workload.googleapis.com/sap/validation/pacemaker",
+            "label": "saphanasr_angi_installed"
+          },
+          "os_vendor": "SLES",
+          "command": "rpm",
+          "args": ["-q", "SAPHanaSR-angi"],
+          "and_eval_rules": {
+            "eval_rules": [
+              {
+                "output_source": "EXIT_CODE",
+                "output_equals": "0"
+              }
+            ],
+            "if_true": {
+              "value_from_literal": "true"
+            },
+            "if_false": {
+              "value_from_literal": "false"
+            }
+          }
+        }
+      ]
     },
     "validation_custom": {
       "os_command_metrics": []

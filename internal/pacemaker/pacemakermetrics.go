@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -132,6 +133,7 @@ func CollectPacemakerMetrics(ctx context.Context, params Parameters) (float64, m
 		"op_timeout":                         true,
 		"stonith_enabled":                    true,
 		"stonith_timeout":                    true,
+		"saphanacontroller_ra_configured":    true,
 		"saphana_automated_register":         true,
 		"saphana_duplicate_primary_timeout":  true,
 		"saphana_prefer_site_takeover":       true,
@@ -268,12 +270,12 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 		clonePrimitives = append(clonePrimitives, cloneResource.Primitives...)
 	}
 
-	// This will get metrics for the <primitive> with type=SAPHana.
-	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(clonePrimitives, "SAPHana"))
+	// This will get metrics for the <primitive> with type=SAPHana or type=SAPHanaController.
+	setPacemakerHanaOperations(labels, filterPrimitiveOpsByType(clonePrimitives, []string{"SAPHana", "SAPHanaController"}))
 	setPacemakerHANACloneAttrs(labels, cloneResources)
 
 	// This will get metrics for the <primitive> with type=SAPHanaTopology.
-	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(clonePrimitives, "SAPHanaTopology"))
+	pacemakerHanaTopology(labels, filterPrimitiveOpsByType(clonePrimitives, []string{"SAPHanaTopology"}))
 	setPacemakerHANATopologyCloneAttrs(labels, cloneResources)
 
 	setPacemakerAPIAccess(ctx, labels, projectID, bearerToken, params.Execute)
@@ -307,11 +309,11 @@ func clusterNodes(nodes []CIBNode) []string {
 }
 
 // filterPrimitiveOpsByType returns a list of Op objects from a list of PrimitiveClass objects
-// that match the given primitive type.
-func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveType string) []Op {
-	ops := []Op{}
+// that match the given primitive type(s).
+func filterPrimitiveOpsByType(primitives []PrimitiveClass, primitiveTypes []string) []Op {
+	var ops []Op
 	for _, primitive := range primitives {
-		if primitive.ClassType == primitiveType {
+		if slices.Contains(primitiveTypes, primitive.ClassType) {
 			ops = append(ops, primitive.Operations...)
 		}
 	}
@@ -1013,6 +1015,7 @@ func setPacemakerStonithClusterProperty(labels map[string]string, cps []ClusterP
 }
 
 func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone) {
+	labels["saphanacontroller_ra_configured"] = "false"
 	labels["saphana_automated_register"] = ""
 	labels["saphana_duplicate_primary_timeout"] = ""
 	labels["saphana_prefer_site_takeover"] = ""
@@ -1036,6 +1039,9 @@ func setPacemakerHANACloneAttrs(labels map[string]string, cloneResources []Clone
 	var metaAttrs []NVPair
 	for _, clone := range cloneResources {
 		for _, p := range clone.Primitives {
+			if p.ClassType == "SAPHanaController" && p.Provider == "suse" && p.Class == "ocf" {
+				labels["saphanacontroller_ra_configured"] = "true"
+			}
 			if p.ClassType == "SAPHana" || p.ClassType == "SAPHanaController" {
 				instanceAttrs = p.InstanceAttributes.NVPairs
 				// For RHEL, the meta attributes exist within the <primitive> tag.

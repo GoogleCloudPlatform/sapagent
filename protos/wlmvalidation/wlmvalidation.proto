@@ -102,6 +102,7 @@ enum PrimitiveVariable {
   ILB_MONITOR_TIMEOUT = 17;
   HAS_ALIAS_IP = 18;
   CLUSTER_HEALTHY = 19;
+  SAPHANACONTROLLER_RA_CONFIGURED = 20;
 }
 
 enum RSCLocationVariable {

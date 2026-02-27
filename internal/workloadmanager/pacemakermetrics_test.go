@@ -150,6 +150,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"op_timeout":                         "600",
 					"stonith_enabled":                    "true",
 					"stonith_timeout":                    "300",
+					"saphanacontroller_ra_configured":    "false",
 					"saphana_automated_register":         "true",
 					"saphana_duplicate_primary_timeout":  "7200",
 					"saphana_prefer_site_takeover":       "true",
@@ -173,6 +174,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"ers_ilb_monitor_timeout":            "60",
 					"has_alias_ip":                       "false",
 					"cluster_healthy":                    "true",
+					"saphanasr_angi_installed":           "true",
 				},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
@@ -209,6 +211,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 	tests := []struct {
 		name                 string
 		exec                 commandlineexecutor.Execute
+		osVendorID           string
 		wantPacemakerExists  float64
 		wantPacemakerMetrics func(*timestamppb.Timestamp, float64, string) WorkloadMetrics
 	}{
@@ -217,16 +220,21 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{} // Empty Pacemaker XML
 			},
+			osVendorID:           "rhel",
 			wantPacemakerExists:  float64(0.0),
 			wantPacemakerMetrics: wantErrorPacemakerMetrics,
 		},
 		{
 			name: "CollectPacemakerMetricsSuccess",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "rpm" {
+					return commandlineexecutor.Result{}
+				}
 				return commandlineexecutor.Result{
 					StdOut: pacemakerCloneXML,
 				}
 			},
+			osVendorID:           "sles",
 			wantPacemakerExists:  float64(1.0),
 			wantPacemakerMetrics: wantDefaultPacemakerMetrics,
 		},
@@ -253,7 +261,7 @@ func TestCollectPacemakerMetricsFromConfig(t *testing.T) {
 				JSONCredentialsGetter: defaultCredGetter,
 				WorkloadConfig:        collectionDefinition.GetWorkloadValidation(),
 				OSType:                "linux",
-				osVendorID:            "rhel",
+				osVendorID:            test.osVendorID,
 			}
 			got := CollectPacemakerMetricsFromConfig(context.Background(), p)
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {

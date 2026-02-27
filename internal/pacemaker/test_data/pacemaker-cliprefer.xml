@@ -134,7 +134,7 @@ limitations under the License.
           <nvpair name="target-role" value="Started" id="msl_SAPHana_HAS_HDB00-meta_attributes-target-role"/>
           <nvpair name="interleave" value="true" id="msl_SAPHana_HAS_HDB00-meta_attributes-interleave"/>
         </meta_attributes>
-        <primitive id="rsc_SAPHana_HAS_HDB00" class="ocf" provider="suse" type="SAPHana">
+        <primitive id="rsc_SAPHana_HAS_HDB00" class="ocf" provider="suse" type="SAPHanaController">
           <operations id="rsc_sap_HAS_HDB00-operations">
             <op name="start" interval="0" timeout="3600" id="rsc_sap_HAS_HDB00-operations-start-0"/>
             <op name="stop" interval="0" timeout="3600" id="rsc_sap_HAS_HDB00-operations-stop-0"/>
