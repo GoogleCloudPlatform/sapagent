@@ -191,6 +191,14 @@ num_completion_queues = 12
 num_submit_queues = 12
 
 [ha_dr_provider_SAPHanaSR]
+provider = SAPHanaSR
+path = /hana/shared/myHooks
+execution_order = 1
+
+[ha_dr_provider_susHanaSR]
+provider = susHanaSR
+path = /usr/share/SAPHanaSR-angi
+execution_order = 1
 
 [ha_dr_provider_chksrv]
 provider = ChkSrv
@@ -1073,6 +1081,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":                             "",
 				"fast_restart":                              "disabled",
 				"ha_sr_hook_configured":                     "no",
+				"saphana_profile_has_angi_hook":             "false",
 				"chksrv_hook_configured":                    "false",
 				"chksrv_provider_configured":                "false",
 				"chksrv_action_on_lost":                     "",
@@ -1202,6 +1211,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"disk_log_type":                             "default-disk-type",
 				"fast_restart":                              "enabled",
 				"ha_sr_hook_configured":                     "yes",
+				"saphana_profile_has_angi_hook":             "true",
 				"chksrv_hook_configured":                    "true",
 				"chksrv_provider_configured":                "true",
 				"chksrv_action_on_lost":                     "stop",
