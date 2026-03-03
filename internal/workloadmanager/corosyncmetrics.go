@@ -38,7 +38,8 @@ func CollectCorosyncMetricsFromConfig(ctx context.Context, params Parameters, pa
 	}
 
 	corosync := params.WorkloadConfig.GetValidationCorosync()
-	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), corosync.GetConfigPath(), corosync.GetConfigMetrics()) {
+	ignoreCase := false
+	for k, v := range configurablemetrics.CollectEvalMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), corosync.GetConfigPath(), corosync.GetConfigMetrics(), ignoreCase) {
 		l[k] = v
 	}
 	for _, m := range corosync.GetOsCommandMetrics() {

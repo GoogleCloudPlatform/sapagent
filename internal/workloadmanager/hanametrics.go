@@ -114,12 +114,16 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		return WorkloadMetrics{Metrics: createTimeSeries(sapValidationHANA, l, hanaVal, params.Config)}
 	}
 
+	// Per b/484848209, SAP HANA configuration files are case-insensitive for
+	// section headers and field labels, but not field values.
+	// As a follow-up, b/488401875 to explore metrics affected by this change.
+	ignoreCase := true
 	hana := params.WorkloadConfig.GetValidationHana()
-	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), globalINIFilePath, hana.GetGlobalIniMetrics()) {
+	for k, v := range configurablemetrics.CollectEvalMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), globalINIFilePath, hana.GetGlobalIniMetrics(), ignoreCase) {
 		l[k] = v
 	}
 	indexserverINIFilePath := hanaSystemConfigDir + "/indexserver.ini"
-	for k, v := range configurablemetrics.CollectMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), indexserverINIFilePath, hana.GetIndexserverIniMetrics()) {
+	for k, v := range configurablemetrics.CollectEvalMetricsFromFile(ctx, configurablemetrics.FileReader(params.ConfigFileReader), indexserverINIFilePath, hana.GetIndexserverIniMetrics(), ignoreCase) {
 		l[k] = v
 	}
 	for _, m := range hana.GetOsCommandMetrics() {

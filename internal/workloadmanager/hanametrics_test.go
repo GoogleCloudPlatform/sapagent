@@ -200,8 +200,8 @@ provider = susHanaSR
 path = /usr/share/SAPHanaSR-angi
 execution_order = 1
 
-[ha_dr_provider_chksrv]
-provider = ChkSrv
+[ha_dr_provider_ChkSrv]
+PROVIDER = ChkSrv
 path = /usr/share/SAPHanaSR/srHook
 execution_order = 2
 action_on_lost = stop
