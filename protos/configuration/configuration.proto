@@ -47,6 +47,14 @@ message Configuration {
   UAPConfiguration uap_configuration = 12;
   GCBDRConfiguration gcbdr_configuration = 13;
   PubSubActions pub_sub_actions = 14;
+  ParameterManagerConfig parameter_manager_config = 15;
+}
+
+message ParameterManagerConfig {
+  string project = 1;
+  string location = 2;
+  string parameter_name = 3;
+  string parameter_version = 4;
 }
 
 message CollectionConfiguration {

@@ -18,6 +18,7 @@ limitations under the License.
 package configuration
 
 import (
+	"context"
 	_ "embed" // Enable file embedding, see also http://go/go-embed.
 	"errors"
 	"fmt"
@@ -29,9 +30,12 @@ import (
 
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 
 	dpb "google.golang.org/protobuf/types/known/durationpb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
@@ -50,7 +54,10 @@ type StatFile func(string) (os.FileInfo, error)
 // MkdirAll abstracts os.MkdirAll function for testability.
 type MkdirAll func(string, os.FileMode) error
 
-var ros = runtime.GOOS
+var (
+	ros            = runtime.GOOS
+	fetchParameter = parametermanager.FetchParameter
+)
 
 //go:embed defaultconfigs/configuration.json
 var defaultConfigurationContent []byte
@@ -132,10 +139,26 @@ func Write(config *cpb.Configuration, path string, write WriteConfigFile) error 
 	return write(path, content, 0644)
 }
 
+func mergePMConfig(ctx context.Context, pmClient *parametermanager.Client, config *cpb.Configuration) (*cpb.Configuration, string, error) {
+	pmConfig := config.GetParameterManagerConfig()
+	log.Logger.Info("Parameter manager config found, attempting to fetch remote config")
+	resource, err := fetchParameter(ctx, pmClient, pmConfig.GetProject(), pmConfig.GetLocation(), pmConfig.GetParameterName(), pmConfig.GetParameterVersion())
+	if err != nil {
+		return nil, "", err
+	}
+	remoteConfig := &cpb.Configuration{}
+	if err := protojson.Unmarshal([]byte(resource.Data), remoteConfig); err != nil {
+		return nil, "", err
+	}
+	proto.Merge(remoteConfig, config)
+	log.Logger.Info("Configuration successfully merged with Parameter Manager payload")
+	return remoteConfig, resource.Version, nil
+}
+
 // ReadFromFile reads the final configuration from the given file. Besides parsing the file,
 // it consists of the final HANA Monitoring configuration after parsing all the enabled
 // HANA Monitoring queries, by applying overrides wherever necessary, into a proto.
-func ReadFromFile(path string, read ReadConfigFile) (*cpb.Configuration, error) {
+func ReadFromFile(path string, read ReadConfigFile, pmClient *parametermanager.Client) (config *cpb.Configuration, pmVersion string, err error) {
 	p := path
 	if len(p) == 0 {
 		p = LinuxConfigPath
@@ -144,15 +167,25 @@ func ReadFromFile(path string, read ReadConfigFile) (*cpb.Configuration, error) 
 		}
 	}
 
-	config, err := Read(p, read)
+	config, err = Read(p, read)
 	if config == nil {
-		return nil, err
+		return nil, "", err
+	}
+
+	if config.GetParameterManagerConfig() != nil {
+		mergedConfig, version, err := mergePMConfig(context.Background(), pmClient, config)
+		if err != nil {
+			log.Logger.Errorw("Failed to merge configuration from Parameter Manager, continuing with local config", "error", err)
+		} else {
+			config = mergedConfig
+			pmVersion = version
+		}
 	}
 
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
 	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
 	validateAgentConfiguration(config)
-	return config, err
+	return config, pmVersion, err
 }
 
 // LogLevelToZapcore returns the zapcore equivalent of the configuration log level.
