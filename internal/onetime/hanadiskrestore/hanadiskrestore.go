@@ -20,6 +20,7 @@ package hanadiskrestore
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"flag"
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -62,6 +64,21 @@ type (
 
 	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
 	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
+
+	disksGetCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Disk, error)
+	}
+	disksInsertCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Operation, error)
+	}
+	snapshotsGetCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Snapshot, error)
+	}
+	computeServiceInterface interface {
+		GetDisk(project, zone, disk string) disksGetCall
+		InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall
+		GetSnapshot(project, snapshot string) snapshotsGetCall
+	}
 
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
@@ -99,6 +116,7 @@ const (
 var (
 	workflowStartTime time.Time
 	suffixRegex       = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$`)
+	restoreCountRegex = regexp.MustCompile(`-r\d+$`)
 )
 
 // compareVersions returns true if version1 is less than version2.
@@ -138,6 +156,21 @@ func compareVersions(version1, version2 string) (bool, error) {
 	return v1Minor < v2Minor, nil
 }
 
+// computeClient implements computeServiceInterface for *compute.Service.
+type computeClient struct {
+	service *compute.Service
+}
+
+func (c *computeClient) GetDisk(project, zone, disk string) disksGetCall {
+	return c.service.Disks.Get(project, zone, disk)
+}
+func (c *computeClient) InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall {
+	return c.service.Disks.Insert(project, zone, disk)
+}
+func (c *computeClient) GetSnapshot(project, snapshot string) snapshotsGetCall {
+	return c.service.Snapshots.Get(project, snapshot)
+}
+
 type (
 	multiDisks struct {
 		disk         *ipb.Disk
@@ -152,7 +185,7 @@ type (
 		disks                                                      []*multiDisks
 		DataDiskVG                                                 string
 		gceService                                                 gceInterface
-		computeService                                             *compute.Service
+		computeService                                             computeServiceInterface
 		sgService                                                  SGInterface
 		cgName                                                     string
 		baseDataPath, baseLogPath                                  string
@@ -176,6 +209,8 @@ type (
 		oteLogger                                                  *onetime.OTELogger
 		UseSnapshotGroupWorkflow                                   bool
 		snapshotItems                                              []snapshotgroup.SnapshotItem
+		currentRestoreCount                                        int
+		newAttachedDisks                                           []multiDisks
 	}
 )
 
@@ -214,7 +249,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.SourceDisks, "source-disks", "", "Comma separated list of disks to be restored. (optional) Default: empty. Accepts comma separated disk names, like \"disk1,disk2,disk3\"")
 	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.GroupSnapshot, "group-snapshot-name", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
-	fs.StringVar(&r.NewDiskName, "new-disk-name", "", "New disk name, ONLY for single disk restore. (required) must be less than 63 characters long")
+	fs.StringVar(&r.NewDiskName, "new-disk-name", "", "New disk name, ONLY for single disk restore. (optional) must be less than 63 characters long")
 	fs.StringVar(&r.NewDiskSuffix, "new-disk-suffix", "", "Suffix to be appended to the new disk name, ONLY for multi-disk restore. (optional) Default: empty, full name of disk has to be less than 63 characters.")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -279,11 +314,12 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	// DataDiskName and NewDiskNames are fetched and respectively created
 	// from individual snapshots mapped to groupSnapshot.
 	restoreFromGroupSnapshot := !(r.Sid == "" || r.GroupSnapshot == "")
-	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "" || r.NewDiskName == "")
+	restoreFromSingleSnapshot := !(r.Sid == "" || r.SourceSnapshot == "")
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
 		return fmt.Errorf("either source-snapshot or group-snapshot-name must be provided, not both. Usage: %s", r.Usage())
-	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
+	}
+	if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
 	if len(r.NewDiskName) > 63 {
@@ -344,13 +380,19 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
 	r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestore)
 
-	if r.computeService, err = computeServiceCreator(ctx); err != nil {
+	cs, err := computeServiceCreator(ctx)
+	if err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
 	}
+	r.computeService = &computeClient{service: cs}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir, commandlineexecutor.ExecuteCommand); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
+		return subcommands.ExitFailure
+	}
+	if err := r.checkCountOfRestores(ctx); err != nil {
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to check count of restores,", err)
 		return subcommands.ExitFailure
 	}
 	if !r.SkipDBSnapshotForChangeDiskType {
@@ -522,7 +564,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		return fmt.Errorf("compute service is nil")
 	}
 
-	snapshot, err := r.computeService.Snapshots.Get(r.Project, sourceSnapshot).Do()
+	snapshot, err := r.computeService.GetSnapshot(r.Project, sourceSnapshot).Do()
 	if err != nil {
 		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", sourceSnapshot, err)
 	}
@@ -548,7 +590,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	}
 	log.CtxLogger(ctx).Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
 
-	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
+	op, err := r.computeService.InsertDisk(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
@@ -664,7 +706,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 	if r.NewDiskType == "" {
 		if !r.isGroupSnapshot {
-			d, err := r.computeService.Disks.Get(r.Project, r.DataDiskZone, r.DataDiskName).Do()
+			d, err := r.computeService.GetDisk(r.Project, r.DataDiskZone, r.DataDiskName).Do()
 			if err != nil {
 				return fmt.Errorf("failed to read data disk type: %v", err)
 			}
@@ -695,7 +737,7 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 		if r.computeService == nil {
 			return fmt.Errorf("compute service is nil")
 		}
-		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+		snapshot, err := r.computeService.GetSnapshot(r.Project, r.SourceSnapshot).Do()
 		if err != nil {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
@@ -852,4 +894,161 @@ func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, er
 	}
 
 	return labels, nil
+}
+
+// checkCountOfRestores checks the count of restores for the disk(s).
+func (r *Restorer) checkCountOfRestores(ctx context.Context) error {
+	if !r.isGroupSnapshot {
+		count, err := r.fetchDiskRestoreCount(ctx, r.DataDiskName)
+		if err != nil {
+			return err
+		}
+		r.currentRestoreCount = count
+	} else {
+		for _, d := range r.disks {
+			count, err := r.fetchDiskRestoreCount(ctx, d.disk.GetDiskName())
+			if err != nil {
+				return err
+			}
+			if count > r.currentRestoreCount {
+				r.currentRestoreCount = count
+			}
+		}
+	}
+
+	log.CtxLogger(ctx).Infof("Disk(s) have been restored %v times", r.currentRestoreCount)
+	return nil
+}
+
+// fetchDiskRestoreCount fetches the restore count from the disk labels.
+// If the label is not present, returns 0.
+func (r *Restorer) fetchDiskRestoreCount(ctx context.Context, diskName string) (int, error) {
+	disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get disk: %v", err)
+	}
+
+	var restoreCount int
+	labels := disk.Labels
+	if labels != nil {
+		if count, ok := labels["goog-sapagent-restore-count"]; ok {
+			if restoreCount, err = strconv.Atoi(count); err != nil {
+				log.CtxLogger(ctx).Errorw("failed to parse restore count", "diskName", diskName, "count", count, "err", err)
+				return 0, nil
+			}
+		}
+	}
+	return restoreCount, nil
+}
+
+func (r *Restorer) isDiskUnique(ctx context.Context, diskName string) (bool, error) {
+	_, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err == nil {
+		// Disk exists, so it's not unique
+		return false, nil
+	}
+
+	// Type assert to see if it's a googleapi.Error
+	if gErr, ok := err.(*googleapi.Error); ok {
+		if gErr.Code == http.StatusNotFound {
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("failed to get disk: %w", err)
+}
+
+// fetchOriginalDiskName fetches the original disk name from the labels.
+// If the label is not present, original disk name is determined on
+// a best effort basis by removing the restore count suffix from the disk name.
+func (r *Restorer) fetchOriginalDiskName(ctx context.Context, diskName string) string {
+	disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err != nil {
+		return ""
+	}
+	labels := disk.Labels
+	if labels != nil {
+		if originalDiskName, ok := labels["goog-sapagent-original-disk-name"]; ok {
+			return originalDiskName
+		}
+	}
+	return restoreCountRegex.ReplaceAllString(diskName, "")
+}
+
+// buildNewDiskName builds the name for the new disk.
+func (r *Restorer) buildNewDiskName(ctx context.Context, originalDiskName, suffix string) (string, error) {
+	newDiskName := fmt.Sprintf("%s%s-r%d", originalDiskName, suffix, r.currentRestoreCount+1)
+
+	if len(newDiskName) > 63 {
+		return "", fmt.Errorf("the new disk %q name is longer than 63 characters", newDiskName)
+	}
+
+	// Ideally, disk name should be unique if we just add a restore count to it,
+	// since disk names are unique in a project.
+	unique, err := r.isDiskUnique(ctx, newDiskName)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("failed to check if disk is unique", "diskName", newDiskName, "err", err)
+		return "", err
+	}
+	if !unique {
+		r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: Disk %s already exists, finding the next available name", newDiskName))
+		for {
+			r.currentRestoreCount = r.currentRestoreCount + 1
+			newDiskName = fmt.Sprintf("%s%s-r%d", originalDiskName, suffix, r.currentRestoreCount+1)
+			unique, err := r.isDiskUnique(ctx, newDiskName)
+			if err != nil {
+				return "", err
+			}
+			if unique {
+				break
+			}
+		}
+	}
+
+	// Final Safety: Remove any accidental trailing hyphen and lowercase
+	return strings.ToLower(strings.TrimSuffix(newDiskName, "-")), nil
+}
+
+// updateRestoreCount sets the restore count label for the disk.
+func (r *Restorer) updateRestoreCount(ctx context.Context, diskName string) error {
+	disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err != nil {
+		return fmt.Errorf("failed to get disk %s: %w", diskName, err)
+	}
+	labels := disk.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
+	labels["goog-sapagent-restore-count"] = fmt.Sprintf("%d", r.currentRestoreCount+1)
+	op, err := r.gceService.UpdateLabels(ctx, r.Project, r.DataDiskZone, diskName, disk.LabelFingerprint, labels)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("failed to update disk labels for disk %s: %v", diskName, err)
+		return nil
+	}
+	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
+		log.CtxLogger(ctx).Errorw("failed to wait for disk update operation to complete for disk %s: %v", diskName, err)
+	}
+	return nil
+}
+
+func (r *Restorer) updateOriginalDiskName(ctx context.Context, diskName, originalDiskName string) error {
+	disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err != nil {
+		return fmt.Errorf("failed to get disk %s: %w", diskName, err)
+	}
+	labels := disk.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels["goog-sapagent-original-disk-name"] = originalDiskName
+	op, err := r.gceService.UpdateLabels(ctx, r.Project, r.DataDiskZone, diskName, disk.LabelFingerprint, labels)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("failed to update original disk name label for disk %s: %v", diskName, err)
+		return nil
+	}
+	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
+		log.CtxLogger(ctx).Errorw("failed to wait for disk update operation to complete for disk %s: %v", diskName, err)
+	}
+	return nil
 }

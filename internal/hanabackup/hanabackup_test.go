@@ -539,16 +539,58 @@ func TestParsePhysicalPath(t *testing.T) {
 			want:     "",
 			wantErr:  cmpopts.AnyError,
 		},
+		{
+			name: "NonRootUserLVDisplayFailsLSBLKSuccess",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
+				}
+				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+					return commandlineexecutor.Result{StdOut: "NAME\n/dev/sda\n/dev/sdb\n/dev/mapper/vg-lv\n"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want:    "/dev/sda\n/dev/sdb",
+			wantErr: nil,
+		},
+		{
+			name: "NonRootUserLVDisplayFailsLSBLKFails",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
+				}
+				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+					return commandlineexecutor.Result{StdErr: "lsblk failed", Error: errors.New("lsblk failed")}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want:    "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NonRootUserLVDisplayFailsLSBLKEmpty",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
+				}
+				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+					return commandlineexecutor.Result{StdOut: "NAME\n"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want:    "",
+			wantErr: cmpopts.AnyError,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got, gotErr := ParsePhysicalPath(context.Background(), "", test.fakeExec)
-			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
-				t.Errorf("parsePhysicalPath() = %v, want %v", gotErr, test.wantErr)
+			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) { // device is always "" in these tests
+				t.Errorf("ParsePhysicalPath() error = %v, want %v", gotErr, test.wantErr)
 			}
 			if got != test.want {
-				t.Errorf("parsePhysicalPath() = %v, want %v", got, test.want)
+				t.Errorf("ParsePhysicalPath() = %v, want %v", got, test.want)
 			}
 		})
 	}

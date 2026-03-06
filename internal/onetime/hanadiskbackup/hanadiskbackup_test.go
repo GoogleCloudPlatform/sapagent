@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"strings"
 	"testing"
@@ -160,6 +161,22 @@ func createDiskSnapshotFail(*compute.Snapshot) fakeDiskCreateSnapshotCall {
 
 func createDiskSnapshotSuccess(*compute.Snapshot) fakeDiskCreateSnapshotCall {
 	return &mockDiskCreateSnapshot{doErr: nil, operation: &compute.Operation{}}
+}
+
+type fakeComputeService struct{}
+
+func (f *fakeComputeService) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
+	return &mockDiskCreateSnapshot{doErr: nil, operation: &compute.Operation{}}
+}
+
+type fakeComputeServiceForCreateSnapshot struct {
+	Snapshot *compute.Snapshot
+	Call     fakeDiskCreateSnapshotCall
+}
+
+func (f *fakeComputeServiceForCreateSnapshot) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
+	f.Snapshot = snapshot
+	return f.Call
 }
 
 func TestSnapshotHandler(t *testing.T) {
@@ -3009,7 +3026,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3026,7 +3043,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3042,7 +3059,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached: true,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3060,6 +3077,26 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestCreateSnapshot(t *testing.T) {
+	wantSnapshot := &compute.Snapshot{Name: "test-snapshot"}
+	s := Snapshot{
+		Project:  "test-project",
+		DiskZone: "test-zone",
+		Disk:     "test-disk",
+	}
+	fake := &fakeComputeServiceForCreateSnapshot{
+		Call: &mockDiskCreateSnapshot{},
+	}
+	s.computeService = fake
+	got := s.createSnapshot(wantSnapshot)
+	if got != fake.Call {
+		t.Errorf("createSnapshot()=%v, want=%v", got, fake.Call)
+	}
+	if diff := cmp.Diff(wantSnapshot, fake.Snapshot); diff != "" {
+		t.Errorf("createSnapshot() snapshot mismatch diff (-want +got):\n%s", diff)
 	}
 }
 
@@ -3089,7 +3126,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "FreezeFS",
 			s: &Snapshot{
-				computeService:   &compute.Service{},
+				computeService:   &fakeComputeService{},
 				FreezeFileSystem: true,
 			},
 			wantOp:  nil,
@@ -3098,7 +3135,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "CreateSnapshotFailure",
 			s: &Snapshot{
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				gceService:     &fake.TestGCE{CreationCompletionErr: cmpopts.AnyError},
 			},
 			createSnapshot: createDiskSnapshotFail,
@@ -3108,7 +3145,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "CreateSnapshotSuccess",
 			s: &Snapshot{
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				gceService:     &fake.TestGCE{CreationCompletionErr: nil},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
@@ -3384,6 +3421,62 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.snapshotName, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateUser(t *testing.T) {
+	tests := []struct {
+		name           string
+		s              *Snapshot
+		geteuidVal     int
+		currentUserVal *user.User
+		currentUserErr error
+		wantSidadmUser bool
+		wantErr        bool
+	}{
+		{
+			name:           "rootUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     0,
+			wantSidadmUser: false,
+		},
+		{
+			name:           "sidadmUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1001,
+			currentUserVal: &user.User{Username: "tstadm"},
+			wantSidadmUser: true,
+		},
+		{
+			name:           "otherUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1002,
+			currentUserVal: &user.User{Username: "other"},
+			wantSidadmUser: false,
+		},
+		{
+			name:           "currentUserError",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1001,
+			currentUserErr: errors.New("some error"),
+			wantErr:        true,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			mockGeteuid := func() int { return tc.geteuidVal }
+			mockCurrentUser := func() (*user.User, error) { return tc.currentUserVal, tc.currentUserErr }
+
+			err := tc.s.validateUser(ctx, mockGeteuid, mockCurrentUser)
+			if tc.wantErr != (err != nil) {
+				t.Errorf("validateUser() got err: %v, want err: %t", err, tc.wantErr)
+			}
+			if tc.s.sidadmUser != tc.wantSidadmUser {
+				t.Errorf("validateUser() sidadmUser got: %t, want: %t", tc.s.sidadmUser, tc.wantSidadmUser)
 			}
 		})
 	}
