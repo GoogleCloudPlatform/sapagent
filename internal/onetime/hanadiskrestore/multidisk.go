@@ -206,11 +206,22 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 		uriParts := strings.Split(sourceDiskURI, "/")
 		sourceDiskName := uriParts[len(uriParts)-1]
-		instanceName := snapshotItem.Labels["goog-sapagent-instance-name"]
-		if instanceName == "" {
-			return fmt.Errorf("instance name is empty for snapshot %s", snapshotItem.Name)
+
+		var instanceName string
+		if !r.isScaleout {
+			instanceName = cp.GetInstanceName()
+		} else {
+			// TODO: Add support for refresh test point for scaleout scenarios.
+			instanceName = snapshotItem.Labels["goog-sapagent-instance-name"]
+			if instanceName == "" {
+				return fmt.Errorf("instance name is empty for snapshot %q", snapshotItem.Name)
+			}
 		}
 
+		// Recreating the disk from snapshot because of the inability
+		// to customize the name of the disk created using bulk insert api.
+		// This is followed by deleting the old disk.
+		// It's a workaround till the snapshot group API supports custom name for disks.
 		newDiskName, err := r.recreateDisk(ctx, exec, snapshotItem, sourceDiskName, instanceName, snapshotKey)
 		if err != nil {
 			log.CtxLogger(ctx).Warnw("failed to recreate disk from snapshot", "snapshot", snapshotItem.Name)

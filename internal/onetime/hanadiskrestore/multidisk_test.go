@@ -164,7 +164,7 @@ func TestGroupRestore(t *testing.T) {
 	for _, tc := range tests {
 		tc.r.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.r.groupRestore(context.Background(), defaultCloudProperties)
+			got := tc.r.groupRestore(t.Context(), defaultCloudProperties)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("groupRestore() returned diff (-want +got):\n%s", diff)
 			}
@@ -377,7 +377,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.r.restoreFromGroupSnapshot(ctx, tc.exec, tc.cp, tc.snapshotKey)
@@ -389,7 +389,7 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 }
 
 func TestTruncateName(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tests := []struct {
 		name               string
 		diskName           string
@@ -560,7 +560,7 @@ func TestReadConsistencyGroup(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			gotCG, gotErr := test.r.readConsistencyGroup(ctx, test.r.DataDiskName)
@@ -691,7 +691,7 @@ func TestValidateDisksBelongToCG(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := test.r.validateDisksBelongToCG(ctx)
@@ -784,7 +784,7 @@ func TestModifyDiskInCGErrors(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -991,7 +991,7 @@ func TestMultiDisksAttachedToInstance(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1051,7 +1051,7 @@ func TestScaleupDisksAttachedToInstanceErrors(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1250,7 +1250,7 @@ func TestScaleoutDisksAttachedToInstanceErrors(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1479,7 +1479,7 @@ func TestGroupRestoreWithSGWorkflow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.groupRestoreWithSGWorkflow(context.Background(), commandlineexecutor.ExecuteCommand, defaultCloudProperties, "")
+			err := tc.r.groupRestoreWithSGWorkflow(t.Context(), commandlineexecutor.ExecuteCommand, defaultCloudProperties, "")
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)
 			}
@@ -1488,7 +1488,7 @@ func TestGroupRestoreWithSGWorkflow(t *testing.T) {
 }
 
 func TestFetchLatestDisk(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	timeNow := time.Now()
 	tests := []struct {
 		name      string
@@ -1589,7 +1589,7 @@ func TestFetchLatestDisk(t *testing.T) {
 }
 
 func TestRecreateDisk(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	tests := []struct {
 		name         string
 		r            *Restorer
@@ -1752,9 +1752,153 @@ func TestRenameLVMForScaleup(t *testing.T) {
 					},
 				},
 			}
-			err := tc.r.renameLVMForScaleup(context.Background(), tc.exec, tc.cp, disks)
+			err := tc.r.renameLVMForScaleup(t.Context(), tc.exec, tc.cp, disks)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("renameLVMForScaleup() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAttachAndConfigureDisks(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name       string
+		r          *Restorer
+		exec       commandlineexecutor.Execute
+		cp         *ipb.CloudProperties
+		wantErr bool
+	}{
+		{
+			name: "FetchLatestDiskError",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1"},
+				},
+				sgService: &fakeSGService{
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return nil, cmpopts.AnyError
+					},
+				},
+			},
+			exec:       scaleupExec,
+			cp:         defaultCloudProperties,
+			wantErr: true,
+		},
+		{
+			name: "EmptySourceDiskError",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1"},
+				},
+				sgService: &fakeSGService{
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+			},
+			exec:       scaleupExec,
+			cp:         defaultCloudProperties,
+			wantErr: true,
+		},
+		{
+			name: "EmptyInstanceNameError",
+			r: &Restorer{
+				isScaleout: true,
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				sgService: &fakeSGService{
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+			},
+			exec:       scaleoutExec,
+			cp:         defaultCloudProperties,
+			wantErr: true,
+		},
+		{
+			name: "RecreateDiskError",
+			r: &Restorer{
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				sgService: &fakeSGService{
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					AttachDiskErr: cmpopts.AnyError,
+				},
+			},
+			exec:       scaleupExec,
+			cp:         defaultCloudProperties,
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.attachAndConfigureDisks(ctx, tc.exec, tc.cp, "snapshotKey")
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("attachAndConfigureDisks() got error %v, want error %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestDeleteOldDisk(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr bool
+	}{
+		{
+			name: "DeleteDiskError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					DeleteDiskResp: []*compute.Operation{nil},
+					DeleteDiskErr:  []error{cmpopts.AnyError},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "WaitError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					DeleteDiskResp: []*compute.Operation{nil},
+					DeleteDiskErr:  []error{nil},
+					DiskOpErr:      cmpopts.AnyError,
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					DeleteDiskResp: []*compute.Operation{nil},
+					DeleteDiskErr:  []error{nil},
+					DiskOpErr:      nil,
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.deleteOldDisk(ctx, "disk-1")
+			if gotErr := (err != nil); gotErr != tc.wantErr {
+				t.Errorf("deleteOldDisk() got error: %v, wantErr: %v", err, tc.wantErr)
 			}
 		})
 	}
