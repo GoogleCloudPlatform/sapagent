@@ -81,8 +81,37 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
 	})
 	if result.Error != nil || result.StdErr != "" {
+		if strings.Contains(result.StdErr, "Running as a non-root user. Functionality may be unavailable.") {
+			result = exec(ctx, commandlineexecutor.Params{
+				Executable: "/bin/sh",
+				Args:       []string{"-c", fmt.Sprintf("lsblk --output NAME --inverse --paths --list %s", logicalPath)},
+			})
+			if result.Error != nil || result.StdErr != "" {
+				return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
+			}
+
+			lines := strings.Split(result.StdOut, "\n")
+			var physicalDevice string
+
+			for _, line := range lines {
+				// Skip lines containing "NAME" or "/dev/mapper"
+				if strings.Contains(line, "NAME") || strings.Contains(line, "/dev/mapper") || line == "" {
+					continue
+				}
+				physicalDevice = fmt.Sprintf("%s%s\n", physicalDevice, line)
+			}
+
+			physicalDevice = strings.TrimSuffix(physicalDevice, "\n")
+			if physicalDevice == "" {
+				return "", fmt.Errorf("physical device is empty")
+			}
+			log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
+			return physicalDevice, nil
+		}
+
 		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
+
 	log.CtxLogger(ctx).Debugw("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	physicalDevice := strings.TrimSuffix(result.StdOut, "\n")
@@ -160,10 +189,6 @@ func CheckDataDir(ctx context.Context, exec commandlineexecutor.Execute) (dataPa
 		return dataPath, "", "", fmt.Errorf("only data disks using LVM are supported, exiting")
 	}
 	if physicalDataPath, err = ParsePhysicalPath(ctx, logicalDataPath, exec); err != nil {
-		log.CtxLogger(ctx).Infow("Error while parsing physical path for data volume", "err", err, "error message", err.Error())
-		if strings.Contains(err.Error(), "Running as a non-root user. Functionality may be unavailable.") {
-			return dataPath, logicalDataPath, "", nil
-		}
 		return dataPath, logicalDataPath, "", err
 	}
 	return dataPath, logicalDataPath, physicalDataPath, nil

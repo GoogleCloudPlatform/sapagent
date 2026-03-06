@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"strings"
 	"testing"
@@ -3384,6 +3385,62 @@ func TestSendDurationToCloudMonitoring(t *testing.T) {
 			got := tc.s.sendDurationToCloudMonitoring(ctx, tc.mtype, tc.snapshotName, tc.dur, tc.bo, defaultCloudProperties)
 			if got != tc.want {
 				t.Errorf("sendDurationToCloudMonitoring(%v, %v, %v) = %v, want: %v", tc.mtype, tc.dur, tc.bo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateUser(t *testing.T) {
+	tests := []struct {
+		name           string
+		s              *Snapshot
+		geteuidVal     int
+		currentUserVal *user.User
+		currentUserErr error
+		wantSidadmUser bool
+		wantErr        bool
+	}{
+		{
+			name:           "rootUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     0,
+			wantSidadmUser: false,
+		},
+		{
+			name:           "sidadmUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1001,
+			currentUserVal: &user.User{Username: "tstadm"},
+			wantSidadmUser: true,
+		},
+		{
+			name:           "otherUser",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1002,
+			currentUserVal: &user.User{Username: "other"},
+			wantSidadmUser: false,
+		},
+		{
+			name:           "currentUserError",
+			s:              &Snapshot{Sid: "tst"},
+			geteuidVal:     1001,
+			currentUserErr: errors.New("some error"),
+			wantErr:        true,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.s.oteLogger = defaultOTELogger
+			mockGeteuid := func() int { return tc.geteuidVal }
+			mockCurrentUser := func() (*user.User, error) { return tc.currentUserVal, tc.currentUserErr }
+
+			err := tc.s.validateUser(ctx, mockGeteuid, mockCurrentUser)
+			if tc.wantErr != (err != nil) {
+				t.Errorf("validateUser() got err: %v, want err: %t", err, tc.wantErr)
+			}
+			if tc.s.sidadmUser != tc.wantSidadmUser {
+				t.Errorf("validateUser() sidadmUser got: %t, want: %t", tc.s.sidadmUser, tc.wantSidadmUser)
 			}
 		})
 	}

@@ -22,10 +22,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/user"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"flag"
@@ -58,6 +60,11 @@ import (
 type (
 	// checkDataDirFunc provides testable replacement for hanabackup.CheckDataDir
 	checkDataDirFunc func(ctx context.Context, exec commandlineexecutor.Execute) (dataPath string, logicalDataPath string, physicalDataPath string, err error)
+
+	// geteuidFunc provides testable replacement for syscall.Geteuid.
+	geteuidFunc func() int
+	// currentUserFunc provides testable replacement for user.Current.
+	currentUserFunc func() (*user.User, error)
 
 	// queryFunc provides testable replacement to the SQL API.
 	queryFunc func(context.Context, *databaseconnector.DBHandle, string) (string, error)
@@ -125,7 +132,9 @@ const (
 
 var (
 	dbFreezeStartTime, workflowStartTime time.Time
-	snapshotNameRegex                    = regexp.MustCompile("^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$")
+	snapshotNameRegex                                    = regexp.MustCompile("^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$")
+	geteuid                              geteuidFunc     = syscall.Geteuid
+	currentUser                          currentUserFunc = user.Current
 )
 
 // compareVersions returns true if version1 is less than version2.
@@ -321,6 +330,11 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 		s.oteLogger.LogMessageToConsole(errMessage)
 		return errMessage, subcommands.ExitUsageError
 	}
+	if err := s.validateUser(ctx, geteuid, currentUser); err != nil {
+		errMessage := err.Error()
+		s.oteLogger.LogMessageToConsole(errMessage)
+		return errMessage, subcommands.ExitUsageError
+	}
 
 	mc, err := monitoring.NewMetricClient(ctx)
 	if err != nil {
@@ -363,9 +377,6 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		errMessage := "ERROR: Failed to check preconditions"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
-	}
-	if s.physicalDataPath == "" {
-		s.sidadmUser = true
 	}
 
 	if msg, exitStatus := s.validateDisks(ctx, cp, commandlineexecutor.ExecuteCommand); exitStatus != subcommands.ExitSuccess {
@@ -567,12 +578,6 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 				s.disks = append(s.disks, disk)
 			}
 		} else {
-			if s.sidadmUser {
-				errMessage := "ERROR: Cannot autodiscover data backing disks"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("running as sidadm user"))
-				return errMessage, subcommands.ExitFailure
-			}
-
 			log.CtxLogger(ctx).Info("Reading disk mapping for /hana/data/")
 			if err := s.readDiskMapping(ctx, cp); err != nil {
 				errMessage := "ERROR: Failed to read disk mapping"
@@ -950,4 +955,27 @@ func (s *Snapshot) sendDurationToCloudMonitoring(ctx context.Context, mtype stri
 		return false
 	}
 	return true
+}
+
+func (s *Snapshot) validateUser(ctx context.Context, geteuid geteuidFunc, currentUser currentUserFunc) error {
+	s.HanaSidAdm = strings.ToLower(s.Sid) + "adm"
+
+	if geteuid() == 0 {
+		s.sidadmUser = false
+		log.CtxLogger(ctx).Info("hanadiskbackup is running with root privileges.")
+		return nil
+	}
+
+	u, err := currentUser()
+	if err != nil {
+		return fmt.Errorf("could not determine current OS user: %w", err)
+	}
+	if u.Username == s.HanaSidAdm {
+		s.sidadmUser = true
+		log.CtxLogger(ctx).Infof("hanadiskbackup is running as the %s OS user.", s.HanaSidAdm)
+	} else {
+		s.sidadmUser = false
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: hanadiskbackup is running as user %s, which is neither root nor the expected sidadm user (%s). Some functionality may fail.", u.Username, s.HanaSidAdm))
+	}
+	return nil
 }
