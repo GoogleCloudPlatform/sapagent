@@ -52,7 +52,9 @@ func TestDiskRestore(t *testing.T) {
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
 				NewDiskName:    "test-new-disk-name",
-				computeService: nil,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: cmpopts.AnyError},
+				},
 				gceService: &fake.TestGCE{
 					DiskAttachedToInstanceDeviceName: "",
 					IsDiskAttached:                   false,

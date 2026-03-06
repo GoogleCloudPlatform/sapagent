@@ -163,6 +163,22 @@ func createDiskSnapshotSuccess(*compute.Snapshot) fakeDiskCreateSnapshotCall {
 	return &mockDiskCreateSnapshot{doErr: nil, operation: &compute.Operation{}}
 }
 
+type fakeComputeService struct{}
+
+func (f *fakeComputeService) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
+	return &mockDiskCreateSnapshot{doErr: nil, operation: &compute.Operation{}}
+}
+
+type fakeComputeServiceForCreateSnapshot struct {
+	Snapshot *compute.Snapshot
+	Call     fakeDiskCreateSnapshotCall
+}
+
+func (f *fakeComputeServiceForCreateSnapshot) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
+	f.Snapshot = snapshot
+	return f.Call
+}
+
 func TestSnapshotHandler(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -3010,7 +3026,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3027,7 +3043,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 					IsDiskAttached:      true,
 					UploadCompletionErr: cmpopts.AnyError,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3043,7 +3059,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 				gceService: &fake.TestGCE{
 					IsDiskAttached: true,
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 			},
 			createSnapshot: createDiskSnapshotSuccess,
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3061,6 +3077,26 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestCreateSnapshot(t *testing.T) {
+	wantSnapshot := &compute.Snapshot{Name: "test-snapshot"}
+	s := Snapshot{
+		Project:  "test-project",
+		DiskZone: "test-zone",
+		Disk:     "test-disk",
+	}
+	fake := &fakeComputeServiceForCreateSnapshot{
+		Call: &mockDiskCreateSnapshot{},
+	}
+	s.computeService = fake
+	got := s.createSnapshot(wantSnapshot)
+	if got != fake.Call {
+		t.Errorf("createSnapshot()=%v, want=%v", got, fake.Call)
+	}
+	if diff := cmp.Diff(wantSnapshot, fake.Snapshot); diff != "" {
+		t.Errorf("createSnapshot() snapshot mismatch diff (-want +got):\n%s", diff)
 	}
 }
 
@@ -3090,7 +3126,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "FreezeFS",
 			s: &Snapshot{
-				computeService:   &compute.Service{},
+				computeService:   &fakeComputeService{},
 				FreezeFileSystem: true,
 			},
 			wantOp:  nil,
@@ -3099,7 +3135,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "CreateSnapshotFailure",
 			s: &Snapshot{
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				gceService:     &fake.TestGCE{CreationCompletionErr: cmpopts.AnyError},
 			},
 			createSnapshot: createDiskSnapshotFail,
@@ -3109,7 +3145,7 @@ func TestCreateBackup(t *testing.T) {
 		{
 			name: "CreateSnapshotSuccess",
 			s: &Snapshot{
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				gceService:     &fake.TestGCE{CreationCompletionErr: nil},
 			},
 			createSnapshot: createDiskSnapshotSuccess,

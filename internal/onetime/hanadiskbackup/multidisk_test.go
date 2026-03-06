@@ -188,6 +188,30 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 		wantErr error
 	}{
 		{
+			name: "DeleteStaleISGsFailure",
+			s: &Snapshot{
+				AbandonPrepared: true,
+				DiskZone:        "europe-west1-b",
+				disks:           []string{"pd-1", "pd-2"},
+				gceService: &fake.TestGCE{
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					IsDiskAttached:                   false,
+					DiskAttachedToInstanceErr:        cmpopts.AnyError,
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-failure",
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsErr:  cmpopts.AnyError,
+					listInstantSnapshotGroupsResp: nil,
+					deleteISGErr:                  cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "DiskAttachErr",
 			s: &Snapshot{
 				disks: []string{"pd-1", "pd-2"},
@@ -362,7 +386,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					GetDiskErr: []error{nil, nil},
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError:                nil,
@@ -380,10 +404,10 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 				},
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
-				if strings.HasPrefix(q, "BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID") {
+				if strings.Contains(q, " SUCCESSFUL") {
 					return "", cmpopts.AnyError
 				}
-				return "", nil
+				return "1234", nil
 			},
 			wantErr: cmpopts.AnyError,
 		},
@@ -414,7 +438,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					GetDiskErr: []error{nil, nil},
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError:                nil,
@@ -461,7 +485,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					GetDiskErr: []error{nil},
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError:                nil,
@@ -504,7 +528,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					GetDiskErr: []error{nil},
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError:                nil,
@@ -550,7 +574,7 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 					},
 					GetDiskErr: []error{nil},
 				},
-				computeService: &compute.Service{},
+				computeService: &fakeComputeService{},
 				cgName:         "test-cg-success",
 				isgService: &mockISGService{
 					createISGError:                nil,
@@ -570,6 +594,203 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailureWithConfirmFalse",
+			s: &Snapshot{
+				AbandonPrepared:                true,
+				ConfirmDataSnapshotAfterCreate: false,
+				DiskZone:                       "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					CreateSnapshotOp: &compute.Operation{
+						Status: "DONE",
+					},
+					CreateSnapshotErr:                      nil,
+					CreationCompletionErr:                  nil,
+					InstantSnapshotConversionCompletionErr: nil,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:  "disk-name",
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError:                nil,
+					listInstantSnapshotGroupsErr:  nil,
+					listInstantSnapshotGroupsResp: nil,
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name: "test-isg",
+						},
+					},
+					describeInstantSnapshotsErr: nil,
+					deleteISGErr:                nil,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.Contains(q, " SUCCESSFUL") {
+					return "", cmpopts.AnyError
+				}
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UseSnapshotGroupWorkflowCreateSGFailure",
+			s: &Snapshot{
+				UseSnapshotGroupWorkflow: true,
+				AbandonPrepared:          true,
+				DiskZone:                 "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-failure",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
+				sgService: &mockSGService{
+					createSGErr: cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UseSnapshotGroupWorkflowConfirmDataSnapshotAfterCreateFailure",
+			s: &Snapshot{
+				UseSnapshotGroupWorkflow:       true,
+				ConfirmDataSnapshotAfterCreate: true,
+				AbandonPrepared:                true,
+				DiskZone:                       "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
+				sgService: &mockSGService{
+					createSGErr:                   nil,
+					waitForSGCreationWithRetryErr: nil,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.Contains(q, " SUCCESSFUL") {
+					return "", cmpopts.AnyError
+				}
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UseSnapshotGroupWorkflowWaitForSGUploadFailure",
+			s: &Snapshot{
+				UseSnapshotGroupWorkflow: true,
+				AbandonPrepared:          true,
+				DiskZone:                 "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
+				sgService: &mockSGService{
+					createSGErr:                           nil,
+					waitForSGCreationWithRetryErr:         nil,
+					waitForSGUploadCompletionWithRetryErr: cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UseSnapshotGroupWorkflowUpdateLabelsFailure",
+			s: &Snapshot{
+				UseSnapshotGroupWorkflow: true,
+				AbandonPrepared:          true,
+				DiskZone:                 "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
+				sgService: &mockSGService{
+					createSGErr:                           nil,
+					waitForSGCreationWithRetryErr:         nil,
+					waitForSGUploadCompletionWithRetryErr: nil,
+					listSnapshotsFromSGErr:                cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UseSnapshotGroupWorkflowSuccess",
+			s: &Snapshot{
+				UseSnapshotGroupWorkflow: true,
+				AbandonPrepared:          true,
+				DiskZone:                 "europe-west1-b",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "pd-1",
+					GetDiskResp: []*compute.Disk{
+						{
+							Users: []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+						},
+					},
+					GetDiskErr: []error{nil},
+				},
+				computeService: &fakeComputeService{},
+				cgName:         "test-cg-success",
+				isgService: &mockISGService{
+					createISGError: nil,
+				},
+				sgService: &mockSGService{
+					createSGErr:                           nil,
+					waitForSGCreationWithRetryErr:         nil,
+					waitForSGUploadCompletionWithRetryErr: nil,
+					listSnapshotsFromSGErr:                nil,
+					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{
+							Name:       "snapshot-1",
+							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
+						},
+					},
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "1234", nil
+			},
+			wantErr: nil,
+		},
 	}
 
 	ctx := context.Background()
@@ -579,6 +800,100 @@ func TestRunWorkflowForInstantSnapshotGroups(t *testing.T) {
 			gotErr := tc.s.runWorkflowForInstantSnapshotGroups(ctx, tc.run, tc.cp)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("runWorkflowForInstantSnapshotGroups(%v, %v) returned diff (-want +got):\n%s", tc.run, tc.cp, diff)
+			}
+		})
+	}
+}
+
+func TestConfirmDataSnapshotAfterCreate(t *testing.T) {
+	tests := []struct {
+		name       string
+		s          *Snapshot
+		run        queryFunc
+		snapshotID string
+		wantErr    bool
+	}{
+		{
+			name: "ConfirmDataSnapshotAfterCreateFalse",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulSuccess",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: true,
+				oteLogger:                      onetime.CreateOTELogger(false),
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailure",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: true,
+				oteLogger:                      onetime.CreateOTELogger(false),
+				isgService:                     &mockISGService{},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			wantErr: true,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailureDeleteISGFailure",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: true,
+				oteLogger:                      onetime.CreateOTELogger(false),
+				isgService: &mockISGService{
+					deleteISGErr: cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			wantErr: true,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailureWithSGWorkflow",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: true,
+				oteLogger:                      onetime.CreateOTELogger(false),
+				isgService:                     &mockISGService{},
+				UseSnapshotGroupWorkflow:       true,
+				sgService:                      &mockSGService{},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			wantErr: true,
+		},
+		{
+			name: "MarkSnapshotAsSuccessfulFailureWithSGWorkflowDeleteSGFailure",
+			s: &Snapshot{
+				ConfirmDataSnapshotAfterCreate: true,
+				oteLogger:                      onetime.CreateOTELogger(false),
+				isgService:                     &mockISGService{},
+				UseSnapshotGroupWorkflow:       true,
+				sgService: &mockSGService{
+					deleteSGErr: cmpopts.AnyError,
+				},
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.s.confirmDataSnapshotAfterCreate(context.Background(), tc.run, tc.snapshotID)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("confirmDataSnapshotAfterCreate() got error: %v, want error: %v", err, tc.wantErr)
 			}
 		})
 	}
@@ -1261,7 +1576,7 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 			s: &Snapshot{
 				sgService: &mockSGService{
 					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
-						snapshotgroup.SnapshotItem{
+						{
 							Name:       "snapshot-1",
 							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
 						},
@@ -1281,7 +1596,7 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 			s: &Snapshot{
 				sgService: &mockSGService{
 					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
-						snapshotgroup.SnapshotItem{
+						{
 							Name:       "snapshot-1",
 							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
 						},
@@ -1303,7 +1618,7 @@ func TestUpdateLabelsForSnapshotGroup(t *testing.T) {
 			s: &Snapshot{
 				sgService: &mockSGService{
 					listSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
-						snapshotgroup.SnapshotItem{
+						{
 							Name:       "snapshot-1",
 							SourceDisk: "projects/my-project/zones/my-zone/disks/my-disk",
 						},

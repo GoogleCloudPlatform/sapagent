@@ -82,6 +82,11 @@ type (
 		RequestId(string) *compute.DisksCreateSnapshotCall
 	}
 
+	// computeServiceInterface is a testable equivalent for compute.Service.
+	computeServiceInterface interface {
+		DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall
+	}
+
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
 		GetSecret(ctx context.Context, projectID, secretName string) (string, error)
@@ -124,6 +129,15 @@ type (
 		name string
 	}
 )
+
+// computeClient implements computeServiceInterface for *compute.Service.
+type computeClient struct {
+	service *compute.Service
+}
+
+func (c *computeClient) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
+	return c.service.Disks.CreateSnapshot(project, zone, disk, snapshot)
+}
 
 const (
 	metricPrefix   = "workload.googleapis.com/sap/agent/"
@@ -211,7 +225,7 @@ type Snapshot struct {
 	disks                                  []string
 	db                                     *databaseconnector.DBHandle
 	gceService                             gceInterface
-	computeService                         *compute.Service
+	computeService                         computeServiceInterface
 	isgService                             ISGInterface
 	sgService                              SGInterface
 	status                                 bool
@@ -425,12 +439,13 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		return errMessage, subcommands.ExitFailure
 	}
 
-	s.computeService, err = computeServiceCreator(ctx)
+	cs, err := computeServiceCreator(ctx)
 	if err != nil {
 		errMessage := "ERROR: Failed to create compute service"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
+	s.computeService = &computeClient{service: cs}
 
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
@@ -767,7 +782,7 @@ func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string) (str
 }
 
 func (s *Snapshot) createSnapshot(snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
-	return s.computeService.Disks.CreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot)
+	return s.computeService.DisksCreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot)
 }
 
 func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {

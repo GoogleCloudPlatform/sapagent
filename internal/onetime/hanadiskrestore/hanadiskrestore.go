@@ -29,6 +29,7 @@ import (
 	"flag"
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
@@ -62,6 +63,21 @@ type (
 
 	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
 	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
+
+	disksGetCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Disk, error)
+	}
+	disksInsertCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Operation, error)
+	}
+	snapshotsGetCall interface {
+		Do(opts ...googleapi.CallOption) (*compute.Snapshot, error)
+	}
+	computeServiceInterface interface {
+		GetDisk(project, zone, disk string) disksGetCall
+		InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall
+		GetSnapshot(project, snapshot string) snapshotsGetCall
+	}
 
 	// gceInterface is the testable equivalent for gce.GCE for secret manager access.
 	gceInterface interface {
@@ -138,6 +154,21 @@ func compareVersions(version1, version2 string) (bool, error) {
 	return v1Minor < v2Minor, nil
 }
 
+// computeClient implements computeServiceInterface for *compute.Service.
+type computeClient struct {
+	service *compute.Service
+}
+
+func (c *computeClient) GetDisk(project, zone, disk string) disksGetCall {
+	return c.service.Disks.Get(project, zone, disk)
+}
+func (c *computeClient) InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall {
+	return c.service.Disks.Insert(project, zone, disk)
+}
+func (c *computeClient) GetSnapshot(project, snapshot string) snapshotsGetCall {
+	return c.service.Snapshots.Get(project, snapshot)
+}
+
 type (
 	multiDisks struct {
 		disk         *ipb.Disk
@@ -152,7 +183,7 @@ type (
 		disks                                                      []*multiDisks
 		DataDiskVG                                                 string
 		gceService                                                 gceInterface
-		computeService                                             *compute.Service
+		computeService                                             computeServiceInterface
 		sgService                                                  SGInterface
 		cgName                                                     string
 		baseDataPath, baseLogPath                                  string
@@ -344,10 +375,12 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	log.CtxLogger(ctx).Infow("Starting HANA disk snapshot restore", "sid", r.Sid)
 	r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestore)
 
-	if r.computeService, err = computeServiceCreator(ctx); err != nil {
+	cs, err := computeServiceCreator(ctx)
+	if err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create compute service,", err)
 		return subcommands.ExitFailure
 	}
+	r.computeService = &computeClient{service: cs}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir, commandlineexecutor.ExecuteCommand); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
@@ -522,7 +555,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		return fmt.Errorf("compute service is nil")
 	}
 
-	snapshot, err := r.computeService.Snapshots.Get(r.Project, sourceSnapshot).Do()
+	snapshot, err := r.computeService.GetSnapshot(r.Project, sourceSnapshot).Do()
 	if err != nil {
 		return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", sourceSnapshot, err)
 	}
@@ -548,7 +581,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	}
 	log.CtxLogger(ctx).Infow("Inserting new HANA disk from source snapshot", "diskName", newDiskName, "sourceSnapshot", sourceSnapshot)
 
-	op, err := r.computeService.Disks.Insert(r.Project, r.DataDiskZone, disk).Do()
+	op, err := r.computeService.InsertDisk(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
@@ -664,7 +697,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 	if r.NewDiskType == "" {
 		if !r.isGroupSnapshot {
-			d, err := r.computeService.Disks.Get(r.Project, r.DataDiskZone, r.DataDiskName).Do()
+			d, err := r.computeService.GetDisk(r.Project, r.DataDiskZone, r.DataDiskName).Do()
 			if err != nil {
 				return fmt.Errorf("failed to read data disk type: %v", err)
 			}
@@ -695,7 +728,7 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 		if r.computeService == nil {
 			return fmt.Errorf("compute service is nil")
 		}
-		snapshot, err := r.computeService.Snapshots.Get(r.Project, r.SourceSnapshot).Do()
+		snapshot, err := r.computeService.GetSnapshot(r.Project, r.SourceSnapshot).Do()
 		if err != nil {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
