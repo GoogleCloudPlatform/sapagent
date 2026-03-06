@@ -42,6 +42,13 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		}
 		snapShotKey = key
 	}
+	if r.NewDiskName == "" {
+		var err error
+		r.NewDiskName, err = r.buildNewDiskName(ctx, r.DataDiskName, r.NewDiskSuffix)
+		if err != nil {
+			return fmt.Errorf("failed to build new disk name: %w", err)
+		}
+	}
 
 	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), snapShotKey, r.NewDiskName, r.SourceSnapshot); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
@@ -49,6 +56,9 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
 		}
 		hanabackup.RescanVolumeGroups(ctx, exec)
+		return err
+	}
+	if err := r.updateOriginalDiskName(ctx, r.NewDiskName, r.DataDiskName); err != nil {
 		return err
 	}
 
@@ -65,6 +75,9 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 			}
 			return err
 		}
+	}
+	if err := r.updateRestoreCount(ctx, r.NewDiskName); err != nil {
+		return err
 	}
 
 	hanabackup.RescanVolumeGroups(ctx, exec)

@@ -19,6 +19,7 @@ package hanadiskrestore
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
@@ -82,6 +84,49 @@ type fakeDiskMapper struct {
 func (f *fakeDiskMapper) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
 	defer func() { f.callCount++ }()
 	return f.deviceName[f.callCount], nil
+}
+
+type fakeDisksGetCall struct {
+	Disk *compute.Disk
+	Err  error
+}
+
+func (f *fakeDisksGetCall) Do(opts ...googleapi.CallOption) (*compute.Disk, error) {
+	return f.Disk, f.Err
+}
+
+type fakeDisksInsertCall struct {
+	Op  *compute.Operation
+	Err error
+}
+
+func (f *fakeDisksInsertCall) Do(opts ...googleapi.CallOption) (*compute.Operation, error) {
+	return f.Op, f.Err
+}
+
+type fakeSnapshotsGetCall struct {
+	Snapshot *compute.Snapshot
+	Err      error
+}
+
+func (f *fakeSnapshotsGetCall) Do(opts ...googleapi.CallOption) (*compute.Snapshot, error) {
+	return f.Snapshot, f.Err
+}
+
+type fakeComputeService struct {
+	GetDiskCallResp     disksGetCall
+	InsertDiskCallResp  disksInsertCall
+	GetSnapshotCallResp snapshotsGetCall
+}
+
+func (f *fakeComputeService) GetDisk(project, zone, disk string) disksGetCall {
+	return f.GetDiskCallResp
+}
+func (f *fakeComputeService) InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall {
+	return f.InsertDiskCallResp
+}
+func (f *fakeComputeService) GetSnapshot(project, snapshot string) snapshotsGetCall {
+	return f.GetSnapshotCallResp
 }
 
 func TestMain(t *testing.M) {
@@ -303,7 +348,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
 			},
-			want: cmpopts.AnyError,
+			want: nil,
 		},
 		{
 			name: "EmptyDiskType",
@@ -315,7 +360,7 @@ func TestValidateParameters(t *testing.T) {
 				DataDiskZone:   "data-zone",
 				SourceSnapshot: "snapshot",
 			},
-			want: cmpopts.AnyError,
+			want: nil,
 		},
 		{
 			name: "newDiskTypeSet",
@@ -849,6 +894,44 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "GroupSnapshotMultiDiskAttachedFalse",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				GroupSnapshot:   "test-snapshot",
+				Sid:             "tst",
+				disks:           defaultRestorer.disks,
+				isGroupSnapshot: true,
+				gceService: &fake.TestGCE{
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+					GetInstanceErr:            []error{nil},
+					IsDiskAttached:            false,
+					DiskAttachedToInstanceErr: nil,
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut: "sapstartsrv pf=/usr/sap/tst/SYS/profile/tst_HDB00_instance",
+					}
+				}
+				if params.Executable == "sapcontrol" || (params.Executable == "sudo" && params.Args[3] == "sapcontrol") {
+					return commandlineexecutor.Result{
+						StdOut: "sapcontrol output line 1\n line 2\n line 3\n line 4\n line 5\n line 6\n line 7",
+					}
+				}
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "SourceSnapshotAbsent",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
@@ -865,6 +948,9 @@ func TestCheckPreConditions(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: cmpopts.AnyError},
 				},
 				isGroupSnapshot: false,
 			},
@@ -1131,6 +1217,33 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "SingleSnapshotEmptyNewDiskTypeGetDiskFails",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:   "test-disk-name",
+				DataDiskZone:   "test-zone",
+				SourceSnapshot: "test-snapshot",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+					GetDiskCallResp:     &fakeDisksGetCall{Err: cmpopts.AnyError},
+				},
+				isGroupSnapshot: false,
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotValidateCGErr",
 			cp:   defaultCloudProperties,
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
@@ -1376,6 +1489,49 @@ func TestPrepare(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "StopHANAFail",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				isScaleout:      true,
+			},
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "bash" && strings.Contains(params.ArgsToSplit, "HDB kill") {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+						StdErr:   "HDB kill failed",
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd   lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "WaitForIndexServerStopFail",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				isScaleout:      true,
+			},
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return cmpopts.AnyError
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd   lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "SingleSnapshotSuccess",
 			r: &Restorer{
 				isGroupSnapshot: false,
@@ -1549,6 +1705,13 @@ func TestVerifySnapshotPresence(t *testing.T) {
 		wantErr error
 	}{
 		{
+			name: "NilComputeService",
+			r: &Restorer{
+				computeService: nil,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotWorkflowWithListErr",
 			r: &Restorer{
 				isGroupSnapshot:          true,
@@ -1586,6 +1749,37 @@ func TestVerifySnapshotPresence(t *testing.T) {
 						snapshotgroup.SnapshotItem{},
 					},
 				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NotGroupSnapshotSuccess",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "GroupSnapshotNoWorkflowSuccess",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: false,
+				disks: []*multiDisks{
+					&multiDisks{},
+				},
+				gceService: &fake.TestGCE{
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Labels: map[string]string{"goog-sapagent-isg": "group-snapshot"},
+							},
+						},
+					},
+				},
+				GroupSnapshot: "group-snapshot",
 			},
 			wantErr: nil,
 		},
@@ -1757,6 +1951,163 @@ func TestFetchVG(t *testing.T) {
 	}
 }
 
+func TestRestoreFromSnapshot(t *testing.T) {
+	tests := []struct {
+		name           string
+		r              *Restorer
+		instanceName   string
+		snapshotKey    string
+		newDiskName    string
+		sourceSnapshot string
+		wantErr        bool
+	}{
+		{
+			name: "NilComputeService",
+			r: &Restorer{
+				computeService: nil,
+			},
+			wantErr: true,
+		},
+		{
+			name: "GetSnapshotError",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: fmt.Errorf("GetSnapshot error")},
+				},
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "InsertDiskError",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: nil, Err: fmt.Errorf("InsertDisk error")},
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "WaitForDiskOpCompletionWithRetryError",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr: fmt.Errorf("WaitForDiskOpCompletionWithRetry error"),
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "AttachDiskError",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:     nil,
+					AttachDiskErr: fmt.Errorf("AttachDisk error"),
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "DiskAttachedToInstanceError",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: fmt.Errorf("DiskAttachedToInstance error"),
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "DiskNotAttached",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            false,
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        true,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        false,
+		},
+		{
+			name: "SuccessWithSizeIOPSAndThroughput",
+			r: &Restorer{
+				DiskSizeGb:            100,
+				ProvisionedIops:       1000,
+				ProvisionedThroughput: 100,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        false,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.restoreFromSnapshot(ctx, successExec, tc.instanceName, tc.snapshotKey, tc.newDiskName, tc.sourceSnapshot)
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("restoreFromSnapshot()=%v, want error presence = %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestRenameLVM(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1835,7 +2186,7 @@ func TestRenameLVM(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
-			name: "RenameVG",
+			name: "RenameVGFailure",
 			r: &Restorer{
 				gceService: &fake.TestGCE{
 					IsDiskAttached:            true,
@@ -1847,11 +2198,47 @@ func TestRenameLVM(t *testing.T) {
 				},
 				DataDiskVG: "vg_1",
 			},
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 1,
+					Error:    cmpopts.AnyError,
+				}
+			},
+			cp:       defaultCloudProperties,
+			diskName: "test-disk-name",
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "RenameVGSuccess",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+				DataDiskVG: "vg_1",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
 				return commandlineexecutor.Result{
 					ExitCode: 0,
 					Error:    nil,
-					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
 				}
 			},
 			cp:       defaultCloudProperties,
@@ -2096,6 +2483,351 @@ func TestAppendLabels(t *testing.T) {
 			}
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("appendLabels() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestIsDiskUnique(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr bool
+		want    bool
+	}{
+		{
+			name: "DiskExists",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DiskDoesNotExist",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{&googleapi.Error{Code: http.StatusNotFound}},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "GetDiskError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{fmt.Errorf("some other error")},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.r.isDiskUnique(ctx, "disk-name")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("isDiskUnique() got error: %v, wantErr: %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("isDiskUnique() = %v, want: %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckCountOfRestores(t *testing.T) {
+	tests := []struct {
+		name            string
+		r               *Restorer
+		wantRestoreCout int
+		wantErr         bool
+	}{
+		{
+			name: "GetDiskFails",
+			r: &Restorer{
+				DataDiskName: "disk-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{fmt.Errorf("get disk error")},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "NoLabels",
+			r: &Restorer{
+				DataDiskName: "disk-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+		},
+		{
+			name: "LabelNotInt",
+			r: &Restorer{
+				DataDiskName: "disk-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{Labels: map[string]string{"goog-sapagent-restore-count": "abc"}}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				DataDiskName: "disk-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{Labels: map[string]string{"goog-sapagent-restore-count": "2"}}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+			wantRestoreCout: 2,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.r.currentRestoreCount = 0
+			err := tc.r.checkCountOfRestores(ctx)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("checkCountOfRestores() got error: %v, wantErr: %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && tc.r.currentRestoreCount != tc.wantRestoreCout {
+				t.Errorf("checkCountOfRestores() currentRestoreCount got: %d, want: %d", tc.r.currentRestoreCount, tc.wantRestoreCout)
+			}
+		})
+	}
+}
+
+func TestFetchOriginalDiskName(t *testing.T) {
+	tests := []struct {
+		name     string
+		r        *Restorer
+		diskName string
+		want     string
+	}{
+		{
+			name: "GetDiskFails",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{fmt.Errorf("get disk error")},
+				},
+			},
+			diskName: "disk-1",
+			want:     "",
+		},
+		{
+			name: "LabelPresent",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{Labels: map[string]string{"goog-sapagent-original-disk-name": "original-disk"}}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+			diskName: "disk-1",
+			want:     "original-disk",
+		},
+		{
+			name: "LabelNotPresent",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{&compute.Disk{}},
+					GetDiskErr:  []error{nil},
+				},
+			},
+			diskName: "disk-1-r241",
+			want:     "disk-1",
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.r.fetchOriginalDiskName(ctx, tc.diskName)
+			if got != tc.want {
+				t.Errorf("fetchOriginalDiskName() = %q, want: %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildNewDiskName(t *testing.T) {
+	tests := []struct {
+		name             string
+		r                *Restorer
+		originalDiskName string
+		suffix           string
+		want             string
+		wantErr          bool
+	}{
+		{
+			name: "DiskNameTooLong",
+			r: &Restorer{
+				currentRestoreCount: 1,
+			},
+			originalDiskName: strings.Repeat("a", 62),
+			suffix:           "",
+			wantErr:          true,
+		},
+		{
+			name: "IsDiskUniqueError",
+			r: &Restorer{
+				currentRestoreCount: 1,
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{&googleapi.Error{Code: http.StatusInternalServerError}},
+				},
+			},
+			originalDiskName: "disk-1",
+			wantErr:          true,
+		},
+		{
+			name: "DiskNotUniqueSuccess",
+			r: &Restorer{
+				currentRestoreCount: 0,
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{},
+						&compute.Disk{},
+						nil,
+					},
+					GetDiskErr: []error{
+						nil,
+						nil,
+						&googleapi.Error{Code: http.StatusNotFound},
+					},
+				},
+				oteLogger: onetime.CreateOTELogger(false),
+			},
+			originalDiskName: "disk-1",
+			suffix:           "-suffix",
+			want:             "disk-1-suffix-r3",
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.r.buildNewDiskName(ctx, tc.originalDiskName, tc.suffix)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("buildNewDiskName() got error: %v, wantErr: %v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("buildNewDiskName() = %q, want: %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateRestoreCount(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr bool
+	}{
+		{
+			name: "GetDiskError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{fmt.Errorf("get disk error")},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "UpdateLabelsError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp:     []*compute.Disk{{}},
+					GetDiskErr:      []error{nil},
+					UpdateLabelsErr: fmt.Errorf("update labels error"),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp:     []*compute.Disk{{}},
+					GetDiskErr:      []error{nil},
+					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
+					UpdateLabelsErr: nil,
+					DiskOpErr:       nil,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.updateRestoreCount(ctx, "disk-1")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("updateRestoreCount() got error %v, wantErr %t", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestUpdateOriginalDiskName(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		wantErr bool
+	}{
+		{
+			name: "GetDiskError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{fmt.Errorf("get disk error")},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "UpdateLabelsError",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp:     []*compute.Disk{{}},
+					GetDiskErr:      []error{nil},
+					UpdateLabelsErr: fmt.Errorf("update labels error"),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetDiskResp:     []*compute.Disk{{}},
+					GetDiskErr:      []error{nil},
+					UpdateLabelsOp:  &compute.Operation{Status: "DONE"},
+					UpdateLabelsErr: nil,
+					DiskOpErr:       nil,
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.updateOriginalDiskName(ctx, "disk-1", "original-disk")
+			if (err != nil) != tc.wantErr {
+				t.Errorf("updateOriginalDiskName() got error %v, wantErr %t", err, tc.wantErr)
 			}
 		})
 	}

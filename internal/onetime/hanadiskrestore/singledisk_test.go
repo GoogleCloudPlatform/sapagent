@@ -18,10 +18,13 @@ package hanadiskrestore
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
@@ -51,9 +54,12 @@ func TestDiskRestore(t *testing.T) {
 			name: "SingleSnapshotRestoreError",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
-				NewDiskName:    "test-new-disk-name",
-				computeService: nil,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: cmpopts.AnyError},
+				},
 				gceService: &fake.TestGCE{
+					GetDiskResp:                      []*compute.Disk{nil},
+					GetDiskErr:                       []error{&googleapi.Error{Code: http.StatusNotFound}},
 					DiskAttachedToInstanceDeviceName: "",
 					IsDiskAttached:                   false,
 					DiskAttachedToInstanceErr:        cmpopts.AnyError,
