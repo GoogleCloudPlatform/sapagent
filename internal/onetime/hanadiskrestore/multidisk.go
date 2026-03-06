@@ -193,7 +193,6 @@ func (r *Restorer) deleteOldDisk(ctx context.Context, diskName string) error {
 // attachAndConfigureDisks attaches restored disks to required instances, adds them to consistency
 // group and configures LVM.
 func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
-	var newDisks []multiDisks
 	for _, snapshotItem := range r.snapshotItems {
 		latestRestoredDisk, err := r.fetchLatestDisk(ctx, snapshotItem)
 		if err != nil {
@@ -240,7 +239,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 		time.Sleep(5 * time.Second)
 
-		newDisks = append(newDisks, multiDisks{
+		r.newAttachedDisks = append(r.newAttachedDisks, multiDisks{
 			disk: &ipb.Disk{
 				DiskName:   newDiskName,
 				DeviceName: dev,
@@ -254,7 +253,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDiskName)
 	}
 
-	if err := r.renameLVMForScaleup(ctx, exec, cp, newDisks); err != nil {
+	if err := r.renameLVMForScaleup(ctx, exec, cp, r.newAttachedDisks); err != nil {
 		return err
 	}
 
@@ -577,6 +576,12 @@ func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.
 // handleRestoreFailure handles the failure of the restore process.
 // It reattaches the old disks to the instance and adds them to the consistency group.
 func (r *Restorer) handleRestoreFailure(ctx context.Context, err error) {
+	for _, d := range r.newAttachedDisks {
+		if detachErr := r.gceService.DetachDisk(ctx, d.instanceName, r.Project, r.DataDiskZone, d.disk.DiskName, d.disk.DeviceName); detachErr != nil {
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "WARNING: Detaching newly attached restored disk failed,", detachErr)
+		}
+	}
+
 	r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 	for _, d := range r.disks {
 		if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {

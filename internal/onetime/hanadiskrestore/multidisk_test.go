@@ -2118,3 +2118,143 @@ func TestDeleteOldDisk(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleRestoreFailure(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name string
+		r    *Restorer
+	}{
+		{
+			name: "Success",
+			r: &Restorer{
+				newAttachedDisks: []multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "new-disk-1",
+							DeviceName: "dev-1",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "old-disk-1",
+							DeviceName: "dev-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:          nil,
+					AttachDiskErr:          nil,
+					AddResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					AddResourcePoliciesErr: nil,
+					DiskOpErr:              nil,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+		},
+		{
+			name: "DetachDiskFails",
+			r: &Restorer{
+				newAttachedDisks: []multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "new-disk-1",
+							DeviceName: "dev-1",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "old-disk-1",
+							DeviceName: "dev-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:          cmpopts.AnyError,
+					AttachDiskErr:          nil,
+					AddResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					AddResourcePoliciesErr: nil,
+					DiskOpErr:              nil,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+		},
+		{
+			name: "AttachDiskFails",
+			r: &Restorer{
+				newAttachedDisks: []multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "new-disk-1",
+							DeviceName: "dev-1",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "old-disk-1",
+							DeviceName: "dev-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:          nil,
+					AttachDiskErr:          cmpopts.AnyError,
+					AddResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					AddResourcePoliciesErr: nil,
+					DiskOpErr:              nil,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+		},
+		{
+			name: "AddResourcePoliciesFails",
+			r: &Restorer{
+				newAttachedDisks: []multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "new-disk-1",
+							DeviceName: "dev-1",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "old-disk-1",
+							DeviceName: "dev-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:          nil,
+					AttachDiskErr:          nil,
+					AddResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					AddResourcePoliciesErr: cmpopts.AnyError,
+					DiskOpErr:              nil,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.r.oteLogger = onetime.CreateOTELogger(false)
+			tc.r.handleRestoreFailure(ctx, cmpopts.AnyError)
+		})
+	}
+}

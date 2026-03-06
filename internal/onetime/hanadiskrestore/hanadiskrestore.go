@@ -207,6 +207,7 @@ type (
 		oteLogger                                                  *onetime.OTELogger
 		UseSnapshotGroupWorkflow                                   bool
 		snapshotItems                                              []snapshotgroup.SnapshotItem
+		newAttachedDisks                                           []multiDisks
 	}
 )
 
