@@ -54,7 +54,7 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 
 	dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewDiskName)
 	if r.DataDiskVG != "" {
-		if err := r.renameLVM(ctx, exec, cp, dev, r.NewDiskName); err != nil {
+		if err := r.renameLVM(ctx, exec, cp, dev); err != nil {
 			log.CtxLogger(ctx).Info("Removing newly attached restored disk")
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewDiskName)
 			if detachErr := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.NewDiskName, dev); detachErr != nil {

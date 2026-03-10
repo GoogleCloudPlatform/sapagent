@@ -18,10 +18,13 @@ package hanadiskrestore
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
@@ -51,11 +54,12 @@ func TestDiskRestore(t *testing.T) {
 			name: "SingleSnapshotRestoreError",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
-				NewDiskName:    "test-new-disk-name",
 				computeService: &fakeComputeService{
 					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: cmpopts.AnyError},
 				},
 				gceService: &fake.TestGCE{
+					GetDiskResp:                      []*compute.Disk{nil},
+					GetDiskErr:                       []error{&googleapi.Error{Code: http.StatusNotFound}},
 					DiskAttachedToInstanceDeviceName: "",
 					IsDiskAttached:                   false,
 					DiskAttachedToInstanceErr:        cmpopts.AnyError,
@@ -68,6 +72,78 @@ func TestDiskRestore(t *testing.T) {
 				}
 			},
 			want: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotRestoreSuccessNoVG",
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				DataDiskVG:     "",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+				},
+			},
+			exec: successExec,
+			want: nil,
+		},
+		{
+			name: "SingleSnapshotRestoreRenameLVMFails",
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				DataDiskVG:     "vg",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+					DetachDiskErr:             nil,
+					GetInstanceErr:            []error{cmpopts.AnyError},
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotRestoreRenameLVMSucceds",
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				DataDiskVG:     "vg",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+					DetachDiskErr:             nil,
+					GetInstanceErr:            []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: nil,
 		},
 	}
 

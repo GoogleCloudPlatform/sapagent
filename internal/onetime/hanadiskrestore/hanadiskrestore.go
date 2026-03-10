@@ -20,6 +20,7 @@ package hanadiskrestore
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -200,6 +201,7 @@ type (
 		isGroupSnapshot                                            bool
 		isScaleout                                                 bool
 		NewDiskName                                                string
+		NewDiskNames                                               string
 		NewDiskSuffix                                              string
 		CSEKKeyFile                                                string
 		ProvisionedIops, ProvisionedThroughput, DiskSizeGb         int64
@@ -221,9 +223,10 @@ func (*Restorer) Synopsis() string {
 
 // Usage implements the subcommand interface for hanadiskrestore.
 func (*Restorer) Usage() string {
-	return `Usage: hanadiskrestore -sid=<HANA-sid> -source-snapshot=<snapshot-name>
-  -data-disk-name=<disk-name> -data-disk-zone=<disk-zone> -new-disk-name=<name-less-than-63-chars>
-	[-group-snapshot-name=<group-snapshot-name>] [labels-on-detached-disk="key1=value1,key2=value2"]
+	return `Usage: hanadiskrestore -sid=<HANA-sid> [-source-snapshot=<snapshot-name>]
+  [-data-disk-name=<disk-name>] [-data-disk-zone=<disk-zone>] [-new-disk-name=<name-less-than-63-chars>]
+	[-group-snapshot-name=<group-snapshot-name>] [labels-on-detached-disk="key1=value1,key2=value2,..."]
+	[-new-disk-names=<new-disk1,new-disk2,new-disk3,...>]
   [-project=<project-name>] [-new-disk-type=<Type of the new disk>] [-force-stop-hana=<true|false>]
   [-hana-sidadm=<hana-sid-user-name>] [-provisioned-iops=<Integer value between 10,000 and 120,000>]
   [-provisioned-throughput=<Integer value between 1 and 7,124>] [-disk-size-gb=<New disk size in GB>]
@@ -247,6 +250,7 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&r.SourceSnapshot, "source-snapshot", "", "Source disk snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.GroupSnapshot, "group-snapshot-name", "", "Backup ID of group snapshot to restore from. (optional) either source-snapshot or group-snapshot-name must be provided")
 	fs.StringVar(&r.NewDiskName, "new-disk-name", "", "New disk name, ONLY for single disk restore. (required) must be less than 63 characters long")
+	fs.StringVar(&r.NewDiskNames, "new-disk-names", "", "New disk names, ONLY for multi-disk restore. (optional) must be comma separated, like \"new-disk-name1,new-disk-name2,new-disk-name3\"")
 	fs.StringVar(&r.NewDiskSuffix, "new-disk-suffix", "", "Suffix to be appended to the new disk name, ONLY for multi-disk restore. (optional) Default: empty, full name of disk has to be less than 63 characters.")
 	fs.StringVar(&r.Project, "project", "", "GCP project. (optional) Default: project corresponding to this instance")
 	fs.StringVar(&r.NewDiskType, "new-disk-type", "", "Type of the new disk. (optional) Default: same type as disk passed in data-disk-name.")
@@ -315,7 +319,8 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 
 	if restoreFromGroupSnapshot == true && restoreFromSingleSnapshot == true {
 		return fmt.Errorf("either source-snapshot or group-snapshot-name must be provided, not both. Usage: %s", r.Usage())
-	} else if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
+	}
+	if restoreFromGroupSnapshot == false && restoreFromSingleSnapshot == false {
 		return fmt.Errorf("required arguments not passed. Usage: %s", r.Usage())
 	}
 	if len(r.NewDiskName) > 63 {
@@ -612,7 +617,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 
 // renameLVM renames the LVM volume group of the newly restored disk to
 // that of the target disk.
-func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, deviceName string, diskName string) error {
+func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, deviceName string) error {
 	var err error
 	var instanceProperties *ipb.InstanceProperties
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, r.gceService)
@@ -718,6 +723,37 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 
 	if err := r.validateDisksBelongToCG(ctx); err != nil {
 		return err
+	}
+
+	if r.NewDiskNames == "" && r.NewDiskSuffix != "" {
+		for _, disk := range r.disks {
+			newDiskName, err := r.buildNewDiskName(ctx, disk.disk.GetDiskName(), r.NewDiskSuffix)
+			if err != nil {
+				return err
+			}
+			r.NewDiskNames = r.NewDiskNames + "," + newDiskName
+		}
+		r.NewDiskNames = strings.TrimPrefix(r.NewDiskNames, ",")
+	}
+
+	// Verify the new-disk-names match the number of disks.
+	if r.NewDiskNames != "" {
+		newDiskNames := strings.Split(r.NewDiskNames, ",")
+		if len(newDiskNames) != len(r.disks) {
+			return fmt.Errorf("number of new disk names provided does not match the number of disks")
+		}
+	}
+
+	// Verify that the new disks do not already exist.
+	if r.NewDiskNames != "" {
+		newDiskNames := strings.Split(r.NewDiskNames, ",")
+		for _, newDiskName := range newDiskNames {
+			if unique, err := r.isDiskUnique(ctx, newDiskName); err != nil {
+				return fmt.Errorf("failed to check if new disk %q already exists: %v", newDiskName, err)
+			} else if !unique {
+				return fmt.Errorf("new disk %q already exists", newDiskName)
+			}
+		}
 	}
 
 	return nil
@@ -886,4 +922,29 @@ func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, er
 	}
 
 	return labels, nil
+}
+
+func (r *Restorer) buildNewDiskName(ctx context.Context, sourceDiskName, suffix string) (string, error) {
+	newDiskName := fmt.Sprintf("%s-%s", sourceDiskName, suffix)
+	if len(newDiskName) > 63 {
+		return "", fmt.Errorf("new disk name is longer than 63 characters")
+	}
+	return newDiskName, nil
+}
+
+func (r *Restorer) isDiskUnique(ctx context.Context, diskName string) (bool, error) {
+	_, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, diskName)
+	if err == nil {
+		// Disk exists, so it's not unique
+		return false, nil
+	}
+
+	// Type assert to see if it's a googleapi.Error
+	if gErr, ok := err.(*googleapi.Error); ok {
+		if gErr.Code == http.StatusNotFound {
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("failed to get disk: %w", err)
 }
