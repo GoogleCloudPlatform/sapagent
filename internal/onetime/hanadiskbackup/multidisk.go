@@ -448,6 +448,7 @@ func cgPath(policies []string) string {
 // createGroupBackupLabels returns the labels to be added for the group snapshot.
 func (s *Snapshot) createGroupBackupLabels(disk, instanceName string) (map[string]string, error) {
 	labels := map[string]string{}
+	// TODO: Add provisioned IOPS and throughput for multi-disk snapshots.
 	if !s.groupSnapshot {
 		if s.provisionedIops != 0 {
 			labels["goog-sapagent-provisioned-iops"] = strconv.FormatInt(s.provisionedIops, 10)

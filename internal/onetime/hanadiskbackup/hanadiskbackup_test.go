@@ -403,8 +403,19 @@ func TestValidateDisks(t *testing.T) {
 				oteLogger: defaultOTELogger,
 				Disks:     "disk-name-1, disk-name-2",
 				gceService: &fake.TestGCE{
-					GetDiskResp: []*compute.Disk{&compute.Disk{}},
-					GetDiskErr:  []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:             "disk-name-1",
+							Users:            []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Name:             "disk-name-2",
+							Users:            []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg-1"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
 				},
 				Sid: "SID",
 			},
@@ -436,9 +447,13 @@ func TestValidateDisks(t *testing.T) {
 				gceService: &fake.TestGCE{
 					GetDiskResp: []*compute.Disk{
 						{
+							Name:             "disk-name-1",
+							Users:            []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 						{
+							Name:             "disk-name-2",
+							Users:            []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 					},
@@ -1129,13 +1144,79 @@ func TestValidateScaleoutDisks(t *testing.T) {
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
+			name: "ScaleoutGetDiskFailure",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{nil},
+					GetDiskErr:  []error{errors.New("GetDisk error")},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   scaleoutTopology,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to get disk \"disk-name-1\"",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleoutDiskNotAttachedToAnyInstance",
+			s: &Snapshot{
+				oteLogger: defaultOTELogger,
+				Disks:     "disk-name-1",
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{{Name: "disk-name-1", Users: nil}},
+					GetDiskErr:  []error{nil},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   scaleoutTopology,
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Disk \"disk-name-1\" is not attached to any instance",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
 			name: "ScaleoutDisksValidateConsistencyGroupFailure",
 			s: &Snapshot{
 				oteLogger: defaultOTELogger,
 				Disks:     "disk-name-1, disk-name-2",
 				gceService: &fake.TestGCE{
-					GetDiskResp: []*compute.Disk{&compute.Disk{}},
-					GetDiskErr:  []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name-1", Users: []string{"user"}},
+						{Name: "disk-name-2", Users: []string{"user"}},
+						nil,
+					},
+					GetDiskErr: []error{nil, nil, cmpopts.AnyError},
 				},
 				Sid: "SID",
 			},
@@ -1163,17 +1244,27 @@ func TestValidateScaleoutDisks(t *testing.T) {
 			name: "ScaleoutSuccess",
 			s: &Snapshot{
 				oteLogger: defaultOTELogger,
-				Disks:     "disk-name-1, disk-name-2",
+				Disks:     "disk-name-1, disk-name-2, ",
 				gceService: &fake.TestGCE{
 					GetDiskResp: []*compute.Disk{
 						{
+							Users:            []string{"user"},
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 						{
+							Users:            []string{"user"},
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Users:            []string{"user"},
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Users:            []string{"user"},
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 					},
-					GetDiskErr: []error{nil, nil},
+					GetDiskErr: []error{nil, nil, nil, nil},
 				},
 				Sid: "SID",
 			},

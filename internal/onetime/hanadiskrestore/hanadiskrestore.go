@@ -514,6 +514,10 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 					if err := r.gceService.AttachDisk(ctx, detachedDisk.disk.DiskName, detachedDisk.instanceName, r.Project, r.DataDiskZone); err != nil {
 						return fmt.Errorf("failed to attach old data disk that was detached earlier: %v", err)
 					}
+					if err := r.modifyDiskInCG(ctx, detachedDisk.disk.DiskName, true); err != nil {
+						log.CtxLogger(ctx).Errorf("failed to add old data disk %q to consistency group: %v", detachedDisk.disk.DiskName, err)
+						r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add old data disk %q to consistency group", detachedDisk.disk.DiskName))
+					}
 				}
 
 				// If detach fails, rescan the volume groups to ensure the directories are mounted.
@@ -527,7 +531,8 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 				return fmt.Errorf("%s: %v", errMessage, err)
 			}
 			if err := r.modifyDiskInCG(ctx, d.disk.DiskName, false); err != nil {
-				log.CtxLogger(ctx).Errorf("failed to modify disk in consistency group: %v", err)
+				log.CtxLogger(ctx).Warnf("failed to remove old data disk %q from consistency group: %v", d.disk.DiskName, err)
+				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to remove old data disk %q from consistency group", d.disk.DiskName))
 			}
 
 			disksDetached = append(disksDetached, d)
@@ -779,10 +784,22 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to list snapshots from snapshot group: %v", err)
 		}
+		if len(sItems) == 0 {
+			return fmt.Errorf("no snapshots found in snapshot group: %v", r.GroupSnapshot)
+		}
 		if len(sItems) != len(r.disks) {
 			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), len(sItems))
 		}
 		r.snapshotItems = sItems
+
+		if r.computeService == nil {
+			return fmt.Errorf("compute service is nil")
+		}
+		snapshot, err := r.computeService.GetSnapshot(r.Project, sItems[0].Name).Do()
+		if err != nil {
+			return fmt.Errorf("failed to fetch snapshot %q: %v", sItems[0].Name, err)
+		}
+		r.extractLabels(ctx, snapshot)
 	} else {
 		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
 		if err != nil {

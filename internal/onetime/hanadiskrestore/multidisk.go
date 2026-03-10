@@ -54,7 +54,7 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 	if r.UseSnapshotGroupWorkflow {
 		err = r.groupRestoreWithSGWorkflow(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
 	} else {
-		err = r.restoreFromGroupSnapshot(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
+		err = r.groupRestoreWithISGWorkflow(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
 	}
 	if err != nil {
 		r.handleRestoreFailure(ctx, err)
@@ -258,7 +258,8 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		}
 
 		if err := r.modifyDiskInCG(ctx, restoredDiskName, true); err != nil {
-			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", restoredDiskName)
+			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", restoredDiskName, "error", err)
+			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group", restoredDiskName))
 		} else {
 			log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", restoredDiskName)
 		}
@@ -271,9 +272,9 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 	return nil
 }
 
-// restoreFromGroupSnapshot creates several new HANA data disks from snapshots belonging
+// groupRestoreWithISGWorkflow creates several new HANA data disks from snapshots belonging
 // to given group snapshot and attaches them to the instance.
-func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
+func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
 	if r.gceService == nil {
 		return fmt.Errorf("gce service is nil")
 	}
@@ -314,7 +315,10 @@ func (r *Restorer) restoreFromGroupSnapshot(ctx context.Context, exec commandlin
 			restoredDiskPV = dev
 
 			if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
-				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDiskName)
+				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDiskName, "error", err)
+				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group", newDiskName))
+			} else {
+				log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDiskName)
 			}
 
 			numOfDisksRestored++

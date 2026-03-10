@@ -218,7 +218,7 @@ func TestGroupRestore(t *testing.T) {
 	}
 }
 
-func TestRestoreFromGroupSnapshot(t *testing.T) {
+func TestGroupRestoreWithISGWorkflow(t *testing.T) {
 	tests := []struct {
 		name        string
 		r           *Restorer
@@ -434,9 +434,9 @@ func TestRestoreFromGroupSnapshot(t *testing.T) {
 	ctx := t.Context()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.r.restoreFromGroupSnapshot(ctx, tc.exec, tc.cp, tc.snapshotKey)
+			got := tc.r.groupRestoreWithISGWorkflow(ctx, tc.exec, tc.cp, tc.snapshotKey)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
-				t.Errorf("restoreFromGroupSnapshot() returned diff (-want +got):\n%s", diff)
+				t.Errorf("groupRestoreWithISGWorkflow() returned diff (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1502,6 +1502,7 @@ func TestGroupRestoreWithSGWorkflow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.r.oteLogger = onetime.CreateOTELogger(false)
 			err := tc.r.groupRestoreWithSGWorkflow(t.Context(), commandlineexecutor.ExecuteCommand, defaultCloudProperties, "")
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("groupRestoreWithSGWorkflow() returned diff (-want +got):\n%s", diff)

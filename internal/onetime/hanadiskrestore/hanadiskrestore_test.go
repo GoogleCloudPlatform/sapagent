@@ -231,7 +231,7 @@ var (
 		SourceSnapshot: "my-snapshot",
 		NewDiskName:    "new-data-disk",
 		SourceDisks:    "data-disk",
-		disks:          []*multiDisks{&multiDisks{disk: &ipb.Disk{DiskName: "data-disk", DeviceName: "pd-balanced", Type: "PERSISTENT"}}},
+		disks:          []*multiDisks{{disk: &ipb.Disk{DiskName: "data-disk", DeviceName: "pd-balanced", Type: "PERSISTENT"}}},
 	}
 	defaultCloudProperties = &ipb.CloudProperties{ProjectId: "default-project"}
 	defaultGetInstanceResp = []*compute.Instance{{
@@ -1028,7 +1028,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskSuffix: "test-suffix",
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
@@ -1076,7 +1076,7 @@ func TestCheckPreConditions(t *testing.T) {
 			},
 			r: &Restorer{
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
@@ -1124,7 +1124,7 @@ func TestCheckPreConditions(t *testing.T) {
 			},
 			r: &Restorer{
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
@@ -1177,7 +1177,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskType: "hyperdisk-extreme",
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DeviceName: "pd-balanced",
 							Type:       "PERSISTENT",
@@ -1256,14 +1256,14 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskSuffix: "suffix",
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
 							Type:       "PERSISTENT",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name-1",
 							DeviceName: "pd-balanced",
@@ -1336,14 +1336,14 @@ func TestCheckPreConditions(t *testing.T) {
 			},
 			r: &Restorer{
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
 							Type:       "PERSISTENT",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name-1",
 							DeviceName: "pd-balanced",
@@ -1408,14 +1408,14 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskNames: "new-disk-1", // 1 name
 				disks: []*multiDisks{ // 2 disks
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
 							Type:       "PERSISTENT",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name-1",
 							DeviceName: "pd-balanced",
@@ -1452,12 +1452,12 @@ func TestCheckPreConditions(t *testing.T) {
 					IsDiskAttached:                   true,
 					DiskAttachedToInstanceErr:        nil,
 					GetDiskResp: []*compute.Disk{
-						&compute.Disk{Name: "test-disk-1", Type: "pd-ssd"}, // for disk type
-						&compute.Disk{ // for CG check disk 1
+						{Name: "test-disk-1", Type: "pd-ssd"}, // for disk type
+						{ // for CG check disk 1
 							Name:             "test-disk-1",
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
 						},
-						&compute.Disk{ // for CG check disk 2
+						{ // for CG check disk 2
 							Name:             "test-disk-2",
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
 						},
@@ -1481,7 +1481,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskNames: "new-disk-1",
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
@@ -1537,7 +1537,7 @@ func TestCheckPreConditions(t *testing.T) {
 			r: &Restorer{
 				NewDiskNames: "new-disk-1",
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
@@ -1592,14 +1592,14 @@ func TestCheckPreConditions(t *testing.T) {
 			},
 			r: &Restorer{
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name",
 							DeviceName: "pd-balanced",
 							Type:       "PERSISTENT",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName:   "test-disk-name-1",
 							DeviceName: "pd-balanced",
@@ -1821,17 +1821,55 @@ func TestPrepare(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "GroupSnapshotDetachDiskErrReattachModifyCGErr",
+			r: &Restorer{
+				isGroupSnapshot: true,
+				isScaleout:      true,
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName: "disk-name-1",
+						},
+						instanceName: "instance-1",
+					},
+					{
+						disk: &ipb.Disk{
+							DiskName: "disk-name-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:          cmpopts.AnyError,
+					AddResourcePoliciesErr: cmpopts.AnyError,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotDetachDiskErr",
 			r: &Restorer{
 				isGroupSnapshot: true,
 				isScaleout:      true,
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-1",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-2",
 						},
@@ -1868,12 +1906,12 @@ func TestPrepare(t *testing.T) {
 			r: &Restorer{
 				isGroupSnapshot: true,
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-1",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-2",
 						},
@@ -1911,12 +1949,12 @@ func TestPrepare(t *testing.T) {
 			r: &Restorer{
 				isGroupSnapshot: true,
 				disks: []*multiDisks{
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-1",
 						},
 					},
-					&multiDisks{
+					{
 						disk: &ipb.Disk{
 							DiskName: "disk-name-2",
 						},
@@ -1990,6 +2028,17 @@ func TestVerifySnapshotPresence(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "GroupSnapshotWorkflowNoSnapshots",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotWorkflowSnapshotMismatch",
 			r: &Restorer{
 				isGroupSnapshot:          true,
@@ -2015,6 +2064,9 @@ func TestVerifySnapshotPresence(t *testing.T) {
 					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
 						snapshotgroup.SnapshotItem{},
 					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
 				},
 			},
 			wantErr: nil,

@@ -550,6 +550,26 @@ func (s *Snapshot) validateScaleoutDisks(ctx context.Context, cp *ipb.CloudPrope
 	for i := range disks {
 		disks[i] = strings.TrimSpace(disks[i])
 	}
+	for _, d := range disks {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		// Check if the disk is attached to the instance.
+		diskData, err := s.gceService.GetDisk(s.Project, s.DiskZone, d)
+		if err != nil {
+			errMessage := fmt.Sprintf("ERROR: Failed to get disk %q", d)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
+
+		if len(diskData.Users) == 0 {
+			errMessage := fmt.Sprintf("ERROR: Disk %q is not attached to any instance", d)
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("disk %q is not attached to any instance", d))
+			return errMessage, subcommands.ExitFailure
+		}
+	}
+
 	if err := s.validateDisksBelongToCG(ctx, disks); err != nil {
 		errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -635,7 +655,6 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 }
 
 // verifyStriping verifies if the data device is striped.
-// It also checks if the disks belong to the same consistency group.
 func (s *Snapshot) verifyStriping(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupStarted)
 	if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, exec); err != nil {
