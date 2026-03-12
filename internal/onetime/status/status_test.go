@@ -66,6 +66,9 @@ var (
 	defaultStorageClient = func(ctx context.Context, opts ...option.ClientOption) (*store.Client, error) {
 		return fakeServer(defaultBucketName).Client(), nil
 	}
+	equateSpaces = cmp.Transformer("EquateSpaces", func(s string) string {
+		return strings.ReplaceAll(s, "\u00a0", " ")
+	})
 )
 
 type mockArtifactRegistryClient struct {
@@ -594,7 +597,7 @@ func TestDiskSnapshotStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := tc.s.diskSnapshotStatus(context.Background(), tc.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("diskSnapshotStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -784,7 +787,7 @@ func TestHostMetricsStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := tc.s.hostMetricsStatus(context.Background(), tc.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("hostMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -963,7 +966,7 @@ func TestProcessMetricsStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := tc.s.processMetricsStatus(context.Background(), tc.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("processMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -1201,7 +1204,7 @@ func TestHanaMonitoringMetricsStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := tc.s.hanaMonitoringMetricsStatus(context.Background(), tc.s.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("hanaMonitoringMetricsStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -1368,7 +1371,7 @@ func TestWorkloadManagerStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := tc.s.workloadManagerStatus(context.Background(), tc.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("workloadManagerStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -1809,7 +1812,7 @@ func TestStatusHandler(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got, gotErr := test.s.statusHandler(context.Background())
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("statusHandler() returned unexpected diff (-want +got):\n%s", diff)
 			}
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
@@ -2044,7 +2047,7 @@ func TestBackintStatusFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got := test.s.backintStatus(context.Background())
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("backintStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -2273,7 +2276,7 @@ func TestSystemDiscoveryStatusFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got := test.s.systemDiscoveryStatus(context.Background(), test.config)
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(test.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("systemDiscoveryStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
@@ -2491,7 +2494,7 @@ func TestParameterManagerStatus(t *testing.T) {
 				Name:            "Parameter Manager",
 				State:           spb.State_SUCCESS_STATE,
 				FullyFunctional: spb.State_FAILURE_STATE,
-				ErrorMessage:    "Failed to parse configuration from Parameter Manager: proto:\u00a0syntax error (line 1:1): invalid value malformed",
+				ErrorMessage:    "Failed to parse configuration from Parameter Manager: proto: syntax error (line 1:1): invalid value malformed",
 				ConfigValues: []*spb.ConfigValue{
 					{Name: "project", Value: "project"},
 					{Name: "location", Value: "location"},
@@ -2549,7 +2552,7 @@ func TestParameterManagerStatus(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tc.s.parameterManagerStatus(t.Context(), tc.config)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("parameterManagerStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})

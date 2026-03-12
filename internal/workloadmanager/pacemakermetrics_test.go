@@ -74,7 +74,7 @@ func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		Metrics: []*mrpb.TimeSeries{{
 			Metric: &metricpb.Metric{
 				Type:   "workload.googleapis.com/sap/validation/pacemaker",
-				Labels: map[string]string{},
+				Labels: map[string]string{"saphanasr_angi_installed": "true"},
 			},
 			MetricKind: metricpb.MetricDescriptor_GAUGE,
 			Resource: &monitoredresourcepb.MonitoredResource{

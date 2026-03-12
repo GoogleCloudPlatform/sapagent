@@ -230,7 +230,9 @@ func (m mockReadCloser) Close() error {
 }
 
 func wantErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
-	return map[string]string{}
+	return map[string]string{
+		"saphanasr_angi_installed": "true",
+	}
 }
 
 func wantServiceAccountErrorPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
@@ -300,6 +302,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"ers_ilb_monitor_timeout":           "",
 		"has_alias_ip":                      "false",
 		"cluster_healthy":                   "true",
+		"saphanasr_angi_installed":          "true",
 	}
 }
 
@@ -454,11 +457,14 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"ers_ilb_monitor_timeout":            "60",
 		"has_alias_ip":                       "false",
 		"cluster_healthy":                    "true",
+		"saphanasr_angi_installed":           "true",
 	}
 }
 
 func wantNoPropertiesPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
-	return map[string]string{}
+	return map[string]string{
+		"saphanasr_angi_installed": "true",
+	}
 }
 
 func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float64, os string, locationPref string) map[string]string {
@@ -517,6 +523,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"ers_ilb_monitor_timeout":           "",
 		"has_alias_ip":                      "false",
 		"cluster_healthy":                   "true",
+		"saphanasr_angi_installed":          "true",
 	}
 }
 

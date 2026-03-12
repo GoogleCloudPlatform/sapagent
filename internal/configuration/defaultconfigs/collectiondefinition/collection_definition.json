@@ -1749,7 +1749,7 @@
             "type": "workload.googleapis.com/sap/validation/pacemaker",
             "label": "saphanasr_angi_installed"
           },
-          "os_vendor": "SLES",
+          "os_vendor": "ALL",
           "command": "rpm",
           "args": ["-q", "SAPHanaSR-angi"],
           "and_eval_rules": {
