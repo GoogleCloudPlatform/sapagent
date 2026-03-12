@@ -47,6 +47,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 
 	arpb "cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
@@ -259,6 +260,20 @@ func TestExecuteStatus(t *testing.T) {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.s, test.args, got, test.want)
 			}
 		})
+	}
+}
+
+func TestInitSetsFunctions(t *testing.T) {
+	s := Status{}
+	err := s.Init(t.Context())
+	if err != nil && !strings.Contains(err.Error(), "credentials") {
+		t.Fatalf("Init() returned an unexpected error: %v", err)
+	}
+	if s.permissionsStatus == nil {
+		t.Errorf("Init() did not set s.permissionsStatus")
+	}
+	if s.fetchParameter == nil {
+		t.Errorf("Init() did not set s.fetchParameter")
 	}
 }
 
@@ -1528,7 +1543,13 @@ func TestStatusHandler(t *testing.T) {
 				"secret_name": "secret1"
 			}
 		]
-  }
+  },
+	"parameter_manager_config": {
+		"project": "project-id",
+		"location": "zone-id",
+		"parameter_name": "parameter-name",
+		"parameter_version": "latest"
+	}
 }
 `), nil
 				},
@@ -1547,7 +1568,7 @@ func TestStatusHandler(t *testing.T) {
 					return commandlineexecutor.Result{StdOut: "", StdErr: "error", ExitCode: 0, Error: fmt.Errorf("error")}
 				},
 				CloudProps: &iipb.CloudProperties{
-					Scopes:       []string{},
+					Scopes:       []string{requiredScope},
 					InstanceId:   "instance-id",
 					InstanceName: "instance-name",
 					ProjectId:    "project-id",
@@ -1568,9 +1589,17 @@ func TestStatusHandler(t *testing.T) {
 				createDBHandle:        dbConnectorSuccess,
 				iamService:            &iam.IAM{},
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
-					return map[string]bool{
-						"monitoring.timeSeries.create": true,
-					}, nil
+					res := map[string]bool{"monitoring.timeSeries.create": true}
+					if serviceName == "PARAMETER_MANAGER" {
+						res["parametermanager.parameterVersions.get"] = true
+						res["parametermanager.parameterVersions.list"] = true
+						res["parametermanager.parameterVersions.render"] = true
+					}
+					return res, nil
+				},
+
+				fetchParameter: func(ctx context.Context, client *parametermanager.Client, project, location, name, version string) (*parametermanager.Resource, error) {
+					return &parametermanager.Resource{Data: `{"provide_sap_host_agent_metrics": true}`}, nil
 				},
 				Feature: allFeatures,
 			},
@@ -1582,7 +1611,7 @@ func TestStatusHandler(t *testing.T) {
 				SystemdServiceRunning:           spb.State_ERROR_STATE,
 				ConfigurationFilePath:           configuration.LinuxConfigPath,
 				ConfigurationValid:              spb.State_SUCCESS_STATE,
-				CloudApiAccessFullScopesGranted: spb.State_FAILURE_STATE,
+				CloudApiAccessFullScopesGranted: spb.State_SUCCESS_STATE,
 				InstanceUri:                     "projects/project-id/zones/zone-id/instances/instance-name",
 				Services: []*spb.ServiceStatus{
 					{
@@ -1680,6 +1709,23 @@ func TestStatusHandler(t *testing.T) {
 							{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
 						},
 						FullyFunctional: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:            "Parameter Manager",
+						State:           spb.State_SUCCESS_STATE,
+						FullyFunctional: spb.State_SUCCESS_STATE,
+						ConfigValues: []*spb.ConfigValue{
+							{Name: "project", Value: "project-id"},
+							{Name: "location", Value: "zone-id"},
+							{Name: "parameter_name", Value: "parameter-name"},
+							{Name: "parameter_version", Value: "latest"},
+						},
+						IamPermissions: []*spb.IAMPermission{
+							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+							{Name: "parametermanager.parameterVersions.get", Granted: spb.State_SUCCESS_STATE},
+							{Name: "parametermanager.parameterVersions.list", Granted: spb.State_SUCCESS_STATE},
+							{Name: "parametermanager.parameterVersions.render", Granted: spb.State_SUCCESS_STATE},
+						},
 					},
 				},
 				References: []*spb.Reference{
@@ -2229,6 +2275,282 @@ func TestSystemDiscoveryStatusFailures(t *testing.T) {
 			got := test.s.systemDiscoveryStatus(context.Background(), test.config)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("systemDiscoveryStatus() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestParameterManagerStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		s      Status
+		config *cpb.Configuration
+		want   *spb.ServiceStatus
+	}{
+		{
+			name:   "NilParameterManagerConfig_ReturnsUnspecifiedState",
+			s:      Status{},
+			config: &cpb.Configuration{},
+			want:   nil,
+		},
+		{
+			name: "MissingRequiredConfigFields_ReturnsFailureState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project: "project",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Invalid Parameter Manager configuration: project, location, and parameter_name must be provided",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "", IsDefault: true},
+					{Name: "parameter_name", Value: "", IsDefault: true},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "CloudPropertiesNotAvailable_ReturnsFailureState",
+			s:    Status{},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Cloud properties not available",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "MissingRequiredAPIScope_ReturnsFailureState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{"other-scope"}},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Missing required scope for Parameter Manager API. Need: https://www.googleapis.com/auth/cloud-platform",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "IAMPermissionFetchFailure_ReturnsErrorState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return nil, fmt.Errorf("error")
+				},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_ERROR_STATE,
+				ErrorMessage:    "Error checking IAM permissions: error",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "RequiredIAMPermissionsNotGranted_ReturnsFailureState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"parametermanager.parameterVersions.get": false,
+					}, nil
+				},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "IAM permissions not granted",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{Name: "parametermanager.parameterVersions.get", Granted: spb.State_FAILURE_STATE},
+				},
+			},
+		},
+		{
+			name: "ParameterFetchFromManagerFailure_ReturnsFailureState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"parametermanager.parameterVersions.get":    true,
+						"parametermanager.parameterVersions.list":   true,
+						"parametermanager.parameterVersions.render": true,
+					}, nil
+				},
+				fetchParameter: func(ctx context.Context, client *parametermanager.Client, project, location, name, version string) (*parametermanager.Resource, error) {
+					return nil, fmt.Errorf("error")
+				},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to fetch configuration from Parameter Manager: error",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{Name: "parametermanager.parameterVersions.get", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.list", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.render", Granted: spb.State_SUCCESS_STATE},
+				},
+			},
+		},
+		{
+			name: "MalformedParameterManagerConfigData_ReturnsFailureState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"parametermanager.parameterVersions.get":    true,
+						"parametermanager.parameterVersions.list":   true,
+						"parametermanager.parameterVersions.render": true,
+					}, nil
+				},
+				fetchParameter: func(ctx context.Context, client *parametermanager.Client, project, location, name, version string) (*parametermanager.Resource, error) {
+					return &parametermanager.Resource{Data: "malformed"}, nil
+				},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to parse configuration from Parameter Manager: proto:\u00a0syntax error (line 1:1): invalid value malformed",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{Name: "parametermanager.parameterVersions.get", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.list", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.render", Granted: spb.State_SUCCESS_STATE},
+				},
+			},
+		},
+		{
+			name: "SuccessfulParameterFetchAndParse_ReturnsSuccessState",
+			s: Status{
+				CloudProps: &iipb.CloudProperties{Scopes: []string{requiredScope}},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"parametermanager.parameterVersions.get":    true,
+						"parametermanager.parameterVersions.list":   true,
+						"parametermanager.parameterVersions.render": true,
+					}, nil
+				},
+				fetchParameter: func(ctx context.Context, client *parametermanager.Client, project, location, name, version string) (*parametermanager.Resource, error) {
+					return &parametermanager.Resource{Data: `{"provide_sap_host_agent_metrics": true}`}, nil
+				},
+			},
+			config: &cpb.Configuration{
+				ParameterManagerConfig: &cpb.ParameterManagerConfig{
+					Project:       "project",
+					Location:      "location",
+					ParameterName: "name",
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Parameter Manager",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "project", Value: "project"},
+					{Name: "location", Value: "location"},
+					{Name: "parameter_name", Value: "name"},
+					{Name: "parameter_version", Value: "", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{Name: "parametermanager.parameterVersions.get", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.list", Granted: spb.State_SUCCESS_STATE},
+					{Name: "parametermanager.parameterVersions.render", Granted: spb.State_SUCCESS_STATE},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.parameterManagerStatus(t.Context(), tc.config)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("parameterManagerStatus() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
 	}

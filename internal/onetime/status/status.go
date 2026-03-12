@@ -50,6 +50,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/recovery"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/statushelper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
@@ -78,20 +79,22 @@ const (
 	workloadEvaluationMELabel = "WORKLOAD_EVALUATION_METRICS"
 	secretManagerLabel        = "SECRET_MANAGER"
 	agentMetricsLabel         = "AGENT_HEALTH_METRICS"
+	parameterManagerLabel     = "PARAMETER_MANAGER"
 
-	hostMetrics     = "host_metrics"
-	processMetrics  = "process_metrics"
-	hanaMonitoring  = "hana_monitoring"
-	sapDiscovery    = "sap_discovery"
-	backint         = "backint"
-	diskSnapshot    = "disk_snapshot"
-	workloadManager = "workload_manager"
+	hostMetrics      = "host_metrics"
+	processMetrics   = "process_metrics"
+	hanaMonitoring   = "hana_monitoring"
+	sapDiscovery     = "sap_discovery"
+	backint          = "backint"
+	diskSnapshot     = "disk_snapshot"
+	workloadManager  = "workload_manager"
+	parameterManager = "parameter_manager"
 )
 
 var (
 	dailyUsageRoutine *recovery.RecoverableRoutine
 	collectRoutine    *recovery.RecoverableRoutine
-	allFeatures       = strings.Join([]string{hostMetrics, processMetrics, hanaMonitoring, sapDiscovery, backint, diskSnapshot, workloadManager}, ",")
+	allFeatures       = strings.Join([]string{hostMetrics, processMetrics, hanaMonitoring, sapDiscovery, backint, diskSnapshot, workloadManager, parameterManager}, ",")
 )
 
 type (
@@ -136,6 +139,7 @@ type Status struct {
 	exec              commandlineexecutor.Execute
 	backintClient     storage.Client
 	permissionsStatus permissions.FetchStatusFunc
+	fetchParameter    func(ctx context.Context, client *parametermanager.Client, projectID, location, parameterName, parameterVersion string) (*parametermanager.Resource, error)
 	httpGet           httpGetter
 	createDBHandle    databaseconnector.DBHandleFunc
 	stat              statFunc
@@ -206,6 +210,7 @@ func (s *Status) Init(ctx context.Context) error {
 	s.stat = os.Stat
 	s.readDir = ioutil.ReadDir
 	s.permissionsStatus = permissions.GetServicePermissionsStatus
+	s.fetchParameter = parametermanager.FetchParameter
 	s.httpGet = http.Get
 	s.createDBHandle = databaseconnector.CreateDBHandle
 	if s.Feature == "" {
@@ -363,6 +368,11 @@ func (s *Status) statusHandler(ctx context.Context) (*spb.AgentStatus, error) {
 	}
 	if strings.Contains(s.Feature, workloadManager) {
 		agentStatus.Services = append(agentStatus.Services, s.workloadManagerStatus(ctx, config))
+	}
+	if strings.Contains(s.Feature, parameterManager) {
+		if pmStatus := s.parameterManagerStatus(ctx, config); pmStatus != nil {
+			agentStatus.Services = append(agentStatus.Services, pmStatus)
+		}
 	}
 	agentStatus.References = append(agentStatus.References, &spb.Reference{
 		Name: "Release notes",
@@ -799,6 +809,62 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+
+	status.FullyFunctional = spb.State_SUCCESS_STATE
+	return status
+}
+
+func (s *Status) parameterManagerStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {
+	if config.GetParameterManagerConfig() == nil {
+		return nil
+	}
+
+	status := &spb.ServiceStatus{
+		Name:  "Parameter Manager",
+		State: spb.State_SUCCESS_STATE,
+	}
+
+	pmConfig := config.GetParameterManagerConfig()
+	status.ConfigValues = []*spb.ConfigValue{
+		configValue("project", pmConfig.GetProject(), ""),
+		configValue("location", pmConfig.GetLocation(), ""),
+		configValue("parameter_name", pmConfig.GetParameterName(), ""),
+		configValue("parameter_version", pmConfig.GetParameterVersion(), ""),
+	}
+
+	// Check 1: JSON configuration validity
+	if pmConfig.GetProject() == "" || pmConfig.GetLocation() == "" || pmConfig.GetParameterName() == "" {
+		return logCheckFailureAndReturnStatus(ctx, status, "Invalid Parameter Manager configuration: project, location, and parameter_name must be provided", spb.State_FAILURE_STATE)
+	}
+
+	// Check 2: API access scope
+	if s.CloudProps == nil {
+		return logCheckFailureAndReturnStatus(ctx, status, "Cloud properties not available", spb.State_FAILURE_STATE)
+	}
+	if !slices.Contains(s.CloudProps.GetScopes(), requiredScope) {
+		return logCheckFailureAndReturnStatus(ctx, status, "Missing required scope for Parameter Manager API. Need: "+requiredScope, spb.State_FAILURE_STATE)
+	}
+
+	// Check 3: API IAM permission
+	permissionsStatus, allGranted, err := s.fetchPermissionsStatus(ctx, parameterManagerLabel, &permissions.ResourceDetails{
+		ProjectID: pmConfig.GetProject(),
+	})
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err), spb.State_ERROR_STATE)
+	}
+	status.IamPermissions = permissionsStatus
+	if !allGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
+	}
+
+	// Check 4: Retrieved configuration validity
+	resource, err := s.fetchParameter(ctx, nil, pmConfig.GetProject(), pmConfig.GetLocation(), pmConfig.GetParameterName(), pmConfig.GetParameterVersion())
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Failed to fetch configuration from Parameter Manager: %v", err), spb.State_FAILURE_STATE)
+	}
+	if err := protojson.Unmarshal([]byte(resource.Data), &cpb.Configuration{}); err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Failed to parse configuration from Parameter Manager: %v", err), spb.State_FAILURE_STATE)
 	}
 
 	status.FullyFunctional = spb.State_SUCCESS_STATE
