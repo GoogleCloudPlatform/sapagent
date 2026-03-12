@@ -539,6 +539,10 @@ func (r *Restorer) handleRestoreFailure(ctx context.Context, err error) {
 		if detachErr := r.gceService.DetachDisk(ctx, d.instanceName, r.Project, r.DataDiskZone, d.disk.DiskName, d.disk.DeviceName); detachErr != nil {
 			r.oteLogger.LogErrorToFileAndConsole(ctx, "WARNING: Detaching newly attached restored disk failed,", detachErr)
 		}
+		if modifyCGErr := r.modifyDiskInCG(ctx, d.disk.DiskName, false); modifyCGErr != nil {
+			log.CtxLogger(ctx).Warnw("failed to remove newly attached disk from consistency group", "disk", d.disk.DiskName)
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Removing newly attached disk from consistency group failed,", modifyCGErr)
+		}
 	}
 
 	r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)

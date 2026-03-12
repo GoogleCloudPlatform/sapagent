@@ -2393,6 +2393,37 @@ func TestHandleRestoreFailure(t *testing.T) {
 				DataDiskZone: "us-central1-a",
 			},
 		},
+		{
+			name: "RemoveResourcePoliciesFails",
+			r: &Restorer{
+				newAttachedDisks: []multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "new-disk-1",
+							DeviceName: "dev-1",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName:   "old-disk-1",
+							DeviceName: "dev-2",
+						},
+						instanceName: "instance-1",
+					},
+				},
+				gceService: &fake.TestGCE{
+					DetachDiskErr:             nil,
+					AttachDiskErr:             nil,
+					RemoveResourcePoliciesOp:  &compute.Operation{Status: "DONE"},
+					RemoveResourcePoliciesErr: cmpopts.AnyError,
+					DiskOpErr:                 nil,
+				},
+				DataDiskZone: "us-central1-a",
+			},
+		},
 	}
 
 	for _, tc := range tests {
