@@ -218,7 +218,7 @@ func (c *ConfigureInstance) setDefaults() {
 // configureInstanceHandler checks and applies OS settings
 // depending on the machine type.
 func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, string) {
-	c.LogToBoth(ctx, "ConfigureInstance starting")
+	c.LogToBoth(ctx, fmt.Sprintf("ConfigureInstance starting: %s", strings.Join(os.Args, " ")))
 	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
 	var err error
