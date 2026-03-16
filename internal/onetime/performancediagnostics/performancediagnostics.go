@@ -888,9 +888,13 @@ func (d *Diagnose) runPerfDiag(ctx context.Context, opts *options) []error {
 	}
 	cmd := "sudo"
 	args := []string{
+		// Note: gcloud storage perfdiag is not supported.
 		fmt.Sprintf("gsutil perfdiag -n 12 -c 12 -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p.json gs://%s", targetPath, targetBucket),
+		// Note: gcloud storage perfdiag is not supported.
 		fmt.Sprintf("gsutil perfdiag -n 12 -c 12 -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p.json gs://%s", targetPath, targetBucket),
+		// Note: gcloud storage perfdiag is not supported.
 		fmt.Sprintf("gsutil perfdiag -s 100m -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_100m_12p_default.json gs://%s", targetPath, targetBucket),
+		// Note: gcloud storage perfdiag is not supported.
 		fmt.Sprintf("gsutil perfdiag -s 1G -t wthru,wthru_file -d /hana/data/ -o %s/backup/out_1g_12p_default.json gs://%s", targetPath, targetBucket),
 	}
 
