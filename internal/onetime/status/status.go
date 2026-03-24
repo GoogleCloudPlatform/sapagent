@@ -539,6 +539,13 @@ func (s *Status) processMetricsStatus(ctx context.Context, config *cpb.Configura
 	if err != nil {
 		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
+	secretPermissions, secretAllGranted, err := s.checkSecretIfConfigured(ctx, config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbPasswordSecretName())
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking secret permissions: %v", err.Error()), spb.State_ERROR_STATE)
+	}
+	permissionsStatus = append(permissionsStatus, secretPermissions...)
+	allGranted = allGranted && secretAllGranted
+
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
@@ -580,7 +587,15 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
 	}
 	var failedInstances []string
+	allSecretsGranted := true
 	for _, i := range s.config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		secretPermissions, secretAllGranted, err := s.checkSecretIfConfigured(ctx, i.GetSecretName())
+		if err != nil {
+			return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking secret permissions: %v", err.Error()), spb.State_ERROR_STATE)
+		}
+		status.IamPermissions = append(status.IamPermissions, secretPermissions...)
+		allSecretsGranted = allSecretsGranted && secretAllGranted
+
 		// Note: We ignore timeout params here.
 		dbp := databaseconnector.Params{
 			Username:       i.GetUser(),
@@ -605,6 +620,9 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 			failedInstances = append(failedInstances, i.GetName())
 			continue
 		}
+	}
+	if !allSecretsGranted {
+		return logCheckFailureAndReturnStatus(ctx, status, "Secret Manager permissions not granted for some instances", spb.State_FAILURE_STATE)
 	}
 	if len(failedInstances) > 0 {
 		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Failed to connect to HANA instances: %s", strings.Join(failedInstances, ", ")), spb.State_FAILURE_STATE)
@@ -806,6 +824,13 @@ func (s *Status) workloadManagerStatus(ctx context.Context, config *cpb.Configur
 	if err != nil {
 		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking IAM permissions: %v", err.Error()), spb.State_ERROR_STATE)
 	}
+	secretPermissions, secretAllGranted, err := s.checkSecretIfConfigured(ctx, config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPasswordSecretName())
+	if err != nil {
+		return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking secret permissions: %v", err.Error()), spb.State_ERROR_STATE)
+	}
+	permissionsStatus = append(permissionsStatus, secretPermissions...)
+	allGranted = allGranted && secretAllGranted
+
 	status.IamPermissions = permissionsStatus
 	if !allGranted {
 		return logCheckFailureAndReturnStatus(ctx, status, "IAM permissions not granted", spb.State_FAILURE_STATE)
@@ -869,6 +894,16 @@ func (s *Status) parameterManagerStatus(ctx context.Context, config *cpb.Configu
 
 	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
+}
+
+func (s *Status) checkSecretIfConfigured(ctx context.Context, secretName string) ([]*spb.IAMPermission, bool, error) {
+	if secretName == "" {
+		return nil, true, nil
+	}
+
+	return s.fetchPermissionsStatus(ctx, secretManagerLabel, &permissions.ResourceDetails{
+		ProjectID: s.CloudProps.GetProjectId(),
+	})
 }
 
 func configValue(name string, value any, defaultValue any) *spb.ConfigValue {

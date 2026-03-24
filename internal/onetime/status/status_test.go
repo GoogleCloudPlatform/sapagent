@@ -960,6 +960,117 @@ func TestProcessMetricsStatus(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "ProcessMetricsWithSecret_Success",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					ProcessMetricsFrequency:     10,
+					ProcessMetricsToSkip:        []string{"test1", "test2"},
+					SlowProcessMetricsFrequency: 20,
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": true,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0111}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Process Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "true", IsDefault: false},
+					{Name: "process_metrics_frequency", Value: "10", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[test1 test2]", IsDefault: false},
+					{Name: "slow_process_metrics_frequency", Value: "20", IsDefault: false},
+				},
+			},
+		},
+		{
+			name: "ProcessMetricsWithSecret_Failure",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics:       true,
+					ProcessMetricsFrequency:     10,
+					ProcessMetricsToSkip:        []string{"test1", "test2"},
+					SlowProcessMetricsFrequency: 20,
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": false,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				stat: func(name string) (os.FileInfo, error) {
+					return &mockFileInfo{perm: 0111}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Process Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_FAILURE_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_process_metrics", Value: "true", IsDefault: false},
+					{Name: "process_metrics_frequency", Value: "10", IsDefault: false},
+					{Name: "process_metrics_to_skip", Value: "[test1 test2]", IsDefault: false},
+					{Name: "slow_process_metrics_frequency", Value: "20", IsDefault: false},
+				},
+				ErrorMessage: "IAM permissions not granted",
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -1198,6 +1309,137 @@ func TestHanaMonitoringMetricsStatus(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "HanaMonitoringWithSecret_Success",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": true,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name:       "instance1",
+								User:       "user1",
+								Host:       "host1",
+								Port:       "1234",
+								SecretName: "my-secret",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+			},
+		},
+		{
+			name: "HanaMonitoringWithSecret_Failure",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": false,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name:       "instance1",
+								User:       "user1",
+								Host:       "host1",
+								Port:       "1234",
+								SecretName: "my-secret",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorSuccess,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_FAILURE_STATE,
+					},
+				},
+				ErrorMessage: "Secret Manager permissions not granted for some instances",
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -1363,6 +1605,119 @@ func TestWorkloadManagerStatus(t *testing.T) {
 					{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
 					{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
 				},
+			},
+		},
+		{
+			name: "WorkloadManagerWithSecret_Success",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": true,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       &wpb.BoolValue{Value: true},
+					},
+					WorkloadValidationDbMetricsFrequency: 3600,
+					WorkloadValidationMetricsFrequency:   300,
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Workload Manager Evaluation",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
+					{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
+					{Name: "fetch_latest_config", Value: "true", IsDefault: true},
+					{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
+					{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
+				},
+			},
+		},
+		{
+			name: "WorkloadManagerWithSecret_Failure",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					if serviceName == secretManagerLabel {
+						return map[string]bool{
+							"secretmanager.versions.access": false,
+						}, nil
+					}
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				CloudProps: &iipb.CloudProperties{
+					ProjectId: "test-project",
+					Scopes:    []string{requiredScope},
+				},
+			},
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectWorkloadValidationMetrics: &wpb.BoolValue{Value: true},
+					WorkloadValidationCollectionDefinition: &cpb.WorkloadValidationCollectionDefinition{
+						ConfigTargetEnvironment: cpb.TargetEnvironment_PRODUCTION,
+						FetchLatestConfig:       &wpb.BoolValue{Value: true},
+					},
+					WorkloadValidationDbMetricsFrequency: 3600,
+					WorkloadValidationMetricsFrequency:   300,
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+			want: &spb.ServiceStatus{
+				Name:            "Workload Manager Evaluation",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+					{
+						Name:    "secretmanager.versions.access",
+						Granted: spb.State_FAILURE_STATE,
+					},
+				},
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "collect_workload_validation_metrics", Value: "true", IsDefault: true},
+					{Name: "config_target_environment", Value: "PRODUCTION", IsDefault: true},
+					{Name: "fetch_latest_config", Value: "true", IsDefault: true},
+					{Name: "workload_validation_db_metrics_frequency", Value: "3600", IsDefault: true},
+					{Name: "workload_validation_metrics_frequency", Value: "300", IsDefault: true},
+				},
+				ErrorMessage: "IAM permissions not granted",
 			},
 		},
 	}
