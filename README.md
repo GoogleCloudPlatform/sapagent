@@ -9,11 +9,12 @@ running.
 
 See documentation at:
 
-*   All Guides: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/all-guides
-*   Planning: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/planning
-*   Installation: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/install-config
-*   Operations: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/operations
-*   Troubleshooting: https://cloud.google.com/solutions/sap/docs/agent-for-sap/latest/troubleshooting
+*   All Guides: https://docs.cloud.google.com/sap/docs/agent-for-sap/latest/all-guides
+*   What's New: https://docs.cloud.google.com/sap/docs/agent-for-sap/whats-new
+*   Planning: https://docs.cloud.google.com/sap/docs/agent-for-sap/latest/planning
+*   Installation: https://docs.cloud.google.com/sap/docs/agent-for-sap/latest/install-config
+*   Operations: https://docs.cloud.google.com/sap/docs/agent-for-sap/latest/operations
+*   Troubleshooting: https://docs.cloud.google.com/sap/docs/agent-for-sap/latest/troubleshooting
 
 ## License and Copyright
 
