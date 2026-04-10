@@ -392,6 +392,8 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
 		return subcommands.ExitFailure
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Pre-restore checks succeeded, starting HANA restore...")
+
 	if !r.SkipDBSnapshotForChangeDiskType {
 		if err := r.prepare(ctx, cp, hanabackup.WaitForIndexServerToStopWithRetry, commandlineexecutor.ExecuteCommand); err != nil {
 			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore prepare failed,", err)
@@ -403,18 +405,24 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 			return subcommands.ExitFailure
 		}
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "HANA restore prepare succeeded, HANA is stopped, data directory is unmounted and target data disks are detached...")
 	// Rescanning to prevent any volume group naming conflicts
 	// with restored disk's volume group.
-	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
+	if err := hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to rescan volume groups,", err)
+		return subcommands.ExitFailure
+	}
 
 	workflowStartTime = time.Now()
 	if !r.isGroupSnapshot {
 		if err := r.diskRestore(ctx, commandlineexecutor.ExecuteCommand, cp); err != nil {
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from disk snapshot failed,", err)
 			return subcommands.ExitFailure
 		}
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskRestoreSucceeded)
 	} else {
-		if err := r.groupRestore(ctx, cp); err != nil {
+		if err := r.groupRestore(ctx, commandlineexecutor.ExecuteCommand, cp); err != nil {
+			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 			return subcommands.ExitFailure
 		}
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupRestoreSucceeded)
@@ -498,7 +506,9 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		log.CtxLogger(ctx).Infow("Detaching old data disk", "disk", r.DataDiskName, "physicalDataPath", r.physicalDataPath)
 		if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 			// If detach fails, rescan the volume groups to ensure the directories are mounted.
-			hanabackup.RescanVolumeGroups(ctx, exec)
+			if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+				log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
+			}
 			return fmt.Errorf("failed to detach old data disk: %v", err)
 		}
 	} else {
@@ -516,12 +526,14 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 					}
 					if err := r.modifyDiskInCG(ctx, detachedDisk.disk.DiskName, true); err != nil {
 						log.CtxLogger(ctx).Errorf("failed to add old data disk %q to consistency group: %v", detachedDisk.disk.DiskName, err)
-						r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add old data disk %q to consistency group", detachedDisk.disk.DiskName))
+						r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add old data disk %q to consistency group...", detachedDisk.disk.DiskName))
 					}
 				}
 
 				// If detach fails, rescan the volume groups to ensure the directories are mounted.
-				hanabackup.RescanVolumeGroups(ctx, exec)
+				if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+					log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
+				}
 
 				errMessage := "failed to detach old data disks"
 				if r.isScaleout {
@@ -532,7 +544,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			}
 			if err := r.modifyDiskInCG(ctx, d.disk.DiskName, false); err != nil {
 				log.CtxLogger(ctx).Warnf("failed to remove old data disk %q from consistency group: %v", d.disk.DiskName, err)
-				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to remove old data disk %q from consistency group", d.disk.DiskName))
+				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to remove old data disk %q from consistency group...", d.disk.DiskName))
 			}
 
 			disksDetached = append(disksDetached, d)
@@ -553,7 +565,9 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 	}
 	if err := r.gceService.DetachDisk(ctx, cp.GetInstanceName(), r.Project, r.DataDiskZone, r.DataDiskName, r.DataDiskDeviceName); err != nil {
 		// If detach fails, rescan the volume groups to ensure the directories are mounted.
-		hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
+		if err := hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+			log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
+		}
 		return fmt.Errorf("failed to detach old data disk: %v", err)
 	}
 	log.CtxLogger(ctx).Info("HANA restore prepareForHANAChangeDiskType succeeded.")

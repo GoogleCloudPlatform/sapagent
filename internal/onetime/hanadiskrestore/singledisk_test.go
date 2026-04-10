@@ -118,6 +118,37 @@ func TestDiskRestore(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "SingleSnapshotRestoreRescanFails",
+			r: &Restorer{
+				SourceSnapshot: "test-snapshot",
+				DataDiskVG:     "vg",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+					DetachDiskErr:             nil,
+					GetInstanceErr:            []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/dmsetup" {
+					return commandlineexecutor.Result{Error: cmpopts.AnyError}
+				}
+				return commandlineexecutor.Result{
+					StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "SingleSnapshotRestoreRenameLVMSucceds",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",

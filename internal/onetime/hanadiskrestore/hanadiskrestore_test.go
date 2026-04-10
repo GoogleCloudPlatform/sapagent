@@ -1735,6 +1735,30 @@ func TestPrepare(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "RescanVolumeGroupsDMSetupError",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				gceService: &fake.TestGCE{
+					DetachDiskErr: cmpopts.AnyError,
+				},
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/dmsetup" {
+					return commandlineexecutor.Result{ExitCode: 1, Error: cmpopts.AnyError}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "SingleSnapshotDetachDiskErr",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
@@ -1794,6 +1818,43 @@ func TestPrepare(t *testing.T) {
 					ExitCode: 0,
 					Error:    nil,
 					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd   lvm2 a--  500.00g 300.00g",
+				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "RescanVolumeGroupsDMSetupErrorGroupSnapshot",
+			r: &Restorer{
+				isGroupSnapshot: true,
+				disks: []*multiDisks{
+					{
+						disk: &ipb.Disk{
+							DiskName: "disk-name-1",
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						{
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr:    []error{nil},
+					DetachDiskErr: cmpopts.AnyError,
+				},
+			},
+			cp: defaultCloudProperties,
+			waitForIndexServerStop: func(context.Context, string, commandlineexecutor.Execute) error {
+				return nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/dmsetup" {
+					return commandlineexecutor.Result{ExitCode: 1, Error: cmpopts.AnyError}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
 				}
 			},
 			want: cmpopts.AnyError,

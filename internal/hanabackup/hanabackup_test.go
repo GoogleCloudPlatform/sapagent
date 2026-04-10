@@ -111,11 +111,11 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "Success",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */ },
-				{ /* vgscan */ },
-				{ /* vgchange */ },
-				{ /* lvscan */ },
-				{ /* mount -av */ },
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{ /* vgchange */},
+				{ /* lvscan */},
+				{ /* mount -av */},
 			},
 			wantErr:       nil,
 			wantExecCalls: 5,
@@ -129,10 +129,27 @@ func TestRescanVolumeGroups(t *testing.T) {
 			wantExecCalls: 1,
 		},
 		{
+			name: "DmsetupRemoveAllFailsWithStderr",
+			mockResults: []commandlineexecutor.Result{
+				{StdErr: "dmsetup failed"},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 1,
+		},
+		{
 			name: "VgscanFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */ },
+				{ /* dmsetup remove_all */},
 				{Error: errors.New("vgscan failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 2,
+		},
+		{
+			name: "VgscanFailsWithStderr",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */},
+				{StdErr: "vgscan failed"},
 			},
 			wantErr:       cmpopts.AnyError,
 			wantExecCalls: 2,
@@ -140,9 +157,19 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "VgchangeFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */ },
-				{ /* vgscan */ },
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
 				{Error: errors.New("vgchange failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 3,
+		},
+		{
+			name: "VgchangeFailsWithStderr",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{StdErr: "vgchange failed"},
 			},
 			wantErr:       cmpopts.AnyError,
 			wantExecCalls: 3,
@@ -150,10 +177,21 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "LvscanFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */ },
-				{ /* vgscan */ },
-				{ /* vgchange */ },
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{ /* vgchange */},
 				{Error: errors.New("lvscan failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 4,
+		},
+		{
+			name: "LvscanFailsWithStderr",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{ /* vgchange */},
+				{StdErr: "lvscan failed"},
 			},
 			wantErr:       cmpopts.AnyError,
 			wantExecCalls: 4,
@@ -161,11 +199,23 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "MountAvFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */ },
-				{ /* vgscan */ },
-				{ /* vgchange */ },
-				{ /* lvscan */ },
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{ /* vgchange */},
+				{ /* lvscan */},
 				{Error: errors.New("mount failed"), ExitCode: 1},
+			},
+			wantErr:       cmpopts.AnyError,
+			wantExecCalls: 5,
+		},
+		{
+			name: "MountAvFailsWithStderr",
+			mockResults: []commandlineexecutor.Result{
+				{ /* dmsetup remove_all */},
+				{ /* vgscan */},
+				{ /* vgchange */},
+				{ /* lvscan */},
+				{StdErr: "mount failed"},
 			},
 			wantErr:       cmpopts.AnyError,
 			wantExecCalls: 5,

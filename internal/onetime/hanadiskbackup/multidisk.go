@@ -84,6 +84,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 		s.oteLogger.LogUsageError(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
 	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA snapshot %q created...", snapshotID))
 
 	err = s.createInstantSnapshotGroup(ctx)
 	if s.FreezeFileSystem {
@@ -109,6 +110,7 @@ func (s *Snapshot) runWorkflowForInstantSnapshotGroups(ctx context.Context, run 
 			}
 			return err
 		}
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Group snapshot created, waiting for upload to complete...")
 
 		if err := s.confirmDataSnapshotAfterCreate(ctx, run, snapshotID); err != nil {
 			return err

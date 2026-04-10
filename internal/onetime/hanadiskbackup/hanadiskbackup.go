@@ -447,6 +447,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	}
 	s.computeService = &computeClient{service: cs}
 
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Starting HANA disk snapshot workflow...")
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
 		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, cp)
@@ -472,7 +473,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	var successMessage string
 	if s.groupSnapshot {
 		snapshotName = s.GroupSnapshotName
-		successMessage = fmt.Sprintf("SUCCESS: HANA backup and group disk snapshot creation successful. Group Backup Name: %s", snapshotName)
+		successMessage = fmt.Sprintf("SUCCESS: HANA backup and group disk snapshot creation successful. Group Snapshot Name: %s", snapshotName)
 		s.oteLogger.LogMessageToConsole(successMessage)
 		s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupSucceeded)
 	} else {

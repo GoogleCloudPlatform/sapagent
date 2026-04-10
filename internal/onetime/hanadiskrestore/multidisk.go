@@ -36,7 +36,7 @@ import (
 )
 
 // groupRestore creates several new HANA data disks from snapshots belonging to given group snapshot and attaches them to the instance.
-func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) error {
+func (r *Restorer) groupRestore(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
 	if r.CSEKKeyFile != "" {
 		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
@@ -52,17 +52,19 @@ func (r *Restorer) groupRestore(ctx context.Context, cp *ipb.CloudProperties) er
 
 	var err error
 	if r.UseSnapshotGroupWorkflow {
-		err = r.groupRestoreWithSGWorkflow(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
+		err = r.groupRestoreWithSGWorkflow(ctx, exec, cp, snapShotKey)
 	} else {
-		err = r.groupRestoreWithISGWorkflow(ctx, commandlineexecutor.ExecuteCommand, cp, snapShotKey)
+		err = r.groupRestoreWithISGWorkflow(ctx, exec, cp, snapShotKey)
 	}
 	if err != nil {
-		r.handleRestoreFailure(ctx, err)
+		r.handleRestoreFailure(ctx, exec, err)
 		return err
 	}
 
-	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
-	log.CtxLogger(ctx).Info("HANA restore from group snapshot succeeded.")
+	if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+		return fmt.Errorf("failed to rescan volume groups after restoring disks from snapshot group: %w", err)
+	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully scanned LVM configurations, LVM is ready...")
 	return nil
 }
 
@@ -79,10 +81,12 @@ func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context, exec commandl
 	if err := r.bulkInsertDisksFromSG(ctx); err != nil {
 		return err
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully created new disks from snapshot group...")
 
 	if err := r.attachAndConfigureDisks(ctx, exec, cp, snapshotKey); err != nil {
 		return err
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully attached and configured new disks...")
 
 	return nil
 }
@@ -259,7 +263,7 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 
 		if err := r.modifyDiskInCG(ctx, restoredDiskName, true); err != nil {
 			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", restoredDiskName, "error", err)
-			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group", restoredDiskName))
+			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group...", restoredDiskName))
 		} else {
 			log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", restoredDiskName)
 		}
@@ -316,7 +320,7 @@ func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec command
 
 			if err := r.modifyDiskInCG(ctx, newDiskName, true); err != nil {
 				log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", newDiskName, "error", err)
-				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group", newDiskName))
+				r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group...", newDiskName))
 			} else {
 				log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", newDiskName)
 			}
@@ -328,6 +332,7 @@ func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec command
 	if numOfDisksRestored != len(r.disks) {
 		return fmt.Errorf("required number of disks did not get restored, wanted: %v, got: %v", len(r.disks), numOfDisksRestored)
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully restored and attached disks to the instance...")
 
 	if err := r.renameLVMForScaleup(ctx, exec, cp, restoredDiskPV); err != nil {
 		return err
@@ -534,7 +539,7 @@ func (r *Restorer) scaleoutDisksAttachedToInstance(ctx context.Context, cp *ipb.
 
 // handleRestoreFailure handles the failure of the restore process.
 // It reattaches the old disks to the instance and adds them to the consistency group.
-func (r *Restorer) handleRestoreFailure(ctx context.Context, err error) {
+func (r *Restorer) handleRestoreFailure(ctx context.Context, exec commandlineexecutor.Execute, err error) {
 	for _, d := range r.newAttachedDisks {
 		if detachErr := r.gceService.DetachDisk(ctx, d.instanceName, r.Project, r.DataDiskZone, d.disk.DiskName, d.disk.DeviceName); detachErr != nil {
 			r.oteLogger.LogErrorToFileAndConsole(ctx, "WARNING: Detaching newly attached restored disk failed,", detachErr)
@@ -557,6 +562,8 @@ func (r *Restorer) handleRestoreFailure(ctx context.Context, err error) {
 		}
 	}
 
-	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
+	if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
+	}
 	return
 }

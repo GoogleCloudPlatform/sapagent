@@ -44,6 +44,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 		s.oteLogger.LogUsageError(usagemetrics.SnapshotDBNotReadyFailure)
 		return err
 	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("HANA snapshot %q created...", snapshotID))
 
 	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
@@ -60,6 +61,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
 		return err
 	}
+	s.oteLogger.LogMessageToFileAndConsole(ctx, "Disk snapshot created, waiting for upload to complete...")
 
 	if s.ConfirmDataSnapshotAfterCreate {
 		log.CtxLogger(ctx).Info("Marking HANA snapshot as successful after disk snapshot is created but not yet uploaded.")

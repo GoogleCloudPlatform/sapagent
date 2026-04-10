@@ -48,9 +48,12 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
 			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
 		}
-		hanabackup.RescanVolumeGroups(ctx, exec)
+		if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+			log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
+		}
 		return err
 	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully attached and configured new disk...")
 
 	dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), r.NewDiskName)
 	if r.DataDiskVG != "" {
@@ -67,7 +70,9 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 		}
 	}
 
-	hanabackup.RescanVolumeGroups(ctx, exec)
-	log.CtxLogger(ctx).Info("HANA restore from snapshot succeeded.")
+	if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+		return fmt.Errorf("failed to rescan volume groups after restoring disk from snapshot: %w", err)
+	}
+	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully rescanned volume groups and LVM is ready...")
 	return nil
 }
