@@ -958,7 +958,8 @@ func (r *Restorer) appendLabels(labels map[string]string) (map[string]string, er
 func (r *Restorer) buildNewDiskName(ctx context.Context, sourceDiskName, suffix string) (string, error) {
 	newDiskName := fmt.Sprintf("%s-%s", sourceDiskName, suffix)
 	if len(newDiskName) > 63 {
-		return "", fmt.Errorf("new disk name is longer than 63 characters")
+		log.CtxLogger(ctx).Infow("New disk name is longer than 63 characters, truncating it", "originalName", newDiskName)
+		newDiskName = newDiskName[:63]
 	}
 	return newDiskName, nil
 }

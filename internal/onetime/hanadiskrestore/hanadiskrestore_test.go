@@ -2929,8 +2929,8 @@ func TestBuildNewDiskName(t *testing.T) {
 			r:                &Restorer{},
 			originalDiskName: strings.Repeat("a", 60),
 			suffix:           "suff",
-			want:             "",
-			wantErr:          true,
+			want:             strings.Repeat("a", 60) + "-su",
+			wantErr:          false,
 		},
 		{
 			name:             "success",
