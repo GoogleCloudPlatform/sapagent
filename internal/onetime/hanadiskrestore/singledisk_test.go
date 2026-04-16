@@ -19,6 +19,7 @@ package hanadiskrestore
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -149,7 +150,7 @@ func TestDiskRestore(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "SingleSnapshotRestoreRenameLVMSucceds",
+			name: "VerifyDataVolumeStateFails",
 			r: &Restorer{
 				SourceSnapshot: "test-snapshot",
 				DataDiskVG:     "vg",
@@ -170,9 +171,60 @@ func TestDiskRestore(t *testing.T) {
 				},
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{Error: cmpopts.AnyError}
+				}
 				return commandlineexecutor.Result{
 					StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
 				}
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SingleSnapshotRestoreRenameLVMSuccess",
+			r: &Restorer{
+				SourceSnapshot:  "test-snapshot",
+				DataDiskVG:      "vg",
+				baseDataPath:    "/hana/data",
+				logicalDataPath: "/dev/mapper/vg-lv",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					DiskOpErr:                 nil,
+					AttachDiskErr:             nil,
+					DiskAttachedToInstanceErr: nil,
+					IsDiskAttached:            true,
+					DetachDiskErr:             nil,
+					GetInstanceErr:            []error{nil},
+					GetInstanceResp:           defaultGetInstanceResp,
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/vgdisplay" && params.ArgsToSplit == "vg" {
+					return commandlineexecutor.Result{StdOut: "vg"}
+				}
+				if params.Executable == "/sbin/lvdisplay" && params.ArgsToSplit == "/dev/mapper/vg-lv" {
+					return commandlineexecutor.Result{StdOut: "lv"}
+				}
+				if params.Executable == "bash" && strings.Contains(params.ArgsToSplit, "df --output=target /hana/data") {
+					return commandlineexecutor.Result{StdOut: "/hana/data"}
+				}
+				if params.Executable == "mountpoint" && params.ArgsToSplit == "/hana/data" {
+					return commandlineexecutor.Result{ExitCode: 0}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				return commandlineexecutor.Result{}
 			},
 			want: nil,
 		},

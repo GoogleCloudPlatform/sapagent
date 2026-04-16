@@ -129,6 +129,47 @@ func (f *fakeComputeService) GetSnapshot(project, snapshot string) snapshotsGetC
 	return f.GetSnapshotCallResp
 }
 
+const (
+	successVGDisplay = `--- Volume group ---
+  VG Name               vg_hana_data
+  System ID
+  Format                lvm2
+  Metadata Areas        2
+  Metadata Sequence No  2
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                1
+  Open LV               1
+  Max PV                0
+  Cur PV                2
+  Act PV                2
+  VG Size               383.99 GiB
+  PE Size               4.00 MiB
+  Total PE              98302
+  Alloc PE / Size       98302 / 383.99 GiB
+  Free  PE / Size       0 / 0   
+  VG UUID               rzGl8D-UGWl-TFwa-FYZP-b87J-CxFI-84fjJY
+`
+	successLVDisplay = `--- Logical volume ---
+  LV Path                /dev/vg_hana_data/data
+  LV Name                data
+  VG Name                vg_hana_data
+  LV UUID                n44fSU-bK1l-BHRp-IhQv-TUM4-TiF0-4lNyQz
+  LV Write Access        read/write
+  LV Creation host, time hana-rh92sap-0-u1776315526-bp, 2026-04-16 05:09:19 +0000
+  LV Status              available
+  # open                 1
+  LV Size                383.99 GiB
+  Current LE             98302
+  Segments               1
+  Allocation             inherit
+  Read ahead sectors     auto
+  - currently set to     2048
+  Block device           253:1
+`
+)
+
 func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
 	os.Exit(t.Run())
@@ -2951,6 +2992,185 @@ func TestBuildNewDiskName(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("buildNewDiskName() = %q, want: %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVerifyDataVolumeState(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		exec    commandlineexecutor.Execute
+		wantErr bool
+	}{
+		{
+			name: "VGDisplayError",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("vgdisplay error")}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "LVDisplayError",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("lvdisplay error")}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "ReadDataDirMountPathError",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: successLVDisplay}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+					return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("df error")}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "MountpointNotMounted",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: successLVDisplay}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+					return commandlineexecutor.Result{StdOut: "/hana/data"}
+				}
+				if params.Executable == "mountpoint" {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "FindmntError",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: successLVDisplay}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+					return commandlineexecutor.Result{StdOut: "/hana/data"}
+				}
+				if params.Executable == "mountpoint" {
+					return commandlineexecutor.Result{ExitCode: 0}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("findmnt error")}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "FindmntWrongLV",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: successLVDisplay}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+					return commandlineexecutor.Result{StdOut: "/hana/data"}
+				}
+				if params.Executable == "mountpoint" {
+					return commandlineexecutor.Result{ExitCode: 0}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/wrongvg-wronglv"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: true,
+		},
+		{
+			name: "Success",
+			r: &Restorer{
+				DataDiskVG:      "vg_hana_data",
+				logicalDataPath: "/dev/mapper/vg_hana_data-data",
+				baseDataPath:    "/hana/data/SID",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" && params.ArgsToSplit == "vg_hana_data" {
+					return commandlineexecutor.Result{StdOut: successVGDisplay}
+				}
+				if params.Executable == "/sbin/lvdisplay" && params.ArgsToSplit == "/dev/mapper/vg_hana_data-data" {
+					return commandlineexecutor.Result{StdOut: successLVDisplay}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+					return commandlineexecutor.Result{StdOut: "/hana/data"}
+				}
+				if params.Executable == "mountpoint" {
+					return commandlineexecutor.Result{ExitCode: 0}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg_hana_data-data"}
+				}
+				return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("unexpected command: %s %v", params.Executable, params.ArgsToSplit)}
+			},
+			wantErr: false,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.r.verifyDataVolumeState(ctx, tc.exec)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("verifyDataVolumeState() got error: %v, wantErr: %v", err, tc.wantErr)
 			}
 		})
 	}

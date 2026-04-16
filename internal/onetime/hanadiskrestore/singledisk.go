@@ -73,6 +73,9 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 	if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
 		return fmt.Errorf("failed to rescan volume groups after restoring disk from snapshot: %w", err)
 	}
+	if err := r.verifyDataVolumeState(ctx, exec); err != nil {
+		return fmt.Errorf("failed to verify data volume state after restoring disk from snapshot: %w", err)
+	}
 	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully rescanned volume groups and LVM is ready...")
 	return nil
 }

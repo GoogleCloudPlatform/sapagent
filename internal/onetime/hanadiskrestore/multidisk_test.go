@@ -284,6 +284,58 @@ func TestGroupRestore(t *testing.T) {
 			},
 			want: cmpopts.AnyError,
 		},
+		{
+			name: "VerifyDataVolumeStateFails",
+			r: &Restorer{
+				GroupSnapshot:            "test-group-snapshot",
+				UseSnapshotGroupWorkflow: true,
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", SourceDisk: "source-disk-1"},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return []snapshotgroup.DiskItem{
+							{Name: "new-disk-1", CreationTimestamp: time.Now().Format(time.RFC3339)},
+						}, nil
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{},
+						nil,
+						&compute.Disk{},
+						&compute.Disk{},
+					},
+					GetDiskErr:                       []error{nil, &googleapi.Error{Code: http.StatusNotFound}, nil, nil},
+					DiskOpErr:                        nil,
+					AttachDiskErr:                    nil,
+					DeleteDiskResp:                   []*compute.Operation{nil},
+					DeleteDiskErr:                    []error{nil},
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "dev",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 100}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{Status: "DONE"}, Err: nil},
+				},
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName: "test-disk-1",
+						},
+					},
+				},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgdisplay" {
+					return commandlineexecutor.Result{Error: cmpopts.AnyError}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want: cmpopts.AnyError,
+		},
 	}
 
 	for _, tc := range tests {

@@ -408,10 +408,7 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	r.oteLogger.LogMessageToFileAndConsole(ctx, "HANA restore prepare succeeded, HANA is stopped, data directory is unmounted and target data disks are detached...")
 	// Rescanning to prevent any volume group naming conflicts
 	// with restored disk's volume group.
-	if err := hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand); err != nil {
-		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to rescan volume groups,", err)
-		return subcommands.ExitFailure
-	}
+	hanabackup.RescanVolumeGroups(ctx, commandlineexecutor.ExecuteCommand)
 
 	workflowStartTime = time.Now()
 	if !r.isGroupSnapshot {
@@ -978,4 +975,52 @@ func (r *Restorer) isDiskUnique(ctx context.Context, diskName string) (bool, err
 	}
 
 	return false, fmt.Errorf("failed to get disk: %w", err)
+}
+
+// verifyDataVolumeState verifies that the data volume is mounted and is backed by the correct LV and is the expected mount point.
+func (r *Restorer) verifyDataVolumeState(ctx context.Context, exec commandlineexecutor.Execute) error {
+	expectedVG := r.DataDiskVG
+	expectedLV := r.logicalDataPath
+
+	// 1. Check VG exists
+	result := exec(ctx, commandlineexecutor.Params{Executable: "/sbin/vgdisplay", ArgsToSplit: expectedVG})
+	if result.Error != nil || result.ExitCode != 0 || !strings.Contains(result.StdOut, expectedVG) {
+		return fmt.Errorf("data VG %s not found or not active after restore. err: %v, stderr: %s, stdout: %s", expectedVG, result.Error, result.StdErr, result.StdOut)
+	}
+	log.CtxLogger(ctx).Infow("Verification successful: VG exists", "VG", expectedVG)
+
+	// 2. Check LV exists
+	result = exec(ctx, commandlineexecutor.Params{Executable: "/sbin/lvdisplay", ArgsToSplit: expectedLV})
+	if result.Error != nil || result.ExitCode != 0 {
+		return fmt.Errorf("data LV %s not found or not active after restore. err: %v, stderr: %s, stdout: %s", expectedLV, result.Error, result.StdErr, result.StdOut)
+	}
+	log.CtxLogger(ctx).Infow("Verification successful: LV exists", "LV", expectedLV)
+
+	// 3. Check Mount Point
+	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, exec)
+	if err != nil {
+		return fmt.Errorf("failed to determine mount point for %s: %v", r.baseDataPath, err)
+	}
+	log.CtxLogger(ctx).Infow("Determined data directory mount path", "mountPath", mountPath)
+
+	// 4. Check if the mount point is mounted
+	result = exec(ctx, commandlineexecutor.Params{Executable: "mountpoint", ArgsToSplit: mountPath})
+	if result.ExitCode != 0 {
+		return fmt.Errorf("data volume mount point %s is not mounted after restore. err: %v, stderr: %s", mountPath, result.Error, result.StdErr)
+	}
+	log.CtxLogger(ctx).Infow("Verification successful: Mount point exists", "MountPoint", mountPath)
+
+	// 5. Check if mount point is backed by the correct LV and is the expected mount point
+	result = exec(ctx, commandlineexecutor.Params{Executable: "findmnt", ArgsToSplit: "-n -o SOURCE --target " + mountPath})
+	if result.Error != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to check source for mount point %s: %v %s", mountPath, result.Error, result.StdErr)
+	}
+	foundLV := strings.TrimSpace(result.StdOut)
+	if foundLV != expectedLV { // expectedLV is /dev/mapper/VG-LV
+		return fmt.Errorf("mount point %s is backed by %s, expected %s", mountPath, foundLV, expectedLV)
+	}
+	log.CtxLogger(ctx).Infow("Verification successful: Mount point source is correct", "MountPoint", mountPath, "Source", foundLV)
+
+	log.CtxLogger(ctx).Info("All data volume verifications passed.")
+	return nil
 }
