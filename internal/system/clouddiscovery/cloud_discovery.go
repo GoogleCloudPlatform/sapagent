@@ -268,6 +268,9 @@ func (d *CloudDiscovery) discoverResource(ctx context.Context, host toDiscover, 
 				d.discoverNetwork(ctx, host.network)
 				cloudNet = d.networks[host.network]
 			}
+			if cloudNet == nil || len(cloudNet.subnets) == 0 {
+				return nil, nil, fmt.Errorf("discoverResource host network not found after discovery: %s", host.network)
+			}
 			log.CtxLogger(ctx).Debugw("discoverResource host network subnets", "subnets", cloudNet.subnets)
 			for _, s := range cloudNet.subnets {
 				log.CtxLogger(ctx).Debugw("discoverResource host network subnets ipRange", "ipRange", s.ipRange)
@@ -624,18 +627,20 @@ func (d *CloudDiscovery) discoverBackendService(ctx context.Context, backendServ
 
 func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string) (*spb.SapDiscovery_Resource, []toDiscover, error) {
 	log.CtxLogger(ctx).Debugw("discoverNetwork", "networkURI", networkURI)
+	networkName := ExtractFromURI(networkURI, networksURIPart)
+	project := ExtractFromURI(networkURI, projectsURIPart)
 	if d.networks == nil {
 		d.networks = make(map[string]*CloudNetwork)
 	}
 	cloudNet, ok := d.networks[networkURI]
 	if !ok {
 		cloudNet = &CloudNetwork{
-			name:    ExtractFromURI(networkURI, networksURIPart),
-			project: ExtractFromURI(networkURI, projectsURIPart),
+			name:    networkName,
+			project: project,
 		}
 	}
 
-	cn, err := d.GceService.GetNetwork(ExtractFromURI(networkURI, networksURIPart), ExtractFromURI(networkURI, projectsURIPart))
+	cn, err := d.GceService.GetNetwork(networkName, project)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -651,7 +656,7 @@ func (d *CloudDiscovery) discoverNetwork(ctx context.Context, networkURI string)
 	for _, s := range cn.Subnetworks {
 		log.CtxLogger(ctx).Debugw("discoverNetwork subnetwork", "subnetwork", s)
 		cs, err := d.GceService.GetSubnetwork(ExtractFromURI(s, subnetworksURIPart),
-			ExtractFromURI(s, projectsURIPart),
+			project,
 			ExtractFromURI(s, regionsURIPart))
 		if err != nil {
 			log.CtxLogger(ctx).Infow("discoverNetwork subnetwork error", "err", err, "subnetwork", s)

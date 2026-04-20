@@ -1551,7 +1551,7 @@ func findDisksForHANABasePath(ctx context.Context, pathName string, globalINIPat
 	// Find what is mounted to that path.
 	p = commandlineexecutor.Params{
 		Executable: "lsblk",
-		Args:       []string{"--output=NAME,MOUNTPOINTS", "--json"},
+		Args:       []string{"--output=NAME,MOUNTPOINT", "--json"},
 	}
 	res = exec(ctx, p)
 	if res.Error != nil {
