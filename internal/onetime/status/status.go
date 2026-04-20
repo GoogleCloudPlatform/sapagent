@@ -588,7 +588,7 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 	}
 	var failedInstances []string
 	allSecretsGranted := true
-	for _, i := range s.config.GetHanaMonitoringConfiguration().GetHanaInstances() {
+	for _, i := range config.GetHanaMonitoringConfiguration().GetHanaInstances() {
 		secretPermissions, secretAllGranted, err := s.checkSecretIfConfigured(ctx, i.GetSecretName())
 		if err != nil {
 			return logCheckFailureAndReturnStatus(ctx, status, fmt.Sprintf("Error checking secret permissions: %v", err.Error()), spb.State_ERROR_STATE)
@@ -609,7 +609,7 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 			HDBUserKey:     i.GetHdbuserstoreKey(),
 			SID:            i.GetSid(),
 			GCEService:     s.gceService,
-			Project:        s.config.GetCloudProperties().GetProjectId(),
+			Project:        config.GetCloudProperties().GetProjectId(),
 			PingSpec: &databaseconnector.PingSpec{
 				Timeout:    1 * time.Second,
 				MaxRetries: 0,
@@ -902,7 +902,8 @@ func (s *Status) checkSecretIfConfigured(ctx context.Context, secretName string)
 	}
 
 	return s.fetchPermissionsStatus(ctx, secretManagerLabel, &permissions.ResourceDetails{
-		ProjectID: s.CloudProps.GetProjectId(),
+		ProjectID:  s.CloudProps.GetProjectId(),
+		SecretName: secretName,
 	})
 }
 

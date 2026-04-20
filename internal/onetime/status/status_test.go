@@ -809,10 +809,10 @@ func TestProcessMetricsStatus(t *testing.T) {
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					return nil, nil
 				},
-				config: &cpb.Configuration{
-					CollectionConfiguration: &cpb.CollectionConfiguration{
-						CollectProcessMetrics: false,
-					},
+			},
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					CollectProcessMetrics: false,
 				},
 			},
 			want: &spb.ServiceStatus{
@@ -977,6 +977,9 @@ func TestProcessMetricsStatus(t *testing.T) {
 				iamService: &iam.IAM{},
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					if serviceName == secretManagerLabel {
+						if r.SecretName != "my-secret" {
+							return nil, fmt.Errorf("unexpected secret name: %v", r.SecretName)
+						}
 						return map[string]bool{
 							"secretmanager.versions.access": true,
 						}, nil
@@ -1032,6 +1035,9 @@ func TestProcessMetricsStatus(t *testing.T) {
 				iamService: &iam.IAM{},
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					if serviceName == secretManagerLabel {
+						if r.SecretName != "my-secret" {
+							return nil, fmt.Errorf("unexpected secret name: %v", r.SecretName)
+						}
 						return map[string]bool{
 							"secretmanager.versions.access": false,
 						}, nil
@@ -1948,6 +1954,9 @@ func TestStatusHandler(t *testing.T) {
 				iamService:            &iam.IAM{},
 				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
 					res := map[string]bool{"monitoring.timeSeries.create": true}
+					if serviceName == secretManagerLabel {
+						return map[string]bool{"secretmanager.versions.access": true}, nil
+					}
 					if serviceName == "PARAMETER_MANAGER" {
 						res["parametermanager.parameterVersions.get"] = true
 						res["parametermanager.parameterVersions.list"] = true
@@ -2003,6 +2012,7 @@ func TestStatusHandler(t *testing.T) {
 						FullyFunctional: spb.State_SUCCESS_STATE,
 						IamPermissions: []*spb.IAMPermission{
 							{Name: "monitoring.timeSeries.create", Granted: spb.State_SUCCESS_STATE},
+							{Name: "secretmanager.versions.access", Granted: spb.State_SUCCESS_STATE},
 						},
 						ConfigValues: []*spb.ConfigValue{
 							{Name: "connection_timeout", Value: "120", IsDefault: true},
