@@ -23,11 +23,8 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/backinthandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/configurehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/configureinstancehandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/hanadiskbackuphandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/instancemetadatahandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/performancediagnosticshandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -45,14 +42,11 @@ const (
 )
 
 var guestActionsHandlers = map[string]guestactions.GuestActionHandler{
-	"backint":                backinthandler.BackintHandler,
-	"configure":              configurehandler.ConfigureHandler,
-	"configureinstance":      configureinstancehandler.ConfigureInstanceHandler,
-	"hanadiskbackup":         hanadiskbackuphandler.HANADiskBackupHandler,
-	"instancemetadata":       instancemetadatahandler.InstanceMetadataHandler,
-	"performancediagnostics": performancediagnosticshandler.PerformanceDiagnosticsHandler,
-	"supportbundle":          supportbundlehandler.SupportBundleHandler,
-	"version":                versionhandler.VersionHandler,
+	"backint":           backinthandler.BackintHandler,
+	"configureinstance": configureinstancehandler.ConfigureInstanceHandler,
+	"instancemetadata":  instancemetadatahandler.InstanceMetadataHandler,
+	"supportbundle":     supportbundlehandler.SupportBundleHandler,
+	"version":           versionhandler.VersionHandler,
 }
 
 // StartACSCommunication establishes communication with ACS.

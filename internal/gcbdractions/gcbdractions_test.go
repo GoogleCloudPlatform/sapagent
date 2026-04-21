@@ -18,7 +18,6 @@ package gcbdractions
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -28,7 +27,6 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/gcbdractions"
@@ -132,135 +130,6 @@ func TestParseRequest(t *testing.T) {
 	}
 }
 
-func TestHandleShellCommand(t *testing.T) {
-	tests := []struct {
-		name    string
-		command *gpb.Command
-		want    *gpb.CommandResult
-		execute commandlineexecutor.Execute
-	}{
-		{
-			name: "ShellCommandError",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_ShellCommand{
-					ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-				},
-			},
-			want: &gpb.CommandResult{
-				Command: &gpb.Command{
-					CommandType: &gpb.Command_ShellCommand{
-						ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-					},
-				},
-				Stdout:   "",
-				Stderr:   "Command executable: \"eecho\" not found.",
-				ExitCode: 1,
-			},
-			execute: commandlineexecutor.ExecuteCommand,
-		},
-		{
-			name: "ShellCommandErrorNonZeroStatus",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_ShellCommand{
-					ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-				},
-			},
-			want: &gpb.CommandResult{
-				Command: &gpb.Command{
-					CommandType: &gpb.Command_ShellCommand{
-						ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-					},
-				},
-				Stdout:   "",
-				Stderr:   "",
-				ExitCode: 3,
-			},
-			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					ExitCode: 3,
-				}
-			},
-		},
-		{
-			name: "ShellCommandErrorZeroStatus",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_ShellCommand{
-					ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-				},
-			},
-			want: &gpb.CommandResult{
-				Command: &gpb.Command{
-					CommandType: &gpb.Command_ShellCommand{
-						ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-					},
-				},
-				Stdout:   "",
-				Stderr:   "",
-				ExitCode: 1,
-			},
-			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error:    errors.New("command executable: \"eecho\" not found"),
-					ExitCode: 0,
-				}
-			},
-		},
-		{
-			name: "ShellCommandStderrZeroStatus",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_ShellCommand{
-					ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-				},
-			},
-			want: &gpb.CommandResult{
-				Command: &gpb.Command{
-					CommandType: &gpb.Command_ShellCommand{
-						ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-					},
-				},
-				Stdout:   "",
-				Stderr:   "Command executable: \"eecho\" not found.",
-				ExitCode: 1,
-			},
-			execute: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdErr:   "Command executable: \"eecho\" not found.",
-					ExitCode: 0,
-				}
-			},
-		},
-		{
-			name: "ShellCommandSuccess",
-			command: &gpb.Command{
-				CommandType: &gpb.Command_ShellCommand{
-					ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
-				},
-			},
-			want: &gpb.CommandResult{
-				Command: &gpb.Command{
-					CommandType: &gpb.Command_ShellCommand{
-						ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
-					},
-				},
-				Stdout:   "Hello World!\n",
-				Stderr:   "",
-				ExitCode: 0,
-			},
-			execute: commandlineexecutor.ExecuteCommand,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			got := handleShellCommand(ctx, test.command, test.execute)
-			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("handleShellCommand(%v) returned diff (-want +got):\n%s", test.command, diff)
-			}
-		})
-	}
-}
-
 func TestMessageHandler(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -338,62 +207,6 @@ func TestMessageHandler(t *testing.T) {
 				Error: &gpb.GCBDRActionError{ErrorMessage: ""},
 			},
 			wantErr: true,
-		},
-		{
-			name: "ShellCommandError",
-			message: &gpb.GCBDRActionRequest{
-				Commands: []*gpb.Command{
-					{
-						CommandType: &gpb.Command_ShellCommand{
-							ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-						},
-					},
-				},
-			},
-			want: &gpb.GCBDRActionResponse{
-				CommandResults: []*gpb.CommandResult{
-					{
-						Command: &gpb.Command{
-							CommandType: &gpb.Command_ShellCommand{
-								ShellCommand: &gpb.ShellCommand{Command: "eecho", Args: "Hello World!"},
-							},
-						},
-						Stdout:   "",
-						Stderr:   "Command executable: \"eecho\" not found.",
-						ExitCode: 1,
-					},
-				},
-				Error: &gpb.GCBDRActionError{ErrorMessage: ""},
-			},
-			wantErr: true,
-		},
-		{
-			name: "ShellCommandSuccess",
-			message: &gpb.GCBDRActionRequest{
-				Commands: []*gpb.Command{
-					{
-						CommandType: &gpb.Command_ShellCommand{
-							ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
-						},
-					},
-				},
-			},
-			want: &gpb.GCBDRActionResponse{
-				CommandResults: []*gpb.CommandResult{
-					{
-						Command: &gpb.Command{
-							CommandType: &gpb.Command_ShellCommand{
-								ShellCommand: &gpb.ShellCommand{Command: "echo", Args: "Hello World!"},
-							},
-						},
-						Stdout:   "Hello World!\n",
-						Stderr:   "",
-						ExitCode: 0,
-					},
-				},
-				Error: &gpb.GCBDRActionError{ErrorMessage: ""},
-			},
-			wantErr: false,
 		},
 	}
 

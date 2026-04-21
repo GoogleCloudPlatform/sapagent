@@ -33,7 +33,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
-	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/communication"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -92,32 +91,6 @@ func gcbdrActionResponse(ctx context.Context, results []*gpb.CommandResult, erro
 	}
 }
 
-func handleShellCommand(ctx context.Context, command *gpb.Command, execute commandlineexecutor.Execute) *gpb.CommandResult {
-	usagemetrics.Action(usagemetrics.UAPShellCommand)
-	sc := command.GetShellCommand()
-	result := execute(
-		ctx,
-		commandlineexecutor.Params{
-			Executable:  sc.GetCommand(),
-			ArgsToSplit: sc.GetArgs(),
-			Timeout:     int(sc.GetTimeoutSeconds()),
-		},
-	)
-	log.CtxLogger(ctx).Debugw("received result for shell command.",
-		"command", prototext.Format(command), "stdOut", result.StdOut,
-		"stdErr", result.StdErr, "error", result.Error, "exitCode", result.ExitCode)
-	exitCode := int32(result.ExitCode)
-	if exitCode == 0 && (result.Error != nil || result.StdErr != "") {
-		exitCode = int32(1)
-	}
-	return &gpb.CommandResult{
-		Command:  command,
-		Stdout:   result.StdOut,
-		Stderr:   result.StdErr,
-		ExitCode: exitCode,
-	}
-}
-
 func handleAgentCommand(ctx context.Context, command *gpb.Command, cloudProperties *metadataserver.CloudProperties) *gpb.CommandResult {
 	agentCommand := strings.ToLower(command.GetAgentCommand().GetCommand())
 	handler, ok := gcbdrActionsHandlers[agentCommand]
@@ -163,9 +136,6 @@ func messageHandler(ctx context.Context, req *anypb.Any, cloudProperties *metada
 			errMsg := fmt.Sprintf("received unknown command: %s", prototext.Format(command))
 			results = append(results, errorResult(errMsg))
 			return anyResponse(ctx, gcbdrActionResponse(ctx, results, errMsg)), errors.New(errMsg)
-		case fd.Name() == shellCommand:
-			result = handleShellCommand(ctx, command, commandlineexecutor.ExecuteCommand)
-			results = append(results, result)
 		case fd.Name() == agentCommand:
 			result = handleAgentCommand(ctx, command, cloudProperties)
 			results = append(results, result)
