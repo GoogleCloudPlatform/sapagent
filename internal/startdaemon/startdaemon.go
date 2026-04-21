@@ -247,8 +247,6 @@ func (d *Daemon) startdaemonHandler(ctx context.Context, cancel context.CancelFu
 	if !restarting {
 		usagemetrics.Started()
 		go usagemetrics.LogRunningDaily()
-		d.startGuestActions(cancel)
-		d.startGCBDRActions()
 		d.startConfigPollerRoutine(cancel)
 	}
 	d.startServices(ctx, cancel, runtime.GOOS, restarting)
