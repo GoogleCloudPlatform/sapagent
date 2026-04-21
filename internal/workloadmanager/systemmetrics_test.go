@@ -204,11 +204,6 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 							StdOut: "Google Cloud SDK 393.0.0",
 						}
 					}
-					if params.Executable == "gsutil" {
-						return commandlineexecutor.Result{
-							StdOut: "gsutil version 5.10",
-						}
-					}
 					if params.Executable == "systemctl" {
 						return commandlineexecutor.Result{
 							StdOut: "active",
@@ -249,7 +244,6 @@ func TestCollectSystemMetricsFromConfig(t *testing.T) {
 				"agent_version":               "1.0",
 				"network_ips":                 "192.168.0.1,192.168.0.2",
 				"gcloud":                      "true",
-				"gsutil":                      "true",
 				"agent_state":                 "running",
 				"os_settings":                 "",
 				"uefi_enabled":                "true",
