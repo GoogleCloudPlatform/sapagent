@@ -25,7 +25,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/backinthandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/configureinstancehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/instancemetadatahandler"
-	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/supportbundlehandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/sapguestactions/handlers/versionhandler"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
@@ -45,7 +44,6 @@ var guestActionsHandlers = map[string]guestactions.GuestActionHandler{
 	"backint":           backinthandler.BackintHandler,
 	"configureinstance": configureinstancehandler.ConfigureInstanceHandler,
 	"instancemetadata":  instancemetadatahandler.InstanceMetadataHandler,
-	"supportbundle":     supportbundlehandler.SupportBundleHandler,
 	"version":           versionhandler.VersionHandler,
 }
 
