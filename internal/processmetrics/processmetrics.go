@@ -279,6 +279,46 @@ func NewMetricClient(ctx context.Context, opts ...option.ClientOption) (cloudmon
 	return monitoring.NewMetricClient(ctx, opts...)
 }
 
+func sapInstancesEqual(old *sapb.SAPInstances, new *sapb.SAPInstances) bool {
+	if old == nil && new == nil {
+		// No instances either way, so no changes.
+		return true
+	}
+	if old == nil || new == nil {
+		// One of the instances is nil, so there are changes in the instances.
+		return false
+	}
+	// First check for proto equality. If they are equal, then no need to check further.
+	if proto.Equal(old, new) {
+		return true
+	}
+
+	if len(old.GetInstances()) != len(new.GetInstances()) {
+		// At least one instance has been added or removed, so the instances are not the same.
+		return false
+	}
+
+	// Check if the actual discovered instances are the same as the previous ones.
+	for _, instance := range old.GetInstances() {
+		if !slices.ContainsFunc(new.GetInstances(), func(instance2 *sapb.SAPInstance) bool {
+			if instance.GetSapsid() != instance2.GetSapsid() {
+				return false
+			}
+			if instance.GetType() != instance2.GetType() {
+				return false
+			}
+			if instance.GetInstanceNumber() != instance2.GetInstanceNumber() {
+				return false
+			}
+			return true
+		}) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func updateMetricsCollectors(ctx context.Context, a any) {
 	var args updateMetricsCollectorsArgs
 	var ok bool
@@ -290,7 +330,7 @@ func updateMetricsCollectors(ctx context.Context, a any) {
 	var lastInstances *sapb.SAPInstances
 	for {
 		newInstances := args.parameters.Discovery.GetSAPInstances()
-		if !proto.Equal(lastInstances, newInstances) {
+		if !sapInstancesEqual(lastInstances, newInstances) {
 			log.CtxLogger(ctx).Info("Updating metrics collectors.")
 			args.procCancel()
 			log.CtxLogger(ctx).Info("Cancelled the slow and fast moving metrics collectors, waiting for the process metrics frequency before starting the collectors again.")

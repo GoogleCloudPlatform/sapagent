@@ -1121,3 +1121,143 @@ func TestExtractKernelVersionAndPatch(t *testing.T) {
 		}
 	}
 }
+
+func TestSAPInstancesEqual(t *testing.T) {
+	tests := []struct {
+		name string
+		old  *sapb.SAPInstances
+		new  *sapb.SAPInstances
+		want bool
+	}{
+		{
+			name: "BothNil",
+			old:  nil,
+			new:  nil,
+			want: true,
+		},
+		{
+			name: "OldNil",
+			old:  nil,
+			new:  &sapb.SAPInstances{},
+			want: false,
+		},
+		{
+			name: "NewNil",
+			old:  &sapb.SAPInstances{},
+			new:  nil,
+			want: false,
+		},
+		{
+			name: "ProtoEqual",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "DifferentLengths",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+					{Sapsid: "ASCS", Type: sapb.InstanceType_NETWEAVER, InstanceNumber: "01"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentSapsid",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "SDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentType",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_NETWEAVER, InstanceNumber: "00"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentInstanceNumber",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "01"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "DifferentOrderEqual",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+					{Sapsid: "ASCS", Type: sapb.InstanceType_NETWEAVER, InstanceNumber: "01"},
+				},
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "ASCS", Type: sapb.InstanceType_NETWEAVER, InstanceNumber: "01"},
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "OtherFieldsDifferentEqual",
+			old: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00", HanaDbUser: "user1"},
+				},
+				LinuxClusterMember: true,
+			},
+			new: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", Type: sapb.InstanceType_HANA, InstanceNumber: "00", HanaDbUser: "user2"},
+				},
+				LinuxClusterMember: false,
+			},
+			want: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := sapInstancesEqual(test.old, test.new)
+			if got != test.want {
+				t.Errorf("sapInstancesEqual(%v, %v) = %v, want %v", test.old, test.new, got, test.want)
+			}
+		})
+	}
+}
