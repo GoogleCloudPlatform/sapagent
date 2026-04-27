@@ -489,7 +489,7 @@ func (r *Restorer) fetchVG(ctx context.Context, cp *ipb.CloudProperties, exec co
 func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitForIndexServerStop waitForIndexServerToStopWithRetry, exec commandlineexecutor.Execute) error {
 	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, exec)
 	if err != nil {
-		return fmt.Errorf("failed to read data directory mount path: %v", err)
+		return fmt.Errorf("failed to read data directory mount path for %q: %v", r.baseDataPath, err)
 	}
 	if err := hanabackup.StopHANA(ctx, r.ForceStopHANA, r.HanaSidAdm, r.Sid, exec); err != nil {
 		return fmt.Errorf("failed to stop HANA: %v", err)
@@ -498,7 +498,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 		return fmt.Errorf("hdbindexserver process still running after HANA is stopped: %v", err)
 	}
 	if err := hanabackup.Unmount(ctx, mountPath, exec, r.isScaleout); err != nil {
-		return fmt.Errorf("failed to unmount data directory: %v", err)
+		return fmt.Errorf("failed to unmount data directory %q: %v", mountPath, err)
 	}
 
 	if !r.isScaleout {
@@ -516,7 +516,7 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
 				log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)
 			}
-			return fmt.Errorf("failed to detach old data disk: %v", err)
+			return fmt.Errorf("failed to detach old data disk %q from instance %q: %v", r.DataDiskName, cp.GetInstanceName(), err)
 		}
 	} else {
 		r.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupRestoreStarted)

@@ -48,7 +48,7 @@ func ParseBasePath(ctx context.Context, pattern string, exec commandlineexecutor
 		ArgsToSplit: args,
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return "", fmt.Errorf("failure parsing base path, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure parsing base path for pattern %s from global.ini, stderr: %s, err: %s", pattern, result.StdErr, result.Error)
 	}
 
 	log.CtxLogger(ctx).Debugw("ParseBasePath", "stdout", result.StdOut, "stderr", result.StdErr)
@@ -65,7 +65,7 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return "", fmt.Errorf("failure parsing logical path, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure parsing logical path for base path %q, stderr: %s, err: %s", basePath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("ParseLogicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -73,14 +73,14 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 
 	// Verifying the logical device matches findmnt output
 	result = exec(ctx, commandlineexecutor.Params{
-		Executable:  "findmnt",
-		Args:        []string{"-n", "--output", "SOURCE", "--target", basePath},
+		Executable: "findmnt",
+		Args:       []string{"-n", "--output", "SOURCE", "--target", basePath},
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return "", fmt.Errorf("failure verifying logical device, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure verifying logical device for base path %q using findmnt, stderr: %s, err: %s", basePath, result.StdErr, result.Error)
 	}
 	if strings.TrimSuffix(result.StdOut, "\n") != logicalDevice {
-		return "", fmt.Errorf("logical device does not match findmnt output")
+		return "", fmt.Errorf("logical device mismatch for base path %s: df found %s, findmnt found %s", basePath, logicalDevice, strings.TrimSuffix(result.StdOut, "\n"))
 	}
 
 	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
@@ -100,7 +100,7 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 				Args:       []string{"-c", fmt.Sprintf("lsblk --output NAME --inverse --paths --list %s", logicalPath)},
 			})
 			if result.Error != nil || result.StdErr != "" {
-				return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
+				return "", fmt.Errorf("failure parsing physical path for logical path %s using lsblk, stderr: %s, err: %s", logicalPath, result.StdErr, result.Error)
 			}
 
 			lines := strings.Split(result.StdOut, "\n")
@@ -116,13 +116,13 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 
 			physicalDevice = strings.TrimSuffix(physicalDevice, "\n")
 			if physicalDevice == "" {
-				return "", fmt.Errorf("physical device is empty")
+				return "", fmt.Errorf("physical device is empty for logical path %q", logicalPath)
 			}
 			log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
 			return physicalDevice, nil
 		}
 
-		return "", fmt.Errorf("failure parsing physical path, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure parsing physical path for logical path %s using lvdisplay, stderr: %s, err: %s", logicalPath, result.StdErr, result.Error)
 	}
 
 	log.CtxLogger(ctx).Debugw("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
@@ -130,7 +130,7 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 	physicalDevice := strings.TrimSuffix(result.StdOut, "\n")
 	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
 	if physicalDevice == "" {
-		return "", fmt.Errorf("physical device is empty")
+		return "", fmt.Errorf("physical device is empty for logical path %q", logicalPath)
 	}
 	return physicalDevice, nil
 }
@@ -169,7 +169,7 @@ func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute,
 func FreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecutor.Execute) error {
 	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-f " + hanaDataPath})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure freezing XFS for path %q, stderr: %s, err: %s", hanaDataPath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("FreezeXFS", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -181,7 +181,7 @@ func FreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecuto
 func UnFreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecutor.Execute) error {
 	result := exec(ctx, commandlineexecutor.Params{Executable: "/usr/sbin/xfs_freeze", ArgsToSplit: "-u " + hanaDataPath})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure un freezing XFS, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure unfreezing XFS for path %s, stderr: %s, err: %s", hanaDataPath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("UnFreezeXFS", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -232,8 +232,9 @@ func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec
 	log.CtxLogger(ctx).Debugw("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	if result.Error != nil || result.StdErr != "" {
-		return false, fmt.Errorf("failure checking if data device is striped, stderr: %s, err: %s", result.StdErr, result.Error)
-	} else if result.ExitCode == 0 {
+		return false, fmt.Errorf("failure checking if logical data volume %q is striped, stderr: %s, err: %s", logicalDataPath, result.StdErr, result.Error)
+	}
+	if result.ExitCode == 0 {
 		return true, nil
 	}
 
@@ -247,7 +248,7 @@ func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec command
 		ArgsToSplit: fmt.Sprintf(" -c 'df --output=target %s| tail -n 1'", baseDataPath),
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return "", fmt.Errorf("failure reading data directory mount path, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure reading data directory mount path for %q, stderr: %s, err: %s", baseDataPath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("ReadDataDirMountPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -261,7 +262,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 		ArgsToSplit: "remove_all",
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure removing device definitions from the Device Mapper driver, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure removing device definitions from the Device Mapper driver using dmsetup, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -270,7 +271,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 		ArgsToSplit: "-v --mknodes",
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure scanning volume groups using vgscan, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -279,7 +280,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 		ArgsToSplit: "-ay",
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure changing volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure activating volume groups using vgchange, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -287,7 +288,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 		Executable: "/sbin/lvscan",
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure scanning volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure scanning logical volumes using lvscan, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -297,7 +298,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 		ArgsToSplit: "-av",
 	})
 	if result.Error != nil || result.StdErr != "" {
-		return fmt.Errorf("failure mounting volume groups, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure mounting volume groups using mount -a, stderr: %s, err: %s", result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("RescanVolumeGroups", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -326,7 +327,7 @@ func StopHANA(ctx context.Context, force bool, user, sid string, exec commandlin
 			cmd, err := shsprintf.Sprintf("-c 'ps -U %sadm -o comm | grep -E \"hdbdaemon|hdb.sap\" | grep -v defunct'", strings.ToLower(sid))
 			if err != nil {
 				log.CtxLogger(ctx).Errorw("Failure generating ps command", "error", err)
-				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+				return fmt.Errorf("failure stopping HANA for SID %q, stderr: %s, err: %s", sid, result.StdErr, result.Error)
 			}
 			checkResult := exec(ctx, commandlineexecutor.Params{
 				User:        user,
@@ -337,13 +338,13 @@ func StopHANA(ctx context.Context, force bool, user, sid string, exec commandlin
 			// If StdOut is non-empty, it means HANA is still running.
 			if len(checkResult.StdOut) > 0 {
 				log.CtxLogger(ctx).Errorw("HANA still running", "stdout", checkResult.StdOut)
-				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+				return fmt.Errorf("failure stopping HANA for SID %q, it appears to be still running, stderr: %s, err: %s", sid, result.StdErr, result.Error)
 			}
 			// If StdErr is non-empty, it means the ps command failed. Error is always non-nil, whether
 			// the grep failed in grabbing the process name or the command itself failed.
 			if checkResult.StdErr != "" {
 				log.CtxLogger(ctx).Errorw("HANA still running", "stdout", checkResult.StdOut, "stderr", checkResult.StdErr)
-				return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+				return fmt.Errorf("failure stopping HANA for SID %q, it appears to be still running, stderr: %s, err: %s", sid, result.StdErr, result.Error)
 			}
 
 			// If both StdOut and StdErr are empty, it means the ps command succeeded but HANA is not
@@ -352,7 +353,7 @@ func StopHANA(ctx context.Context, force bool, user, sid string, exec commandlin
 			return nil
 		}
 
-		return fmt.Errorf("failure stopping HANA, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("failure stopping HANA for SID %q, stderr: %s, err: %s", sid, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("StopHANA", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -369,7 +370,7 @@ func waitForIndexServerToStop(ctx context.Context, user string, exec commandline
 	})
 
 	if result.ExitCode == 0 {
-		return fmt.Errorf("failure waiting for index server to stop, stderr: %s, err: %s", result.StdErr, result.Error)
+		return fmt.Errorf("index server is still running for user %q, stderr: %s, err: %s", user, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("waitForIndexServerToStop", "stdout", result.StdOut, "stderr", result.StdErr)
 
@@ -409,7 +410,7 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 			return k.Key, nil
 		}
 	}
-	return "", fmt.Errorf("no matching key for the disk")
+	return "", fmt.Errorf("no matching key found for disk URI %q in key file %q", diskURI, file)
 }
 
 // CheckTopology checks if topology of the system this instance belongs to is scaleout or not.
@@ -438,7 +439,7 @@ func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID st
 	res := exec(ctx, cmd)
 	log.CtxLogger(ctx).Debugw("CheckTopology", "stdout", res.StdOut, "stderr", res.StdErr, "error", res.Error)
 	if res.Error != nil {
-		return false, fmt.Errorf("failed to verify topology: %w", res.Error)
+		return false, fmt.Errorf("failed to verify topology for SID %s: %w", SID, res.Error)
 	}
 	log.CtxLogger(ctx).Debugw("`sapcontrol -nr %s -function GetSystemInstanceList` returned", instanceNumber, "stdout", res.StdOut, "stderr", res.StdErr, "error", res.Error)
 
@@ -449,7 +450,7 @@ func CheckTopology(ctx context.Context, exec commandlineexecutor.Execute, SID st
 	if len(lines) > 7 {
 		return true, nil
 	}
-	return false, fmt.Errorf("no SAP instances found")
+	return false, fmt.Errorf("no SAP instances found for SID %q", SID)
 }
 
 // getInstanceNumber returns the instance number of the instance.
@@ -460,12 +461,12 @@ func getInstanceNumber(ctx context.Context, exec commandlineexecutor.Execute, SI
 	})
 	log.CtxLogger(ctx).Debugw("`grep 'pf=' /usr/sap/sapservices` returned", "stdout", result.StdOut, "stderr", result.StdErr, "error", result.Error)
 	if result.Error != nil || result.StdErr != "" {
-		return "", fmt.Errorf("failure getting instance number, stderr: %s, err: %s", result.StdErr, result.Error)
+		return "", fmt.Errorf("failure getting instance number for SID %q from /usr/sap/sapservices, stderr: %s, err: %s", SID, result.StdErr, result.Error)
 	}
 
 	path := sapServicesStartsrvPattern.FindStringSubmatch(result.StdOut)
 	if len(path) < 6 {
-		return "", fmt.Errorf("no SAP Instance found")
+		return "", fmt.Errorf("no SAP instance found for SID %q in /usr/sap/sapservices", SID)
 	}
 	log.CtxLogger(ctx).Debugw("SAP Instance found", "instanceNumber", path[5])
 

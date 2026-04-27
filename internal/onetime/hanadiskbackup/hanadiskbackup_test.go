@@ -203,7 +203,7 @@ func TestSnapshotHandler(t *testing.T) {
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return nil, cmpopts.AnyError },
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
-				return "", "", "", nil
+				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
 			},
 			want: subcommands.ExitFailure,
 		},
@@ -446,7 +446,7 @@ func TestValidateDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantMessage: "ERROR: Failed to validate whether disks [\"disk-name-1\" \"disk-name-2\"] belong to consistency group",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
@@ -617,7 +617,7 @@ func TestValidateDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to get disk data for disk disk-name-1",
+			wantMessage: "ERROR: Failed to get disk data for disk \"disk-name-1\"",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
@@ -782,8 +782,16 @@ func TestValidateDisks(t *testing.T) {
 			name: "ScaleupCheckStripeError",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name", ProvisionedIops: 100, ProvisionedThroughput: 1000},
+						{Name: "disk-name-2", ProvisionedIops: 100, ProvisionedThroughput: 1000},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -853,15 +861,23 @@ func TestValidateDisks(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantMessage: "ERROR: Failed to check if data volume group \"/dev/mapper/hanavg-datalv\" is striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupCheckStripeFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name", ProvisionedIops: 100, ProvisionedThroughput: 1000},
+						{Name: "disk-name-2", ProvisionedIops: 100, ProvisionedThroughput: 1000},
+					},
+					GetDiskErr: []error{nil, nil, nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -931,15 +947,18 @@ func TestValidateDisks(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device \"/dev/mapper/hanavg-datalv\" is not striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupValidateConsistencyGroupFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -981,8 +1000,12 @@ func TestValidateDisks(t *testing.T) {
 						},
 					},
 					ListDisksErr: []error{nil, nil},
-					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
-					GetDiskErr:   []error{cmpopts.AnyError},
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+						&compute.Disk{},
+					},
+					GetDiskErr: []error{nil, nil, cmpopts.AnyError},
 				},
 				Sid: "SID",
 			},
@@ -1011,15 +1034,18 @@ func TestValidateDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantMessage: "ERROR: Failed to validate whether disks [disk-name disk-name-2] belong to consistency group",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupStripedDiskSuccess",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -1247,7 +1273,7 @@ func TestValidateScaleoutDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantMessage: "ERROR: Failed to validate whether disks [\"disk-name-1\" \"disk-name-2\"] belong to consistency group",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
@@ -1496,7 +1522,7 @@ func TestValidateScaleupDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to get disk data for disk disk-name-1",
+			wantMessage: "ERROR: Failed to get disk data for disk \"disk-name-1\"",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
@@ -1661,8 +1687,16 @@ func TestValidateScaleupDisks(t *testing.T) {
 			name: "ScaleupCheckStripeError",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -1732,15 +1766,23 @@ func TestValidateScaleupDisks(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantMessage: "ERROR: Failed to check if data volume group \"/dev/mapper/hanavg-datalv\" is striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupCheckStripeFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -1810,15 +1852,24 @@ func TestValidateScaleupDisks(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device \"/dev/mapper/hanavg-datalv\" is not striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupValidateConsistencyGroupFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+						&compute.Disk{},
+					},
+					GetDiskErr: []error{nil, nil, cmpopts.AnyError},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -1860,8 +1911,6 @@ func TestValidateScaleupDisks(t *testing.T) {
 						},
 					},
 					ListDisksErr: []error{nil, nil},
-					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
-					GetDiskErr:   []error{cmpopts.AnyError},
 				},
 				Sid: "SID",
 			},
@@ -1890,15 +1939,29 @@ func TestValidateScaleupDisks(t *testing.T) {
 					ExitCode: 0,
 				}
 			},
-			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
+			wantMessage: "ERROR: Failed to validate whether disks [disk-name disk-name-2] belong to consistency group",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupStripedDiskSuccess",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:             "disk-name",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Name:             "disk-name-2",
+							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -1940,15 +2003,6 @@ func TestValidateScaleupDisks(t *testing.T) {
 						},
 					},
 					ListDisksErr: []error{nil, nil},
-					GetDiskResp: []*compute.Disk{
-						{
-							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
-						},
-						{
-							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
-						},
-					},
-					GetDiskErr: []error{nil, nil},
 				},
 				Sid: "SID",
 			},
@@ -2010,8 +2064,16 @@ func TestVerifyStriping(t *testing.T) {
 			name: "ScaleupCheckStripeError",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -2081,15 +2143,23 @@ func TestVerifyStriping(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Failed to check if data device is striped",
+			wantMessage: "ERROR: Failed to check if data volume group \"/dev/mapper/hanavg-datalv\" is striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupCheckStripeFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+					},
+					GetDiskErr: []error{nil, nil},
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -2159,95 +2229,18 @@ func TestVerifyStriping(t *testing.T) {
 					ExitCode: 1,
 				}
 			},
-			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device is not striped",
+			wantMessage: "ERROR: Multiple disks are backing up /hana/data but data device \"/dev/mapper/hanavg-datalv\" is not striped",
 			wantStatus:  subcommands.ExitFailure,
 		},
 		{
 			name: "ScaleupValidateConsistencyGroupFailure",
 			s: &Snapshot{
 				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
 				gceService: &fake.TestGCE{
-					GetInstanceResp: []*compute.Instance{{
-						MachineType:       "test-machine-type",
-						CpuPlatform:       "test-cpu-platform",
-						CreationTimestamp: "test-creation-timestamp",
-						Disks: []*compute.AttachedDisk{
-							{
-								Source:     "/some/path/disk-name",
-								DeviceName: "disk-device-name",
-								Type:       "PERSISTENT",
-							},
-							{
-								Source:     "/some/path/disk-name-2",
-								DeviceName: "disk-device-name-2",
-								Type:       "PERSISTENT",
-							},
-						},
-					}},
-					GetInstanceErr: []error{nil},
-					ListDisksResp: []*compute.DiskList{
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-							},
-						},
-						{
-							Items: []*compute.Disk{
-								{
-									Name:                  "disk-name-2",
-									Type:                  "/some/path/device-type",
-									ProvisionedIops:       100,
-									ProvisionedThroughput: 1000,
-								},
-							},
-						},
-					},
-					ListDisksErr: []error{nil, nil},
-					GetDiskResp:  []*compute.Disk{&compute.Disk{}},
-					GetDiskErr:   []error{cmpopts.AnyError},
-				},
-				Sid: "SID",
-			},
-			cp: defaultCloudProperties,
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "grep" {
-					return commandlineexecutor.Result{
-						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
-						StdErr:   "",
-						Error:    nil,
-						ExitCode: 0,
-					}
-				}
-				if params.Executable == "sudo" {
-					return commandlineexecutor.Result{
-						StdOut:   scaleupTopology,
-						StdErr:   "",
-						Error:    nil,
-						ExitCode: 0,
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut:   "",
-					StdErr:   "",
-					Error:    nil,
-					ExitCode: 0,
-				}
-			},
-			wantMessage: "ERROR: Failed to validate whether disks belong to consistency group",
-			wantStatus:  subcommands.ExitFailure,
-		},
-		{
-			name: "ScaleupStripedDiskSuccess",
-			s: &Snapshot{
-				oteLogger:        defaultOTELogger,
-				physicalDataPath: "unknown",
-				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
 					GetInstanceResp: []*compute.Instance{{
 						MachineType:       "test-machine-type",
 						CpuPlatform:       "test-cpu-platform",
@@ -2290,14 +2283,103 @@ func TestVerifyStriping(t *testing.T) {
 					},
 					ListDisksErr: []error{nil, nil},
 					GetDiskResp: []*compute.Disk{
+						{Name: "disk-name"},
+						{Name: "disk-name-2"},
+						&compute.Disk{},
+					},
+					GetDiskErr: []error{nil, nil, cmpopts.AnyError},
+				},
+				Sid: "SID",
+			},
+			cp: defaultCloudProperties,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut:   "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				if params.Executable == "sudo" {
+					return commandlineexecutor.Result{
+						StdOut:   scaleupTopology,
+						StdErr:   "",
+						Error:    nil,
+						ExitCode: 0,
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut:   "",
+					StdErr:   "",
+					Error:    nil,
+					ExitCode: 0,
+				}
+			},
+			wantMessage: "ERROR: Failed to validate whether disks [disk-name disk-name-2] belong to consistency group",
+			wantStatus:  subcommands.ExitFailure,
+		},
+		{
+			name: "ScaleupStripedDiskSuccess",
+			s: &Snapshot{
+				oteLogger:        defaultOTELogger,
+				Disks:            "disk-name, disk-name-2",
+				physicalDataPath: "/dev/sdb",
+				logicalDataPath:  "/dev/mapper/hanavg-datalv",
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					GetDiskResp: []*compute.Disk{
 						{
+							Name:             "disk-name",
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 						{
+							Name:             "disk-name-2",
 							ResourcePolicies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
 						},
 					},
 					GetDiskErr: []error{nil, nil},
+					GetInstanceResp: []*compute.Instance{{
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+						Disks: []*compute.AttachedDisk{
+							{
+								Source:     "/some/path/disk-name",
+								DeviceName: "disk-device-name",
+								Type:       "PERSISTENT",
+							},
+							{
+								Source:     "/some/path/disk-name-2",
+								DeviceName: "disk-device-name-2",
+								Type:       "PERSISTENT",
+							},
+						},
+					}},
+					GetInstanceErr: []error{nil},
+					ListDisksResp: []*compute.DiskList{
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+						{
+							Items: []*compute.Disk{
+								{
+									Name:                  "disk-name-2",
+									Type:                  "/some/path/device-type",
+									ProvisionedIops:       100,
+									ProvisionedThroughput: 1000,
+								},
+							},
+						},
+					},
+					ListDisksErr: []error{nil, nil},
 				},
 				Sid: "SID",
 			},

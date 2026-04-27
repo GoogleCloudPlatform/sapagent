@@ -407,7 +407,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 
 		for _, snapshot := range snapshotList.Items {
 			if snapshot.Labels["goog-sapagent-isg"] == s.GroupSnapshotName {
-				errMessage := "ERROR: Group snapshot with given name already exists"
+				errMessage := fmt.Sprintf("ERROR: Group snapshot with name %q already exists in project %q", s.GroupSnapshotName, s.Project)
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("group snapshot with given name already exists"))
 				return errMessage, subcommands.ExitFailure
 			}
@@ -434,7 +434,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	if s.SkipDBSnapshotForChangeDiskType {
 		s.oteLogger.LogMessageToFileAndConsole(ctx, "Skipping connecting to HANA Database in case of changedisktype workflow.")
 	} else if s.db, err = databaseconnector.CreateDBHandle(ctx, dbp); err != nil {
-		errMessage := "ERROR: Failed to connect to database"
+		errMessage := fmt.Sprintf("ERROR: Failed to connect to HANA database for SID %q", s.Sid)
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
@@ -572,7 +572,7 @@ func (s *Snapshot) validateScaleoutDisks(ctx context.Context, cp *ipb.CloudPrope
 	}
 
 	if err := s.validateDisksBelongToCG(ctx, disks); err != nil {
-		errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+		errMessage := fmt.Sprintf("ERROR: Failed to validate whether disks %q belong to consistency group", disks)
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
@@ -604,7 +604,7 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 
 				diskData, err := s.gceService.GetDisk(s.Project, s.DiskZone, disk)
 				if err != nil {
-					errMessage := fmt.Sprintf("ERROR: Failed to get disk data for disk %s", disk)
+					errMessage := fmt.Sprintf("ERROR: Failed to get disk data for disk %q", disk)
 					s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 					return errMessage, subcommands.ExitFailure
 				}
@@ -644,7 +644,7 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 				return errMessage, subcommands.ExitFailure
 			}
 			if err := s.validateDisksBelongToCG(ctx, s.disks); err != nil {
-				errMessage := "ERROR: Failed to validate whether disks belong to consistency group"
+				errMessage := fmt.Sprintf("ERROR: Failed to validate whether disks %v belong to consistency group", s.disks)
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 				return errMessage, subcommands.ExitFailure
 			}
@@ -659,11 +659,11 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 func (s *Snapshot) verifyStriping(ctx context.Context, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	s.oteLogger.LogUsageAction(usagemetrics.HANADiskGroupBackupStarted)
 	if ok, err := hanabackup.CheckDataDeviceForStripes(ctx, s.logicalDataPath, exec); err != nil {
-		errMessage := "ERROR: Failed to check if data device is striped"
+		errMessage := fmt.Sprintf("ERROR: Failed to check if data volume group %q is striped", s.logicalDataPath)
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	} else if !ok {
-		errMessage := "ERROR: Multiple disks are backing up /hana/data but data device is not striped"
+		errMessage := fmt.Sprintf("ERROR: Multiple disks are backing up /hana/data but data device %q is not striped", s.logicalDataPath)
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("data device is not striped"))
 		return errMessage, subcommands.ExitFailure
 	}
@@ -734,15 +734,15 @@ func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error 
 	case os == "windows":
 		return fmt.Errorf("disk snapshot is only supported on Linux systems")
 	case s.Sid == "":
-		return fmt.Errorf("%s", "required argument -sid not passed. Usage:"+s.Usage())
+		return fmt.Errorf("required argument -sid not passed, usage: %s", s.Usage())
 	case s.HDBUserstoreKey == "":
 		switch {
 		case s.HanaDBUser == "":
-			return fmt.Errorf("%s", "either -hana-db-user or -hdbuserstore-key is required. Usage:"+s.Usage())
+			return fmt.Errorf("either -hana-db-user or -hdbuserstore-key is required, usage: %s", s.Usage())
 		case s.Port == "" && s.InstanceID == "":
-			return fmt.Errorf("%s", "either -port and -instance-id, or -hdbuserstore-key is required. Usage:"+s.Usage())
+			return fmt.Errorf("either -port and -instance-id, or -hdbuserstore-key is required, usage: %s", s.Usage())
 		case s.Password == "" && s.PasswordSecret == "":
-			return fmt.Errorf("%s", "either -password, -password-secret or -hdbuserstore-key is required. Usage:"+s.Usage())
+			return fmt.Errorf("either -password, -password-secret or -hdbuserstore-key is required, usage: %s", s.Usage())
 		}
 	}
 

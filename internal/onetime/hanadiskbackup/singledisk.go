@@ -74,7 +74,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 		log.CtxLogger(ctx).Errorw("Error uploading disk snapshot", "error", err)
 		if s.ConfirmDataSnapshotAfterCreate {
 			s.oteLogger.LogErrorToFileAndConsole(
-				ctx, fmt.Sprintf("Error uploading disk snapshot, HANA snapshot %s is not successful", snapshotID), err,
+				ctx, fmt.Sprintf("Error uploading disk snapshot %q for disk %q, HANA snapshot %q is not successful", s.SnapshotName, s.Disk, snapshotID), err,
 			)
 		}
 		s.diskSnapshotFailureHandler(ctx, run, snapshotID)
