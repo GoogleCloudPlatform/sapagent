@@ -217,6 +217,16 @@ func TestSnapshotHandler(t *testing.T) {
 			},
 			want: subcommands.ExitFailure,
 		},
+		{
+			name:               "CheckDataDirFindmntFailure",
+			snapshot:           defaultSnapshot,
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", errors.New("failure verifying logical device, stderr: findmnt error, err: exit status 1")
+			},
+			want: subcommands.ExitFailure,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

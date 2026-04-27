@@ -111,11 +111,11 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "Success",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
-				{ /* vgchange */},
-				{ /* lvscan */},
-				{ /* mount -av */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{ /* lvscan */ },
+				{ /* mount -av */ },
 			},
 			wantErr:       nil,
 			wantExecCalls: 5,
@@ -139,7 +139,7 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "VgscanFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
+				{ /* dmsetup remove_all */ },
 				{Error: errors.New("vgscan failed"), ExitCode: 1},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -148,7 +148,7 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "VgscanFailsWithStderr",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
+				{ /* dmsetup remove_all */ },
 				{StdErr: "vgscan failed"},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -157,8 +157,8 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "VgchangeFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
 				{Error: errors.New("vgchange failed"), ExitCode: 1},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -167,8 +167,8 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "VgchangeFailsWithStderr",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
 				{StdErr: "vgchange failed"},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -177,9 +177,9 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "LvscanFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
-				{ /* vgchange */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
 				{Error: errors.New("lvscan failed"), ExitCode: 1},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -188,9 +188,9 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "LvscanFailsWithStderr",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
-				{ /* vgchange */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
 				{StdErr: "lvscan failed"},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -199,10 +199,10 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "MountAvFails",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
-				{ /* vgchange */},
-				{ /* lvscan */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{ /* lvscan */ },
 				{Error: errors.New("mount failed"), ExitCode: 1},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -211,10 +211,10 @@ func TestRescanVolumeGroups(t *testing.T) {
 		{
 			name: "MountAvFailsWithStderr",
 			mockResults: []commandlineexecutor.Result{
-				{ /* dmsetup remove_all */},
-				{ /* vgscan */},
-				{ /* vgchange */},
-				{ /* lvscan */},
+				{ /* dmsetup remove_all */ },
+				{ /* vgscan */ },
+				{ /* vgchange */ },
+				{ /* lvscan */ },
 				{StdErr: "mount failed"},
 			},
 			wantErr:       cmpopts.AnyError,
@@ -423,6 +423,9 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
 				}
@@ -441,6 +444,9 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{StdOut: "/dev/sdb"}
 				}
@@ -450,6 +456,40 @@ func TestCheckDataDir(t *testing.T) {
 			wantLogicalDataPath:  "/dev/mapper/vg-lv",
 			wantPhysicalDataPath: "/dev/sdb",
 			wantErr:              nil,
+		},
+		{
+			name: "FindmntFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{Error: errors.New("findmnt failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath: "/hana/data/SID",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "LogicalDeviceMismatch",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv-different"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantDataPath: "/hana/data/SID",
+			wantErr:      cmpopts.AnyError,
 		},
 	}
 
@@ -517,6 +557,9 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
 				}
@@ -535,6 +578,9 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "df --output=source") {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
 				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
 					return commandlineexecutor.Result{StdOut: "/dev/sdc"}
 				}
@@ -544,6 +590,40 @@ func TestCheckLogDir(t *testing.T) {
 			wantLogicalLogPath:  "/dev/mapper/vg-lv",
 			wantPhysicalLogPath: "/dev/sdc",
 			wantErr:             nil,
+		},
+		{
+			name: "FindmntFails",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{Error: errors.New("findmnt failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantBasePath: "/hana/log/SID",
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name: "LogicalDeviceMismatch",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "global.ini") {
+					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
+				}
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv-different"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantBasePath: "/hana/log/SID",
+			wantErr:      cmpopts.AnyError,
 		},
 	}
 
@@ -659,9 +739,43 @@ func TestParseLogicalPath(t *testing.T) {
 			wantErr:  cmpopts.AnyError,
 		},
 		{
-			name:     "Success",
-			fakeExec: fakeCommandExecute("/dev/mapper/vg-volume-1", "", nil),
-			want:     "/dev/mapper/vg-volume-1",
+			name: "Success",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want: "/dev/mapper/vg-volume-1",
+		},
+		{
+			name: "FindmntFails",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{Error: errors.New("findmnt failed"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "LogicalDeviceMismatch",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-different"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			wantErr: cmpopts.AnyError,
 		},
 	}
 

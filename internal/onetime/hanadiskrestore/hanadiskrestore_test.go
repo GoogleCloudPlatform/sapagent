@@ -18,6 +18,7 @@ package hanadiskrestore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -803,6 +804,19 @@ func TestCheckPreConditions(t *testing.T) {
 			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				fmt.Println("here")
 				return "", "", "", cmpopts.AnyError
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", nil
+			},
+			exec:    failExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CheckDataDirFindmntErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "", "", "", errors.New("failure verifying logical device, stderr: findmnt error, err: exit status 1")
 			},
 			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", nil

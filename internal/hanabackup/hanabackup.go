@@ -70,6 +70,19 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 	log.CtxLogger(ctx).Debugw("ParseLogicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+
+	// Verifying the logical device matches findmnt output
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable:  "findmnt",
+		Args:        []string{"-n", "--output", "SOURCE", "--target", basePath},
+	})
+	if result.Error != nil || result.StdErr != "" {
+		return "", fmt.Errorf("failure verifying logical device, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+	if strings.TrimSuffix(result.StdOut, "\n") != logicalDevice {
+		return "", fmt.Errorf("logical device does not match findmnt output")
+	}
+
 	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
 	return logicalDevice, nil
 }

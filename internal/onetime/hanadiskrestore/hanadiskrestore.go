@@ -297,7 +297,12 @@ func (r *Restorer) Run(ctx context.Context, runOpts *onetime.RunOptions) subcomm
 	}
 
 	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
-	return r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
+	exitStatus := r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
+	if r.LogLevel == "debug" {
+		log.CtxLogger(ctx).Infow("Recording system state after restore")
+		r.recordSystemState(ctx, commandlineexecutor.ExecuteCommand)
+	}
+	return exitStatus
 }
 
 // validateParameters validates the parameters passed to the restore subcommand.
@@ -387,6 +392,11 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 		return subcommands.ExitFailure
 	}
 	r.computeService = &computeClient{service: cs}
+
+	if r.LogLevel == "debug" {
+		log.CtxLogger(ctx).Infow("Recording system state for debugging purposes")
+		r.recordSystemState(ctx, commandlineexecutor.ExecuteCommand)
+	}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir, commandlineexecutor.ExecuteCommand); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Pre-restore check failed,", err)
@@ -1023,4 +1033,64 @@ func (r *Restorer) verifyDataVolumeState(ctx context.Context, exec commandlineex
 
 	log.CtxLogger(ctx).Info("All data volume verifications passed.")
 	return nil
+}
+
+// recordSystemState records the system state of the instance.
+// Records:
+// - df output
+// - vgscan output
+// - pvscan output
+// - lvscan output
+// - lsblk output
+// - /etc/fstab content
+func (r *Restorer) recordSystemState(ctx context.Context, exec commandlineexecutor.Execute) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable: "df",
+		Args:       []string{"-h"},
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record df output", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "df", result.StdOut)
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable: "/sbin/vgscan",
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record vgscan output", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "vgscan", result.StdOut)
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable: "/sbin/pvscan",
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record pvscan output", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "pvscan", result.StdOut)
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable: "/sbin/lvscan",
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record lvscan output", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "lvscan", result.StdOut)
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable: "lsblk",
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record lsblk output", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "lsblk", result.StdOut)
+
+	result = exec(ctx, commandlineexecutor.Params{
+		Executable: "cat",
+		Args:       []string{"/etc/fstab"},
+	})
+	if result.Error != nil || result.StdErr != "" {
+		log.CtxLogger(ctx).Errorw("Failed to record /etc/fstab content", "err", result.Error, "stderr", result.StdErr)
+	}
+	log.CtxLogger(ctx).Debugw("System state", "fstab", result.StdOut)
 }
