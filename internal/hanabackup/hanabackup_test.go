@@ -86,6 +86,11 @@ func TestParseBasePath(t *testing.T) {
 			fakeExec: fakeCommandExecute("/hana/data/ABC", "", nil),
 			want:     "/hana/data/ABC",
 		},
+		{
+			name:     "SuccessWithSpaces",
+			fakeExec: fakeCommandExecute("  /hana/data/ABC  \n", "", nil),
+			want:     "/hana/data/ABC",
+		},
 	}
 
 	for _, test := range tests {
@@ -95,7 +100,7 @@ func TestParseBasePath(t *testing.T) {
 				t.Errorf("parseBasePath() = %v, want %v", gotErr, test.wantErr)
 			}
 			if got != test.want {
-				t.Errorf("parseBasePath() = %v, want %v", got, test.want)
+				t.Errorf("parseBasePath() = %q, want %q", got, test.want)
 			}
 		})
 	}
@@ -720,7 +725,7 @@ func TestParsePhysicalPath(t *testing.T) {
 				t.Errorf("ParsePhysicalPath() error = %v, want %v", gotErr, test.wantErr)
 			}
 			if got != test.want {
-				t.Errorf("ParsePhysicalPath() = %v, want %v", got, test.want)
+				t.Errorf("ParsePhysicalPath() = %q, want %q", got, test.want)
 			}
 		})
 	}
@@ -777,6 +782,19 @@ func TestParseLogicalPath(t *testing.T) {
 			},
 			wantErr: cmpopts.AnyError,
 		},
+		{
+			name: "SuccessWithSpaces",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+					return commandlineexecutor.Result{StdOut: "  /dev/mapper/vg-volume-1  \n"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "  /dev/mapper/vg-volume-1  \n"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want: "/dev/mapper/vg-volume-1",
+		},
 	}
 
 	for _, test := range tests {
@@ -786,7 +804,7 @@ func TestParseLogicalPath(t *testing.T) {
 				t.Errorf("parseLogicalPath() = %v, want %v", gotErr, test.wantErr)
 			}
 			if got != test.want {
-				t.Errorf("parseLogicalPath() = %v, want %v", got, test.want)
+				t.Errorf("parseLogicalPath() = %q, want %q", got, test.want)
 			}
 		})
 	}

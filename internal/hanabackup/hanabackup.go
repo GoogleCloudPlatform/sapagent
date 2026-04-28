@@ -53,7 +53,7 @@ func ParseBasePath(ctx context.Context, pattern string, exec commandlineexecutor
 
 	log.CtxLogger(ctx).Debugw("ParseBasePath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	basePath := strings.TrimSuffix(result.StdOut, "\n")
+	basePath := strings.TrimSpace(result.StdOut)
 	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
 	return basePath, nil
 }
@@ -69,7 +69,7 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 	}
 	log.CtxLogger(ctx).Debugw("ParseLogicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	logicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+	logicalDevice := strings.TrimSpace(result.StdOut)
 
 	// Verifying the logical device matches findmnt output
 	result = exec(ctx, commandlineexecutor.Params{
@@ -79,8 +79,8 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 	if result.Error != nil || result.StdErr != "" {
 		return "", fmt.Errorf("failure verifying logical device for base path %q using findmnt, stderr: %s, err: %s", basePath, result.StdErr, result.Error)
 	}
-	if strings.TrimSuffix(result.StdOut, "\n") != logicalDevice {
-		return "", fmt.Errorf("logical device mismatch for base path %s: df found %s, findmnt found %s", basePath, logicalDevice, strings.TrimSuffix(result.StdOut, "\n"))
+	if strings.TrimSpace(result.StdOut) != logicalDevice {
+		return "", fmt.Errorf("logical device mismatch for base path %s: df found %s, findmnt found %s", basePath, logicalDevice, strings.TrimSpace(result.StdOut))
 	}
 
 	log.CtxLogger(ctx).Infow("Directory to logical device mapping", "DirectoryPath", basePath, "LogicalDevice", logicalDevice)
@@ -114,7 +114,7 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 				physicalDevice = fmt.Sprintf("%s%s\n", physicalDevice, line)
 			}
 
-			physicalDevice = strings.TrimSuffix(physicalDevice, "\n")
+			physicalDevice = strings.TrimSpace(physicalDevice)
 			if physicalDevice == "" {
 				return "", fmt.Errorf("physical device is empty for logical path %q", logicalPath)
 			}
@@ -127,7 +127,7 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 
 	log.CtxLogger(ctx).Debugw("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	physicalDevice := strings.TrimSuffix(result.StdOut, "\n")
+	physicalDevice := strings.TrimSpace(result.StdOut)
 	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
 	if physicalDevice == "" {
 		return "", fmt.Errorf("physical device is empty for logical path %q", logicalPath)
@@ -252,7 +252,7 @@ func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec command
 	}
 	log.CtxLogger(ctx).Debugw("ReadDataDirMountPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	return strings.TrimSuffix(result.StdOut, "\n"), nil
+	return strings.TrimSpace(result.StdOut), nil
 }
 
 // RescanVolumeGroups rescans all volume groups and mounts them.
