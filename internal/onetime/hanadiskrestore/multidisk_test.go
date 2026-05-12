@@ -19,7 +19,9 @@ package hanadiskrestore
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,6 +236,52 @@ func TestGroupRestore(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "SuccessWithSGWorkflow_RecreateDisk_IOPS",
+			r: &Restorer{
+				GroupSnapshot:            "test-group-snapshot",
+				UseSnapshotGroupWorkflow: true,
+				ProvisionedIops:          10000,
+				snapshotItems: []snapshotgroup.SnapshotItem{
+					{Name: "snapshot-1", Labels: map[string]string{"goog-sapagent-disk-name": "test-disk-1"}},
+				},
+				sgService: &fakeSGService{
+					GetSGResp: &snapshotgroup.SGItem{},
+					ListDisksFromSnapshotFn: func(ctx context.Context, project, zone, snapshot string) ([]snapshotgroup.DiskItem, error) {
+						return nil, fmt.Errorf("ListDisksFromSnapshot should not be called")
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetDiskResp: []*compute.Disk{
+						&compute.Disk{},
+						nil,
+						&compute.Disk{},
+						&compute.Disk{},
+					},
+					GetDiskErr:                       []error{nil, &googleapi.Error{Code: http.StatusNotFound}, nil, nil},
+					DiskOpErr:                        nil,
+					AttachDiskErr:                    nil,
+					DeleteDiskResp:                   []*compute.Operation{nil},
+					DeleteDiskErr:                    []error{nil},
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "dev",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 100}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{Status: "DONE"}, Err: nil},
+				},
+				disks: []*multiDisks{
+					&multiDisks{
+						disk: &ipb.Disk{
+							DiskName: "test-disk-1",
+						},
+					},
+				},
+			},
+			exec: successExec,
+			want: nil,
+		},
+		{
 			name: "RescanVolumeGroupsFails",
 			r: &Restorer{
 				GroupSnapshot:            "test-group-snapshot",
@@ -345,6 +393,16 @@ func TestGroupRestore(t *testing.T) {
 			got := tc.r.groupRestore(t.Context(), tc.exec, defaultCloudProperties)
 			if diff := cmp.Diff(got, tc.want, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("groupRestore() returned diff (-want +got):\n%s", diff)
+			}
+			if tc.name == "SuccessWithSGWorkflow_RecreateDisk_IOPS" {
+				fcs, ok := tc.r.computeService.(*fakeComputeService)
+				if !ok {
+					t.Errorf("computeService is not *fakeComputeService")
+				} else {
+					if !strings.HasPrefix(fcs.InsertedDiskName, "test-group-snapshot-disk1-") {
+						t.Errorf("InsertedDiskName = %q, want prefix %q", fcs.InsertedDiskName, "test-group-snapshot-disk1-")
+					}
+				}
 			}
 		})
 	}

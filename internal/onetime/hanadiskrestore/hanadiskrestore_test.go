@@ -118,12 +118,14 @@ type fakeComputeService struct {
 	GetDiskCallResp     disksGetCall
 	InsertDiskCallResp  disksInsertCall
 	GetSnapshotCallResp snapshotsGetCall
+	InsertedDiskName    string
 }
 
 func (f *fakeComputeService) GetDisk(project, zone, disk string) disksGetCall {
 	return f.GetDiskCallResp
 }
 func (f *fakeComputeService) InsertDisk(project, zone string, disk *compute.Disk) disksInsertCall {
+	f.InsertedDiskName = disk.Name
 	return f.InsertDiskCallResp
 }
 func (f *fakeComputeService) GetSnapshot(project, snapshot string) snapshotsGetCall {

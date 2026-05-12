@@ -214,11 +214,22 @@ func (r *Restorer) restoreAndConfigureDisk(ctx context.Context, exec commandline
 func (r *Restorer) createAttachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
 	var shouldRecreateDisk bool
 	var newDiskNames *list.List
-	if r.NewDiskNames != "" {
+	if r.NewDiskNames != "" || r.ProvisionedIops > 0 || r.ProvisionedThroughput > 0 || r.DiskSizeGb > 0 || r.TargetKMSKey != "" {
 		shouldRecreateDisk = true
 		newDiskNames = list.New()
-		for _, diskName := range strings.Split(r.NewDiskNames, ",") {
-			newDiskNames.PushBack(strings.TrimSpace(diskName))
+		if r.NewDiskNames != "" {
+			for _, diskName := range strings.Split(r.NewDiskNames, ",") {
+				newDiskNames.PushBack(strings.TrimSpace(diskName))
+			}
+		} else {
+			timestamp := time.Now().Format("20060102-150405")
+			for i := range r.snapshotItems {
+				diskName := fmt.Sprintf("%s-disk%d-%s", r.GroupSnapshot, i+1, timestamp)
+				if len(diskName) > 63 {
+					return fmt.Errorf("generated disk name %q is longer than 63 characters", diskName)
+				}
+				newDiskNames.PushBack(diskName)
+			}
 		}
 	} else {
 		if err := r.bulkInsertDisksFromSG(ctx); err != nil {
