@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -210,6 +211,9 @@ type (
 		UseSnapshotGroupWorkflow                                   bool
 		snapshotItems                                              []snapshotgroup.SnapshotItem
 		newAttachedDisks                                           []multiDisks
+		TargetKMSKey, TargetKMSKeyring                             string
+		TargetKMSLocation, TargetKMSProject                        string
+		TargetKMSServiceAccount                                    string
 	}
 )
 
@@ -262,6 +266,11 @@ func (r *Restorer) SetFlags(fs *flag.FlagSet) {
 	fs.Int64Var(&r.ProvisionedThroughput, "provisioned-throughput", 0, "Number of throughput mb per second that the disk can handle. (optional)")
 	fs.BoolVar(&r.SendToMonitoring, "send-metrics-to-monitoring", true, "Send restore related metrics to cloud monitoring. (optional) Default: true")
 	fs.StringVar(&r.CSEKKeyFile, "csek-key-file", "", `Path to a Customer-Supplied Encryption Key (CSEK) key file for the source snapshot. (required if source snapshot is encrypted)`)
+	fs.StringVar(&r.TargetKMSKey, "target-kms-key", "", "KMS key to encrypt the restored disk with. (optional)")
+	fs.StringVar(&r.TargetKMSKeyring, "target-kms-keyring", "", "KMS keyring name. (optional)")
+	fs.StringVar(&r.TargetKMSLocation, "target-kms-location", "", "KMS location name. (optional)")
+	fs.StringVar(&r.TargetKMSProject, "target-kms-project", "", "KMS project name. (optional)")
+	fs.StringVar(&r.TargetKMSServiceAccount, "target-kms-service-account", "", "Service account to be used for CMEK encryption. (optional)")
 	fs.StringVar(&r.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/hanadiskrestore.log")
 	fs.BoolVar(&r.help, "h", false, "Displays help")
 	fs.StringVar(&r.LogLevel, "loglevel", "info", "Sets the logging level")
@@ -346,6 +355,28 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 
 	if restoreFromGroupSnapshot {
 		r.isGroupSnapshot = true
+	}
+
+	if r.isGroupSnapshot && r.CSEKKeyFile != "" {
+		return fmt.Errorf("csek encryption is not supported for snapshot groups / multi-disk setups")
+	}
+
+	if (r.TargetKMSKey == "" && r.TargetKMSKeyring != "") || (r.TargetKMSKey != "" && r.TargetKMSKeyring == "") {
+		return fmt.Errorf("both target-kms-key and target-kms-keyring must be provided together")
+	}
+
+	if r.TargetKMSLocation == "" {
+		zone := r.DataDiskZone
+		if zone == "" {
+			if cp == nil {
+				return fmt.Errorf("cloud properties are nil, cannot determine target kms location")
+			}
+			zone = cp.GetZone()
+		}
+		parts := strings.Split(zone, "-")
+		if len(parts) >= 2 {
+			r.TargetKMSLocation = strings.Join(parts[:len(parts)-1], "-")
+		}
 	}
 
 	log.Logger.Debug("Parameter validation successful.")
@@ -582,7 +613,7 @@ func (r *Restorer) prepareForHANAChangeDiskType(ctx context.Context, cp *ipb.Clo
 }
 
 // restoreFromSnapshot creates a new HANA data disk and attaches it to the instance.
-func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, instanceName, snapshotKey, newDiskName, sourceSnapshot string) error {
+func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexecutor.Execute, instanceName, newDiskName, sourceSnapshot string) error {
 	if r.computeService == nil {
 		return fmt.Errorf("compute service is nil")
 	}
@@ -596,12 +627,51 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	}
 
 	disk := &compute.Disk{
-		Name:                        newDiskName,
-		Type:                        r.NewDiskType,
-		Zone:                        r.DataDiskZone,
-		SourceSnapshot:              fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, sourceSnapshot),
-		SourceSnapshotEncryptionKey: &compute.CustomerEncryptionKey{RsaEncryptedKey: snapshotKey},
+		Name:           newDiskName,
+		Type:           r.NewDiskType,
+		Zone:           r.DataDiskZone,
+		SourceSnapshot: fmt.Sprintf("projects/%s/global/snapshots/%s", r.Project, sourceSnapshot),
 	}
+
+	if r.TargetKMSKey != "" && r.TargetKMSKeyring != "" {
+		kmsProject := r.TargetKMSProject
+		if kmsProject == "" {
+			kmsProject = r.Project
+		}
+		kmsURI := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s", kmsProject, r.TargetKMSLocation, r.TargetKMSKeyring, r.TargetKMSKey)
+		disk.DiskEncryptionKey = &compute.CustomerEncryptionKey{
+			KmsKeyName: kmsURI,
+		}
+		if r.TargetKMSServiceAccount != "" {
+			disk.DiskEncryptionKey.KmsKeyServiceAccount = r.TargetKMSServiceAccount
+		}
+		log.CtxLogger(ctx).Debugw("Using CMEK for new disk", "kmsURI", kmsURI, "kmsKeyServiceAccount", r.TargetKMSServiceAccount)
+	} else if r.CSEKKeyFile != "" {
+		// Only supported for single disk restore.
+		// It will fail for multi disk restore in validateParameters if used with multi disk restore.
+		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
+		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, sourceSnapshot)
+		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
+		if err != nil {
+			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
+			return err
+		}
+		disk.SourceSnapshotEncryptionKey = &compute.CustomerEncryptionKey{
+			RsaEncryptedKey: key,
+		}
+		log.CtxLogger(ctx).Debugw("Using CSEK for new disk", "CSEKKeyFile", r.CSEKKeyFile)
+	} else if snapshot.SnapshotEncryptionKey != nil && snapshot.SnapshotEncryptionKey.KmsKeyName != "" {
+		// Note: This is only supported for snapshots encrypted with same CMEK as the source disk.
+		// Since we do not support encrypting snapshots with a different CMEK than the source disk,
+		// we can safely assume that the snapshot is encrypted with the same CMEK as the source disk.
+		// If the source disk is not encrypted, the snapshot is not encrypted and hence the
+		// snapshot.SnapshotEncryptionKey is nil.
+		disk.DiskEncryptionKey = &compute.CustomerEncryptionKey{
+			KmsKeyName: snapshot.SnapshotEncryptionKey.KmsKeyName,
+		}
+		log.CtxLogger(ctx).Debugw("Using CMEK from source snapshot for new disk", "kmsURI", snapshot.SnapshotEncryptionKey.KmsKeyName)
+	}
+
 	if r.DiskSizeGb > 0 {
 		disk.SizeGb = r.DiskSizeGb
 	}
@@ -1093,4 +1163,11 @@ func (r *Restorer) recordSystemState(ctx context.Context, exec commandlineexecut
 		log.CtxLogger(ctx).Errorw("Failed to record /etc/fstab content", "err", result.Error, "stderr", result.StdErr)
 	}
 	log.CtxLogger(ctx).Debugw("System state", "fstab", result.StdOut)
+}
+
+// validateEncryptionKeys acts as a pre-flight placeholder check for CMEK/KMS permissions.
+func (r *Restorer) validateEncryptionKeys(ctx context.Context) error {
+	// TODO: Implement full IAM role and key accessibility validation
+	// for both the target CMEK key and any source CMEK keys.
+	return nil
 }

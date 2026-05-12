@@ -19,10 +19,8 @@ package hanadiskrestore
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
-	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -30,23 +28,12 @@ import (
 
 // diskRestore creates a new data disk restored from a single snapshot and attaches it to the instance.
 func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
-	snapShotKey := ""
-	if r.CSEKKeyFile != "" {
-		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
-
-		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.SourceSnapshot)
-		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
-		if err != nil {
-			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
-			return err
-		}
-		snapShotKey = key
-	}
-
-	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), snapShotKey, r.NewDiskName, r.SourceSnapshot); err != nil {
+	if err := r.restoreFromSnapshot(ctx, exec, cp.GetInstanceName(), r.NewDiskName, r.SourceSnapshot); err != nil {
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
-		if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
-			log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
+		if r.gceService != nil {
+			if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
+				log.CtxLogger(ctx).Errorw("reattaching old disk failed", "err", attachErr)
+			}
 		}
 		if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
 			log.CtxLogger(ctx).Errorw("Failed to rescan volume groups", "err", err)

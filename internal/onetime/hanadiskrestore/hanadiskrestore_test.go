@@ -325,6 +325,7 @@ func TestValidateParameters(t *testing.T) {
 		name         string
 		restorer     Restorer
 		os           string
+		cp           *ipb.CloudProperties
 		want         error
 		wantRestorer *Restorer
 	}{
@@ -567,12 +568,80 @@ func TestValidateParameters(t *testing.T) {
 			},
 			want: nil,
 		},
+		{
+			name: "MutualKMSParameterFailureMissingKeyring",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+				TargetKMSKey:   "my-key",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "MutualKMSParameterFailureMissingKey",
+			restorer: Restorer{
+				Sid:              "tst",
+				DataDiskName:     "data-disk",
+				SourceSnapshot:   "snapshot",
+				NewDiskName:      "new-disk",
+				TargetKMSKeyring: "my-keyring",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotCSEKKeyFileRejected",
+			restorer: Restorer{
+				Sid:           "tst",
+				GroupSnapshot: "group-snapshot",
+				CSEKKeyFile:   "/path/to/key",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "InferTargetKMSLocationFromDataDiskZone",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				DataDiskZone:   "us-central1-a",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+			},
+			wantRestorer: &Restorer{
+				TargetKMSLocation: "us-central1",
+			},
+			want: nil,
+		},
+		{
+			name: "InferTargetKMSLocationFromCloudProperties",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+			},
+			cp: &ipb.CloudProperties{Zone: "us-central1-a"},
+			wantRestorer: &Restorer{
+				TargetKMSLocation: "us-central1",
+			},
+			want: nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.validateParameters(test.os, defaultCloudProperties)
+			cp := test.cp
+			if cp == nil {
+				cp = defaultCloudProperties
+			}
+			got := test.restorer.validateParameters(test.os, cp)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("validateParameters(%q) = %v, want %v", test.os, got, test.want)
+			}
+			if test.wantRestorer != nil {
+				if test.restorer.TargetKMSLocation != test.wantRestorer.TargetKMSLocation {
+					t.Errorf("validateParameters(%q, %v) TargetKMSLocation = %v, want %v", test.os, cp, test.restorer.TargetKMSLocation, test.wantRestorer.TargetKMSLocation)
+				}
 			}
 		})
 	}
@@ -2530,14 +2599,55 @@ func TestRestoreFromSnapshot(t *testing.T) {
 			sourceSnapshot: "test-snapshot",
 			wantErr:        false,
 		},
+		{
+			name: "SuccessWithTargetKMSAndServiceAccount",
+			r: &Restorer{
+				TargetKMSKey:            "my-key",
+				TargetKMSKeyring:        "my-ring",
+				TargetKMSLocation:       "us-central1",
+				TargetKMSProject:        "my-proj",
+				TargetKMSServiceAccount: "service-account@foo.iam.gserviceaccount.com",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{DiskSizeGb: 10}, Err: nil},
+					InsertDiskCallResp:  &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+				},
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        false,
+		},
+		{
+			name: "SuccessWithInheritedSnapshotEncryptionKey",
+			r: &Restorer{
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							DiskSizeGb: 10,
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key",
+							},
+						},
+						Err: nil,
+					},
+					InsertDiskCallResp: &fakeDisksInsertCall{Op: &compute.Operation{}, Err: nil},
+				},
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+				},
+			},
+			sourceSnapshot: "test-snapshot",
+			wantErr:        false,
+		},
 	}
 
 	ctx := context.Background()
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.restoreFromSnapshot(ctx, successExec, tc.instanceName, tc.snapshotKey, tc.newDiskName, tc.sourceSnapshot)
+			err := tc.r.restoreFromSnapshot(ctx, successExec, tc.instanceName, tc.newDiskName, tc.sourceSnapshot)
 			if gotErr := err != nil; gotErr != tc.wantErr {
-				t.Errorf("restoreFromSnapshot()=%v, want error presence = %v", err, tc.wantErr)
+				t.Errorf("restoreFromSnapshot(instanceName=%q, newDiskName=%q, sourceSnapshot=%q) got error: %v, want error presence: %v", tc.instanceName, tc.newDiskName, tc.sourceSnapshot, err, tc.wantErr)
 			}
 		})
 	}

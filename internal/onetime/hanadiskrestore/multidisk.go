@@ -21,13 +21,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
-	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -38,18 +36,6 @@ import (
 // groupRestore creates several new HANA data disks from snapshots belonging to given group snapshot and attaches them to the instance.
 func (r *Restorer) groupRestore(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) error {
 	snapShotKey := ""
-	if r.CSEKKeyFile != "" {
-		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
-
-		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, r.GroupSnapshot)
-		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
-		if err != nil {
-			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
-			return err
-		}
-		snapShotKey = key
-	}
-
 	var err error
 	if r.UseSnapshotGroupWorkflow {
 		err = r.groupRestoreWithSGWorkflow(ctx, exec, cp, snapShotKey)
@@ -166,7 +152,7 @@ func (r *Restorer) fetchLatestDisk(ctx context.Context, snapshot snapshotgroup.S
 // recreateDisk creates a new HANA data disk from a snapshot and attaches it to the instance.
 func (r *Restorer) recreateDisk(ctx context.Context, exec commandlineexecutor.Execute, snapshotItem snapshotgroup.SnapshotItem, newDiskName, instanceName, snapshotKey string) error {
 	log.CtxLogger(ctx).Debugw("Recreating disk from snapshot", "new Disk", newDiskName)
-	if err := r.restoreFromSnapshot(ctx, exec, instanceName, snapshotKey, newDiskName, snapshotItem.Name); err != nil {
+	if err := r.restoreFromSnapshot(ctx, exec, instanceName, newDiskName, snapshotItem.Name); err != nil {
 		return err
 	}
 	return nil
@@ -308,7 +294,7 @@ func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec command
 			if instanceName == "" {
 				return fmt.Errorf("instance name is empty for snapshot %s", snapshot.Name)
 			}
-			if err := r.restoreFromSnapshot(ctx, exec, instanceName, snapshotKey, newDiskName, snapshot.Name); err != nil {
+			if err := r.restoreFromSnapshot(ctx, exec, instanceName, newDiskName, snapshot.Name); err != nil {
 				return err
 			}
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
