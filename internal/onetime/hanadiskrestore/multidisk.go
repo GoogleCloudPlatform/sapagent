@@ -67,12 +67,7 @@ func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context, exec commandl
 		return fmt.Errorf("snapshot group %s not found", r.GroupSnapshot)
 	}
 
-	if err := r.bulkInsertDisksFromSG(ctx); err != nil {
-		return err
-	}
-	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully created new disks from snapshot group...")
-
-	if err := r.attachAndConfigureDisks(ctx, exec, cp, snapshotKey); err != nil {
+	if err := r.createAttachAndConfigureDisks(ctx, exec, cp, snapshotKey); err != nil {
 		return err
 	}
 	r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully attached and configured new disks...")
@@ -149,34 +144,74 @@ func (r *Restorer) fetchLatestDisk(ctx context.Context, snapshot snapshotgroup.S
 	return &latestDisk, nil
 }
 
-// recreateDisk creates a new HANA data disk from a snapshot and attaches it to the instance.
-func (r *Restorer) recreateDisk(ctx context.Context, exec commandlineexecutor.Execute, snapshotItem snapshotgroup.SnapshotItem, newDiskName, instanceName, snapshotKey string) error {
-	log.CtxLogger(ctx).Debugw("Recreating disk from snapshot", "new Disk", newDiskName)
-	if err := r.restoreFromSnapshot(ctx, exec, instanceName, newDiskName, snapshotItem.Name); err != nil {
-		return err
-	}
-	return nil
-}
-
-// deleteOldDisk deletes the disk created from the snapshot.
-// This is used to delete the old disk before creating the new disk from snapshot.
-func (r *Restorer) deleteOldDisk(ctx context.Context, diskName string) error {
-	// Delete the old disk
-	if op, err := r.gceService.DeleteDisk(r.Project, r.DataDiskZone, diskName); err != nil {
-		return fmt.Errorf("failed to delete disk %s: %w", diskName, err)
+func (r *Restorer) restoreAndConfigureDisk(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotItem snapshotgroup.SnapshotItem, shouldRecreateDisk bool, newDiskNames *list.List) (string, error) {
+	var instanceName string
+	if !r.isScaleout {
+		instanceName = cp.GetInstanceName()
 	} else {
-		if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
-			return fmt.Errorf("failed to wait for disk deletion operation to complete: %w", err)
-		} else {
-			log.CtxLogger(ctx).Debugw("Deleted old disk", "diskName", diskName)
+		// TODO: Add support for refresh test point for scaleout scenarios.
+		instanceName = snapshotItem.Labels["goog-sapagent-instance-name"]
+		if instanceName == "" {
+			return "", fmt.Errorf("instance name is empty for snapshot %q", snapshotItem.Name)
 		}
 	}
-	return nil
+
+	var restoredDiskName string
+	if shouldRecreateDisk {
+		if newDiskNames.Len() == 0 {
+			return "", fmt.Errorf("not enough new disk names provided to recreate disk from snapshot %q", snapshotItem.Name)
+		}
+		newDiskName := newDiskNames.Front().Value.(string)
+		newDiskNames.Remove(newDiskNames.Front())
+		// Create disk directly from snapshot because of the inability
+		// to customize the name of the disk created using bulk insert api.
+		if err := r.restoreFromSnapshot(ctx, exec, instanceName, newDiskName, snapshotItem.Name); err != nil {
+			log.CtxLogger(ctx).Warnw("failed to create disk from snapshot", "snapshot", snapshotItem.Name)
+			return "", err
+		}
+		restoredDiskName = newDiskName
+	} else {
+		latestRestoredDisk, err := r.fetchLatestDisk(ctx, snapshotItem)
+		if err != nil {
+			return "", err
+		}
+		if err := r.gceService.AttachDisk(ctx, latestRestoredDisk.Name, instanceName, r.Project, r.DataDiskZone); err != nil {
+			return "", fmt.Errorf("failed to attach disk %q to the instance %q: %w", latestRestoredDisk.Name, instanceName, err)
+		}
+
+		restoredDiskName = latestRestoredDisk.Name
+	}
+
+	dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, restoredDiskName)
+	if err != nil {
+		return "", fmt.Errorf("failed to check if new disk %v is attached to the instance %s: %w", restoredDiskName, instanceName, err)
+	}
+	if !ok {
+		return "", fmt.Errorf("newly created disk %v is not attached to the instance %s", restoredDiskName, instanceName)
+	}
+	time.Sleep(5 * time.Second)
+
+	r.newAttachedDisks = append(r.newAttachedDisks, multiDisks{
+		disk: &ipb.Disk{
+			DiskName:   restoredDiskName,
+			DeviceName: dev,
+		},
+		instanceName: instanceName,
+	})
+
+	if err := r.modifyDiskInCG(ctx, restoredDiskName, true); err != nil {
+		log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", restoredDiskName, "error", err)
+		r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group...", restoredDiskName))
+	} else {
+		log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", restoredDiskName)
+	}
+
+	return dev, nil
 }
 
-// attachAndConfigureDisks attaches restored disks to required instances, adds them to consistency
+// createAttachAndConfigureDisks creates or attaches restored disks to required instances, adds them to consistency
 // group and configures LVM.
-func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
+func (r *Restorer) createAttachAndConfigureDisks(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, snapshotKey string) error {
 	var shouldRecreateDisk bool
 	var newDiskNames *list.List
 	if r.NewDiskNames != "" {
@@ -185,77 +220,20 @@ func (r *Restorer) attachAndConfigureDisks(ctx context.Context, exec commandline
 		for _, diskName := range strings.Split(r.NewDiskNames, ",") {
 			newDiskNames.PushBack(strings.TrimSpace(diskName))
 		}
+	} else {
+		if err := r.bulkInsertDisksFromSG(ctx); err != nil {
+			return err
+		}
+		r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully created new disks from snapshot group...")
 	}
 
 	var restoredDiskPV string
 	for _, snapshotItem := range r.snapshotItems {
-		latestRestoredDisk, err := r.fetchLatestDisk(ctx, snapshotItem)
+		dev, err := r.restoreAndConfigureDisk(ctx, exec, cp, snapshotItem, shouldRecreateDisk, newDiskNames)
 		if err != nil {
 			return err
 		}
-
-		var instanceName string
-		if !r.isScaleout {
-			instanceName = cp.GetInstanceName()
-		} else {
-			// TODO: Add support for refresh test point for scaleout scenarios.
-			instanceName = snapshotItem.Labels["goog-sapagent-instance-name"]
-			if instanceName == "" {
-				return fmt.Errorf("instance name is empty for snapshot %q", snapshotItem.Name)
-			}
-		}
-
-		var restoredDiskName string
-		if shouldRecreateDisk {
-			newDiskName := newDiskNames.Front().Value.(string)
-			newDiskNames.Remove(newDiskNames.Front())
-			// Recreating the disk from snapshot because of the inability
-			// to customize the name of the disk created using bulk insert api.
-			// This is followed by deleting the old disk.
-			// It's a workaround till the snapshot group API supports custom name for disks.
-			err = r.recreateDisk(ctx, exec, snapshotItem, newDiskName, instanceName, snapshotKey)
-			if err != nil {
-				log.CtxLogger(ctx).Warnw("failed to recreate disk from snapshot", "snapshot", snapshotItem.Name)
-				return err
-			}
-			if err := r.deleteOldDisk(ctx, latestRestoredDisk.Name); err != nil {
-				log.CtxLogger(ctx).Warnw("failed to delete old disk", "disk", latestRestoredDisk.Name, "error", err)
-			}
-			restoredDiskName = newDiskName
-		} else {
-			if err := r.gceService.AttachDisk(ctx, latestRestoredDisk.Name, instanceName, r.Project, r.DataDiskZone); err != nil {
-				return fmt.Errorf("failed to attach disk %q to the instance %q: %w", latestRestoredDisk.Name, instanceName, err)
-			}
-
-			restoredDiskName = latestRestoredDisk.Name
-		}
-
-		dev, ok, err := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, instanceName, restoredDiskName)
-		if err != nil {
-			return fmt.Errorf("failed to check if new disk %v is attached to the instance %s: %w", restoredDiskName, instanceName, err)
-		}
-		if !ok {
-			return fmt.Errorf("newly created disk %v is not attached to the instance %s", restoredDiskName, instanceName)
-		}
 		restoredDiskPV = dev
-		time.Sleep(5 * time.Second)
-
-		if shouldRecreateDisk {
-			r.newAttachedDisks = append(r.newAttachedDisks, multiDisks{
-				disk: &ipb.Disk{
-					DiskName:   restoredDiskName,
-					DeviceName: dev,
-				},
-				instanceName: instanceName,
-			})
-		}
-
-		if err := r.modifyDiskInCG(ctx, restoredDiskName, true); err != nil {
-			log.CtxLogger(ctx).Warnw("failed to add newly attached disk to consistency group", "disk", restoredDiskName, "error", err)
-			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: failed to add newly attached disk %q to consistency group...", restoredDiskName))
-		} else {
-			log.CtxLogger(ctx).Infow("Disk added to consistency group", "diskName", restoredDiskName)
-		}
 	}
 
 	if err := r.renameLVMForScaleup(ctx, exec, cp, restoredDiskPV); err != nil {
