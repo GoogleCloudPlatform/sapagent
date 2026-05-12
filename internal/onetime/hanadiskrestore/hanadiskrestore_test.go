@@ -593,6 +593,18 @@ func TestValidateParameters(t *testing.T) {
 			want: cmpopts.AnyError,
 		},
 		{
+			name: "BothCSEKAndKMSProvidedError",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+				CSEKKeyFile:    "/path/to/csek-key-file",
+				TargetKMSKey:   "my-key",
+			},
+			want: cmpopts.AnyError,
+		},
+		{
 			name: "GroupSnapshotCSEKKeyFileRejected",
 			restorer: Restorer{
 				Sid:           "tst",

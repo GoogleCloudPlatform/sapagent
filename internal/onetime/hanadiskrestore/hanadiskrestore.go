@@ -361,6 +361,10 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 		return fmt.Errorf("csek encryption is not supported for snapshot groups / multi-disk setups")
 	}
 
+	if r.CSEKKeyFile != "" && r.TargetKMSKey != "" {
+		return fmt.Errorf("both csek-key-file and target-kms-key cannot be provided together")
+	}
+
 	if (r.TargetKMSKey == "" && r.TargetKMSKeyring != "") || (r.TargetKMSKey != "" && r.TargetKMSKeyring == "") {
 		return fmt.Errorf("both target-kms-key and target-kms-keyring must be provided together")
 	}
