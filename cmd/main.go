@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"flag"
@@ -129,6 +130,12 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 }
 
 func main() {
+	// Trim space from arguments to avoid issues with parsing. We have seen cases where the arguments
+	// have leading or trailing spaces (e.g. when running as an extension).
+	for i := range os.Args {
+		os.Args[i] = strings.TrimSpace(os.Args[i])
+	}
+
 	ctx := context.Background()
 	lp := log.Parameters{
 		OSType:     runtime.GOOS,
