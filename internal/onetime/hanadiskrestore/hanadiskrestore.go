@@ -55,10 +55,10 @@ import (
 
 type (
 	// getDataPaths provides testable replacement for hanabackup.CheckDataDir
-	getDataPaths func(context.Context, commandlineexecutor.Execute) (string, string, string, error)
+	getDataPaths func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error)
 
 	// getLogPaths provides testable replacement for hanabackup.CheckLogDir
-	getLogPaths func(context.Context, commandlineexecutor.Execute) (string, string, string, error)
+	getLogPaths func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error)
 
 	// waitForIndexServerToStopWithRetry provides testable replacement for hanabackup.WaitForIndexServerToStopWithRetry
 	waitForIndexServerToStopWithRetry func(ctx context.Context, user string, exec commandlineexecutor.Execute) error
@@ -758,10 +758,10 @@ func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execu
 // Also verifies that the data disk is attached to the instance.
 func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths, exec commandlineexecutor.Execute) error {
 	var err error
-	if r.baseDataPath, r.logicalDataPath, r.physicalDataPath, err = checkDataDir(ctx, exec); err != nil {
+	if r.baseDataPath, r.logicalDataPath, r.physicalDataPath, err = checkDataDir(ctx, r.Sid, exec); err != nil {
 		return err
 	}
-	if r.baseLogPath, r.logicalLogPath, r.physicalLogPath, err = checkLogDir(ctx, exec); err != nil {
+	if r.baseLogPath, r.logicalLogPath, r.physicalLogPath, err = checkLogDir(ctx, r.Sid, exec); err != nil {
 		return err
 	}
 	log.CtxLogger(ctx).Infow("Checking preconditions", "Data directory", r.baseDataPath, "Data file system",

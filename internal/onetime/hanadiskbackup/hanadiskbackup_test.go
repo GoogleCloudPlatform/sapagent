@@ -192,7 +192,7 @@ func TestSnapshotHandler(t *testing.T) {
 			name:       "GCEServiceCreationFailure",
 			snapshot:   defaultSnapshot,
 			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return nil, cmpopts.AnyError },
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", cmpopts.AnyError
 			},
 			want: subcommands.ExitFailure,
@@ -202,7 +202,7 @@ func TestSnapshotHandler(t *testing.T) {
 			snapshot:           defaultSnapshot,
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return nil, cmpopts.AnyError },
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
 			},
 			want: subcommands.ExitFailure,
@@ -212,7 +212,7 @@ func TestSnapshotHandler(t *testing.T) {
 			snapshot:           defaultSnapshot,
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", cmpopts.AnyError
 			},
 			want: subcommands.ExitFailure,
@@ -222,7 +222,7 @@ func TestSnapshotHandler(t *testing.T) {
 			snapshot:           defaultSnapshot,
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", errors.New("failure verifying logical device, stderr: findmnt error, err: exit status 1")
 			},
 			want: subcommands.ExitFailure,

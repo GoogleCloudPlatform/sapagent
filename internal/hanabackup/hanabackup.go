@@ -41,8 +41,8 @@ var (
 )
 
 // ParseBasePath parses the base path from the global.ini file.
-func ParseBasePath(ctx context.Context, pattern string, exec commandlineexecutor.Execute) (string, error) {
-	args := `-c 'grep ` + pattern + ` /usr/sap/*/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'`
+func ParseBasePath(ctx context.Context, pattern string, sid string, exec commandlineexecutor.Execute) (string, error) {
+	args := fmt.Sprintf("-c 'grep %s /usr/sap/%s/SYS/global/hdb/custom/config/global.ini | cut -d= -f 2'", pattern, sid)
 	result := exec(ctx, commandlineexecutor.Params{
 		Executable:  "/bin/sh",
 		ArgsToSplit: args,
@@ -190,8 +190,8 @@ func UnFreezeXFS(ctx context.Context, hanaDataPath string, exec commandlineexecu
 }
 
 // CheckDataDir checks if the data directory is valid and has a valid physical volume.
-func CheckDataDir(ctx context.Context, exec commandlineexecutor.Execute) (dataPath, logicalDataPath, physicalDataPath string, err error) {
-	if dataPath, err = ParseBasePath(ctx, "basepath_datavolumes", exec); err != nil {
+func CheckDataDir(ctx context.Context, sid string, exec commandlineexecutor.Execute) (dataPath, logicalDataPath, physicalDataPath string, err error) {
+	if dataPath, err = ParseBasePath(ctx, "basepath_datavolumes", sid, exec); err != nil {
 		return "", "", "", err
 	}
 	log.CtxLogger(ctx).Infow("Data volume base path", "path", dataPath)
@@ -208,8 +208,8 @@ func CheckDataDir(ctx context.Context, exec commandlineexecutor.Execute) (dataPa
 }
 
 // CheckLogDir checks if the log directory is valid and has a valid physical volume.
-func CheckLogDir(ctx context.Context, exec commandlineexecutor.Execute) (baseLogPath, logicalLogPath, physicalLogPath string, err error) {
-	if baseLogPath, err = ParseBasePath(ctx, "basepath_logvolumes", exec); err != nil {
+func CheckLogDir(ctx context.Context, sid string, exec commandlineexecutor.Execute) (baseLogPath, logicalLogPath, physicalLogPath string, err error) {
+	if baseLogPath, err = ParseBasePath(ctx, "basepath_logvolumes", sid, exec); err != nil {
 		return "", "", "", err
 	}
 	log.CtxLogger(ctx).Infow("Log volume base path", "path", baseLogPath)

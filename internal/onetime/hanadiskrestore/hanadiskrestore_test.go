@@ -796,7 +796,7 @@ func TestRestoreHandler(t *testing.T) {
 		},
 	}
 
-	checkDir := func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+	checkDir := func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 		return "", "", "", nil
 	}
 	for _, test := range tests {
@@ -884,11 +884,11 @@ func TestCheckPreConditions(t *testing.T) {
 			name: "CheckDataDirErr",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				fmt.Println("here")
 				return "", "", "", cmpopts.AnyError
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", nil
 			},
 			exec:    failExec,
@@ -898,10 +898,10 @@ func TestCheckPreConditions(t *testing.T) {
 			name: "CheckDataDirFindmntErr",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", errors.New("failure verifying logical device, stderr: findmnt error, err: exit status 1")
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", nil
 			},
 			exec:    failExec,
@@ -911,10 +911,10 @@ func TestCheckPreConditions(t *testing.T) {
 			name: "CheckLogDirErr",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "", "", "", cmpopts.AnyError
 			},
 			exec:    failExec,
@@ -924,10 +924,10 @@ func TestCheckPreConditions(t *testing.T) {
 			name: "DataAndLogOnSameDisk1",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			exec:    successExec,
@@ -937,10 +937,10 @@ func TestCheckPreConditions(t *testing.T) {
 			name: "DataAndLogOnSameDisk2",
 			cp:   defaultCloudProperties,
 			r:    &Restorer{},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c\nd", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			exec:    successExec,
@@ -955,10 +955,10 @@ func TestCheckPreConditions(t *testing.T) {
 					GetInstanceErr:  []error{cmpopts.AnyError},
 				},
 			},
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			exec:    successExec,
@@ -967,10 +967,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "SingleSnapshotDiskAttachedErr",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -986,10 +986,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "SingleSnapshotDiskAttachedFalse",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1008,10 +1008,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotMultiDiskAttachedErr",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1035,10 +1035,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotMultiDiskAttachedFalse",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1073,10 +1073,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "SourceSnapshotAbsent",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1099,10 +1099,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotAbsent",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1127,10 +1127,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "numOfSnapshotsNotEqualToNumOfDisks",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1157,10 +1157,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotNewDiskSuffixPresent",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1206,10 +1206,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "EmptyNewTypeGroupSnapshotErr",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1254,10 +1254,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "EmptyNewTypeGroupSnapshotCGErr",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1306,10 +1306,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "NewTypePresent",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1358,10 +1358,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "SingleSnapshotEmptyNewDiskTypeGetDiskFails",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1385,10 +1385,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "BuildNewDiskNamesFromSuffixSuccess",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1466,10 +1466,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotValidateCGErr",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1537,10 +1537,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "NewDiskNamesCountMismatch",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1610,10 +1610,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "NewDiskNameAlreadyExists",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1666,10 +1666,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "NewDiskNameUniqueCheckError",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1722,10 +1722,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "GroupSnapshotValidateCGSuccess",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "a", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "c", nil
 			},
 			r: &Restorer{
@@ -1793,10 +1793,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "ExplicitKMSLocationMismatch",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1823,10 +1823,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "ExplicitKMSLocationMatch",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1853,10 +1853,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "DataDiskZoneAndCloudPropertiesNil",
 			cp:   nil,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1869,10 +1869,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "ExplicitKMSLocationEmptyDiskRegion",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{
@@ -1892,10 +1892,10 @@ func TestCheckPreConditions(t *testing.T) {
 		{
 			name: "ExplicitKMSEmptyLocationMatchesRegion",
 			cp:   defaultCloudProperties,
-			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "a", "b", "c", nil
 			},
-			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
 				return "b", "a", "d", nil
 			},
 			r: &Restorer{

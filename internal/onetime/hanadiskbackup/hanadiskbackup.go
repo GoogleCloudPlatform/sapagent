@@ -59,7 +59,7 @@ import (
 
 type (
 	// checkDataDirFunc provides testable replacement for hanabackup.CheckDataDir
-	checkDataDirFunc func(ctx context.Context, exec commandlineexecutor.Execute) (dataPath string, logicalDataPath string, physicalDataPath string, err error)
+	checkDataDirFunc func(ctx context.Context, sid string, exec commandlineexecutor.Execute) (dataPath string, logicalDataPath string, physicalDataPath string, err error)
 
 	// geteuidFunc provides testable replacement for syscall.Geteuid.
 	geteuidFunc func() int
@@ -387,7 +387,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	}
 
 	// If the command is run as a non-root user, physical data path will be empty but error is nil.
-	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = checkDataDir(ctx, commandlineexecutor.ExecuteCommand); err != nil {
+	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = checkDataDir(ctx, s.Sid, commandlineexecutor.ExecuteCommand); err != nil {
 		errMessage := "ERROR: Failed to check preconditions"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure

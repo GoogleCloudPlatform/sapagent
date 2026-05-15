@@ -95,7 +95,7 @@ func TestParseBasePath(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, gotErr := ParseBasePath(context.Background(), "", test.fakeExec)
+			got, gotErr := ParseBasePath(context.Background(), "", "HDB", test.fakeExec)
 			if !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("parseBasePath() = %v, want %v", gotErr, test.wantErr)
 			}
@@ -500,7 +500,7 @@ func TestCheckDataDir(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dp, ldp, pdp, err := CheckDataDir(context.Background(), tc.exec)
+			dp, ldp, pdp, err := CheckDataDir(context.Background(), "HDB", tc.exec)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("CheckDataDir() error = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -634,7 +634,7 @@ func TestCheckLogDir(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			bpl, llp, plp, err := CheckLogDir(context.Background(), tc.exec)
+			bpl, llp, plp, err := CheckLogDir(context.Background(), "HDB", tc.exec)
 			if !cmp.Equal(err, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("CheckLogDir() error = %v, wantErr %v", err, tc.wantErr)
 			}
