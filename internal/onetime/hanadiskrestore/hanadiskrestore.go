@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"flag"
+	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -49,6 +50,8 @@ import (
 
 	mrpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	tspb "google.golang.org/protobuf/types/known/timestamppb"
+	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
+	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 )
@@ -65,6 +68,14 @@ type (
 
 	// metricClientCreator provides testable replacement for monitoring.NewMetricClient API.
 	metricClientCreator func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error)
+
+	kmsClientCreator func(context.Context, ...option.ClientOption) (kmsClientInterface, error)
+
+	kmsClientInterface interface {
+		GetCryptoKey(ctx context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error)
+		GetIamPolicy(ctx context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error)
+		Close() error
+	}
 
 	disksGetCall interface {
 		Do(opts ...googleapi.CallOption) (*compute.Disk, error)
@@ -159,6 +170,30 @@ func compareVersions(version1, version2 string) (bool, error) {
 // computeClient implements computeServiceInterface for *compute.Service.
 type computeClient struct {
 	service *compute.Service
+}
+
+type kmsClientWrapper struct {
+	client *kms.KeyManagementClient
+}
+
+func (w *kmsClientWrapper) GetCryptoKey(ctx context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+	return w.client.GetCryptoKey(ctx, req)
+}
+
+func (w *kmsClientWrapper) GetIamPolicy(ctx context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	return w.client.GetIamPolicy(ctx, req)
+}
+
+func (w *kmsClientWrapper) Close() error {
+	return w.client.Close()
+}
+
+func newKMSClient(ctx context.Context, opts ...option.ClientOption) (kmsClientInterface, error) {
+	client, err := kms.NewKeyManagementClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &kmsClientWrapper{client: client}, nil
 }
 
 func (c *computeClient) GetDisk(project, zone, disk string) disksGetCall {
@@ -306,7 +341,7 @@ func (r *Restorer) Run(ctx context.Context, runOpts *onetime.RunOptions) subcomm
 	}
 
 	r.oteLogger = onetime.CreateOTELogger(runOpts.DaemonMode)
-	exitStatus := r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
+	exitStatus := r.restoreHandler(ctx, monitoring.NewMetricClient, gce.NewGCEClient, onetime.NewComputeService, newKMSClient, runOpts.CloudProperties, hanabackup.CheckDataDir, hanabackup.CheckLogDir)
 	if r.LogLevel == "debug" {
 		log.CtxLogger(ctx).Infow("Recording system state after restore")
 		r.recordSystemState(ctx, commandlineexecutor.ExecuteCommand)
@@ -347,6 +382,9 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 	}
 
 	if r.Project == "" {
+		if cp == nil {
+			return fmt.Errorf("cloud properties are nil, cannot determine project")
+		}
 		r.Project = cp.GetProjectId()
 	}
 	if r.HanaSidAdm == "" {
@@ -382,6 +420,12 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 			r.TargetKMSLocation = strings.Join(parts[:len(parts)-1], "-")
 		}
 	}
+	if r.TargetKMSProject == "" {
+		if cp == nil {
+			return fmt.Errorf("cloud properties are nil, cannot determine target kms project")
+		}
+		r.TargetKMSProject = cp.GetProjectId()
+	}
 
 	log.Logger.Debug("Parameter validation successful.")
 	log.Logger.Infof("List of parameters to be used: %+v", r)
@@ -390,7 +434,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 }
 
 // restoreHandler is the main handler for the restore subcommand.
-func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
+func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, kcc kmsClientCreator, cp *ipb.CloudProperties, checkDataDir getDataPaths, checkLogDir getLogPaths) subcommands.ExitStatus {
 	var err error
 	if err = r.validateParameters(runtime.GOOS, cp); err != nil {
 		r.oteLogger.LogMessageToConsole(err.Error())
@@ -431,6 +475,18 @@ func (r *Restorer) restoreHandler(ctx context.Context, mcc metricClientCreator, 
 	if r.LogLevel == "debug" {
 		log.CtxLogger(ctx).Infow("Recording system state for debugging purposes")
 		r.recordSystemState(ctx, commandlineexecutor.ExecuteCommand)
+	}
+
+	kmsClient, err := kcc(ctx)
+	if err != nil {
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Failed to create KMS client", err)
+		return subcommands.ExitFailure
+	}
+	defer kmsClient.Close()
+
+	if err := r.validateEncryptionKeys(ctx, kmsClient, cp); err != nil {
+		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: KMS key validation failed", err)
+		return subcommands.ExitFailure
 	}
 
 	if err := r.checkPreConditions(ctx, cp, checkDataDir, checkLogDir, commandlineexecutor.ExecuteCommand); err != nil {
@@ -1237,9 +1293,131 @@ func (r *Restorer) recordSystemState(ctx context.Context, exec commandlineexecut
 	log.CtxLogger(ctx).Debugw("System state", "fstab", result.StdOut)
 }
 
-// validateEncryptionKeys acts as a pre-flight placeholder check for CMEK/KMS permissions.
-func (r *Restorer) validateEncryptionKeys(ctx context.Context) error {
-	// TODO: Implement full IAM role and key accessibility validation
-	// for both the target CMEK key and any source CMEK keys.
+// validateEncryptionKeys acts as a pre-flight check for CMEK/KMS accessibility and permissions.
+func (r *Restorer) validateEncryptionKeys(ctx context.Context, kmsClient kmsClientInterface, cp *ipb.CloudProperties) error {
+	type kmsKeyValidationInfo struct {
+		uri            string
+		serviceAccount string
+	}
+	var keysToValidate []kmsKeyValidationInfo
+
+	if r.TargetKMSKey != "" && r.TargetKMSKeyring != "" {
+		kmsProject := r.TargetKMSProject
+		if kmsProject == "" {
+			kmsProject = r.Project
+		}
+		kmsLocation := r.TargetKMSLocation
+		if kmsLocation == "" {
+			kmsLocation = cp.GetZone()
+		}
+		kmsURI := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s", kmsProject, kmsLocation, r.TargetKMSKeyring, r.TargetKMSKey)
+		keysToValidate = append(keysToValidate, kmsKeyValidationInfo{
+			uri:            kmsURI,
+			serviceAccount: r.TargetKMSServiceAccount,
+		})
+	} else {
+		if r.SourceSnapshot != "" {
+			if r.computeService != nil {
+				snapshot, err := r.computeService.GetSnapshot(r.Project, r.SourceSnapshot).Do()
+				if err == nil && snapshot != nil && snapshot.SnapshotEncryptionKey != nil && snapshot.SnapshotEncryptionKey.KmsKeyName != "" {
+					keysToValidate = append(keysToValidate, kmsKeyValidationInfo{
+						uri:            snapshot.SnapshotEncryptionKey.KmsKeyName,
+						serviceAccount: snapshot.SnapshotEncryptionKey.KmsKeyServiceAccount,
+					})
+				}
+			}
+		} else if r.GroupSnapshot != "" {
+			if r.UseSnapshotGroupWorkflow && r.sgService != nil {
+				sItems, err := r.sgService.ListSnapshotsFromSG(ctx, r.Project, r.GroupSnapshot)
+				if err == nil {
+					for _, item := range sItems {
+						if r.computeService != nil {
+							snapshot, err := r.computeService.GetSnapshot(r.Project, item.Name).Do()
+							if err == nil && snapshot != nil && snapshot.SnapshotEncryptionKey != nil && snapshot.SnapshotEncryptionKey.KmsKeyName != "" {
+								keysToValidate = append(keysToValidate, kmsKeyValidationInfo{
+									uri:            snapshot.SnapshotEncryptionKey.KmsKeyName,
+									serviceAccount: snapshot.SnapshotEncryptionKey.KmsKeyServiceAccount,
+								})
+							}
+						}
+					}
+				}
+			} else if r.gceService != nil {
+				snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
+				if err == nil && snapshotList != nil {
+					for _, snapshot := range snapshotList.Items {
+						if snapshot != nil && snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot && snapshot.SnapshotEncryptionKey != nil && snapshot.SnapshotEncryptionKey.KmsKeyName != "" {
+							keysToValidate = append(keysToValidate, kmsKeyValidationInfo{
+								uri:            snapshot.SnapshotEncryptionKey.KmsKeyName,
+								serviceAccount: snapshot.SnapshotEncryptionKey.KmsKeyServiceAccount,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if len(keysToValidate) == 0 {
+		return nil
+	}
+
+	var uniqueKeys []kmsKeyValidationInfo
+	seenKeys := make(map[string]bool)
+	for _, k := range keysToValidate {
+		if !seenKeys[k.uri] {
+			seenKeys[k.uri] = true
+			uniqueKeys = append(uniqueKeys, k)
+		}
+	}
+
+	for _, info := range uniqueKeys {
+		kmsURI := info.uri
+		_, err := kmsClient.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: kmsURI})
+		if err != nil {
+			return fmt.Errorf("target or inferred KMS key %q does not exist or cannot be accessed: %w", kmsURI, err)
+		}
+
+		serviceAccount := info.serviceAccount
+		if serviceAccount == "" {
+			if cp.GetNumericProjectId() == "" {
+				r.oteLogger.LogMessageToFileAndConsole(ctx, "WARNING: Missing numeric project ID in cloud properties, skipping IAM role binding validation for default compute engine service agent...")
+				continue
+			}
+			serviceAccount = fmt.Sprintf("service-%s@compute-system.iam.gserviceaccount.com", cp.GetNumericProjectId())
+		}
+
+		policy, err := kmsClient.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: kmsURI})
+		if err != nil {
+			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: Failed to retrieve IAM Policy for KMS key %q (caller might lack policy read permission), skipping role binding validation. Error: %v", kmsURI, err))
+			continue
+		}
+
+		hasCombinedRole := false
+		hasEncrypter := false
+		hasDecrypter := false
+		targetMember := "serviceAccount:" + serviceAccount
+
+		for _, binding := range policy.GetBindings() {
+			role := binding.GetRole()
+			for _, member := range binding.GetMembers() {
+				if member == targetMember {
+					if role == "roles/cloudkms.cryptoKeyEncrypterDecrypter" {
+						hasCombinedRole = true
+					} else if role == "roles/cloudkms.cryptoKeyEncrypter" {
+						hasEncrypter = true
+					} else if role == "roles/cloudkms.cryptoKeyDecrypter" {
+						hasDecrypter = true
+					}
+					break
+				}
+			}
+		}
+
+		if !hasCombinedRole && !(hasEncrypter && hasDecrypter) {
+			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: Service account %q lacks the required predefined encryption/decryption roles ('roles/cloudkms.cryptoKeyEncrypterDecrypter', or both 'roles/cloudkms.cryptoKeyEncrypter' and 'roles/cloudkms.cryptoKeyDecrypter') on KMS key %q. Disk creation might fail if fine-grained permissions are not granted through custom roles.", serviceAccount, kmsURI))
+		}
+	}
+
 	return nil
 }

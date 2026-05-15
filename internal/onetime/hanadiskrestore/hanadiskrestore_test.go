@@ -30,6 +30,8 @@ import (
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
+	iampb "cloud.google.com/go/iam/apiv1/iampb"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -44,6 +46,32 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
+
+type fakeKMSClient struct {
+	getCryptoKeyErr  error
+	getIamPolicyErr  error
+	policy           *iampb.Policy
+	lastRequestedKey string
+}
+
+func (f *fakeKMSClient) GetCryptoKey(ctx context.Context, req *kmspb.GetCryptoKeyRequest) (*kmspb.CryptoKey, error) {
+	f.lastRequestedKey = req.Name
+	return nil, f.getCryptoKeyErr
+}
+
+func (f *fakeKMSClient) GetIamPolicy(ctx context.Context, req *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	if f.getIamPolicyErr != nil {
+		return nil, f.getIamPolicyErr
+	}
+	if f.policy == nil {
+		return &iampb.Policy{}, nil
+	}
+	return f.policy, nil
+}
+
+func (f *fakeKMSClient) Close() error {
+	return nil
+}
 
 type fakeSGService struct {
 	ListSnapshotsFromSGErr  error
@@ -324,12 +352,13 @@ var (
 
 func TestValidateParameters(t *testing.T) {
 	tests := []struct {
-		name         string
-		restorer     Restorer
-		os           string
-		cp           *ipb.CloudProperties
-		want         error
-		wantRestorer *Restorer
+		name               string
+		restorer           Restorer
+		os                 string
+		cp                 *ipb.CloudProperties
+		nilCloudProperties bool
+		want               error
+		wantRestorer       *Restorer
 	}{
 		{
 			name: "WindowsUnSupported",
@@ -624,6 +653,7 @@ func TestValidateParameters(t *testing.T) {
 			},
 			wantRestorer: &Restorer{
 				TargetKMSLocation: "us-central1",
+				TargetKMSProject:  "default-project",
 			},
 			want: nil,
 		},
@@ -638,15 +668,45 @@ func TestValidateParameters(t *testing.T) {
 			cp: &ipb.CloudProperties{Zone: "us-central1-a"},
 			wantRestorer: &Restorer{
 				TargetKMSLocation: "us-central1",
+				TargetKMSProject:  "",
 			},
 			want: nil,
+		},
+		{
+			name: "InferTargetKMSProjectFromCloudProperties",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+			},
+			cp: &ipb.CloudProperties{ProjectId: "inferred-project"},
+			wantRestorer: &Restorer{
+				TargetKMSLocation: "",
+				TargetKMSProject:  "inferred-project",
+			},
+			want: nil,
+		},
+		{
+			name: "NilCloudPropertiesReturnsError",
+			restorer: Restorer{
+				Sid:            "tst",
+				DataDiskName:   "data-disk",
+				SourceSnapshot: "snapshot",
+				NewDiskName:    "new-disk",
+			},
+			nilCloudProperties: true,
+			want:               cmpopts.AnyError,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cp := test.cp
-			if cp == nil {
-				cp = defaultCloudProperties
+			var cp *ipb.CloudProperties
+			if !test.nilCloudProperties {
+				cp = test.cp
+				if cp == nil {
+					cp = defaultCloudProperties
+				}
 			}
 			got := test.restorer.validateParameters(test.os, cp)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
@@ -654,7 +714,10 @@ func TestValidateParameters(t *testing.T) {
 			}
 			if test.wantRestorer != nil {
 				if test.restorer.TargetKMSLocation != test.wantRestorer.TargetKMSLocation {
-					t.Errorf("validateParameters(%q, %v) TargetKMSLocation = %v, want %v", test.os, cp, test.restorer.TargetKMSLocation, test.wantRestorer.TargetKMSLocation)
+					t.Errorf("validateParameters(%q, %v) TargetKMSLocation = %q, want %q", test.os, cp, test.restorer.TargetKMSLocation, test.wantRestorer.TargetKMSLocation)
+				}
+				if test.restorer.TargetKMSProject != test.wantRestorer.TargetKMSProject {
+					t.Errorf("validateParameters(%q, %v) TargetKMSProject = %q, want %q", test.os, cp, test.restorer.TargetKMSProject, test.wantRestorer.TargetKMSProject)
 				}
 			}
 		})
@@ -750,6 +813,7 @@ func TestRestoreHandler(t *testing.T) {
 		fakeMetricClient   metricClientCreator
 		fakeNewGCE         onetime.GCEServiceFunc
 		fakeComputeService onetime.ComputeServiceFunc
+		fakeKMSClient      kmsClientCreator
 		want               subcommands.ExitStatus
 	}{
 		{
@@ -785,14 +849,35 @@ func TestRestoreHandler(t *testing.T) {
 			want:               subcommands.ExitFailure,
 		},
 		{
-			name:     "checkPreconditionFailure",
+			name: "ValidateEncryptionKeysFailure",
+			restorer: func() Restorer {
+				r := defaultRestorer
+				r.TargetKMSKey = "bad-key"
+				r.TargetKMSKeyring = "ring"
+				return r
+			}(),
+			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
+				return &monitoring.MetricClient{}, nil
+			},
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
+			fakeKMSClient: func(context.Context, ...option.ClientOption) (kmsClientInterface, error) {
+				return &fakeKMSClient{getCryptoKeyErr: errors.New("key validation failure")}, nil
+			},
+			want: subcommands.ExitFailure,
+		},
+		{
+			name:     "KMSClientCreationFailure",
 			restorer: defaultRestorer,
 			fakeMetricClient: func(context.Context, ...option.ClientOption) (*monitoring.MetricClient, error) {
 				return &monitoring.MetricClient{}, nil
 			},
 			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
 			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
-			want:               subcommands.ExitFailure,
+			fakeKMSClient: func(context.Context, ...option.ClientOption) (kmsClientInterface, error) {
+				return nil, cmpopts.AnyError
+			},
+			want: subcommands.ExitFailure,
 		},
 	}
 
@@ -802,7 +887,13 @@ func TestRestoreHandler(t *testing.T) {
 	for _, test := range tests {
 		test.restorer.oteLogger = onetime.CreateOTELogger(false)
 		t.Run(test.name, func(t *testing.T) {
-			got := test.restorer.restoreHandler(context.Background(), test.fakeMetricClient, test.fakeNewGCE, test.fakeComputeService, defaultCloudProperties, checkDir, checkDir)
+			kcc := test.fakeKMSClient
+			if kcc == nil {
+				kcc = func(context.Context, ...option.ClientOption) (kmsClientInterface, error) {
+					return &fakeKMSClient{}, nil
+				}
+			}
+			got := test.restorer.restoreHandler(context.Background(), test.fakeMetricClient, test.fakeNewGCE, test.fakeComputeService, kcc, defaultCloudProperties, checkDir, checkDir)
 			if got != test.want {
 				t.Errorf("restoreHandler() = %v, want %v", got, test.want)
 			}
@@ -3645,6 +3736,244 @@ func TestVerifyDataVolumeState(t *testing.T) {
 			err := tc.r.verifyDataVolumeState(ctx, tc.exec)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("verifyDataVolumeState() got error: %v, wantErr: %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateEncryptionKeys(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		client  *fakeKMSClient
+		cp      *ipb.CloudProperties
+		wantErr bool
+	}{
+		{
+			name:    "NoTargetKey",
+			r:       &Restorer{},
+			wantErr: false,
+		},
+		{
+			name: "KeyDoesNotExist",
+			r: &Restorer{
+				TargetKMSKey:     "key",
+				TargetKMSKeyring: "ring",
+			},
+			client: &fakeKMSClient{
+				getCryptoKeyErr: errors.New("not found"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "PolicyRetrievalErrorLogsWarningContinues",
+			r: &Restorer{
+				TargetKMSKey:            "key",
+				TargetKMSKeyring:        "ring",
+				TargetKMSServiceAccount: "my-sa",
+			},
+			client: &fakeKMSClient{
+				getIamPolicyErr: errors.New("permission denied"),
+			},
+			wantErr: false,
+		},
+		{
+			name: "MissingBindingRoleLogsWarning",
+			r: &Restorer{
+				TargetKMSKey:            "key",
+				TargetKMSKeyring:        "ring",
+				TargetKMSServiceAccount: "my-sa",
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role: "roles/viewer",
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "ValidBindingSuccess",
+			r: &Restorer{
+				TargetKMSKey:            "key",
+				TargetKMSKeyring:        "ring",
+				TargetKMSServiceAccount: "my-sa",
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+							Members: []string{"serviceAccount:my-sa"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "SeparateFineGrainedRolesBindingSuccess",
+			r: &Restorer{
+				TargetKMSKey:            "key",
+				TargetKMSKeyring:        "ring",
+				TargetKMSServiceAccount: "my-sa",
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/cloudkms.cryptoKeyEncrypter",
+							Members: []string{"serviceAccount:my-sa"},
+						},
+						{
+							Role:    "roles/cloudkms.cryptoKeyDecrypter",
+							Members: []string{"serviceAccount:my-sa"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "PartialFineGrainedRolesLogsWarning",
+			r: &Restorer{
+				TargetKMSKey:            "key",
+				TargetKMSKeyring:        "ring",
+				TargetKMSServiceAccount: "my-sa",
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/cloudkms.cryptoKeyEncrypter",
+							Members: []string{"serviceAccount:my-sa"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "InferredSingleSnapshotSuccess",
+			r: &Restorer{
+				SourceSnapshot: "snap",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "inferred-snap-key",
+							},
+						},
+					},
+				},
+			},
+			client:  &fakeKMSClient{},
+			wantErr: false,
+		},
+		{
+			name: "InferredGroupSnapshotSGServiceSuccess",
+			r: &Restorer{
+				GroupSnapshot:            "group-snap",
+				UseSnapshotGroupWorkflow: true,
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "snap1"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "inferred-group-key",
+							},
+						},
+					},
+				},
+			},
+			client:  &fakeKMSClient{},
+			wantErr: false,
+		},
+		{
+			name: "InferredGroupSnapshotGCESuccess",
+			r: &Restorer{
+				GroupSnapshot: "group-snap",
+				gceService: &fake.TestGCE{
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Labels: map[string]string{"goog-sapagent-isg": "group-snap"},
+								SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+									KmsKeyName: "inferred-gce-key",
+								},
+							},
+						},
+					},
+				},
+			},
+			client:  &fakeKMSClient{},
+			wantErr: false,
+		},
+		{
+			name: "ExplicitKMSLocationAndProjectFallback",
+			r: &Restorer{
+				Project:          "source-project",
+				TargetKMSKey:     "key",
+				TargetKMSKeyring: "ring",
+			},
+			cp: &ipb.CloudProperties{
+				Zone: "us-west1-b",
+			},
+			client:  &fakeKMSClient{},
+			wantErr: false,
+		},
+		{
+			name: "InferredSourceSnapshotWithCustomServiceAccount",
+			r: &Restorer{
+				SourceSnapshot: "snap-custom",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName:           "inferred-custom-sa-key",
+								KmsKeyServiceAccount: "custom-sa@project.iam.gserviceaccount.com",
+							},
+						},
+					},
+				},
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+							Members: []string{"serviceAccount:custom-sa@project.iam.gserviceaccount.com"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.r.oteLogger = onetime.CreateOTELogger(false)
+			cp := tc.cp
+			if cp == nil {
+				cp = defaultCloudProperties
+			}
+			err := tc.r.validateEncryptionKeys(context.Background(), tc.client, cp)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("validateEncryptionKeys() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.name == "ExplicitKMSLocationAndProjectFallback" {
+				wantKey := "projects/source-project/locations/us-west1-b/keyRings/ring/cryptoKeys/key"
+				if tc.client.lastRequestedKey != wantKey {
+					t.Errorf("validateEncryptionKeys() requested key = %q, want %q", tc.client.lastRequestedKey, wantKey)
+				}
 			}
 		})
 	}
