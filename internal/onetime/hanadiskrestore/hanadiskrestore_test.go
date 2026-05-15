@@ -1790,6 +1790,135 @@ func TestCheckPreConditions(t *testing.T) {
 			exec:    scaleupExec,
 			wantErr: nil,
 		},
+		{
+			name: "ExplicitKMSLocationMismatch",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:      "test-disk-name",
+				DataDiskZone:      "us-central1-a",
+				SourceSnapshot:    "test-snapshot",
+				TargetKMSKey:      "my-kms",
+				TargetKMSKeyring:  "my-keyring",
+				TargetKMSLocation: "us-east1",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+					GetDiskCallResp:     &fakeDisksGetCall{Err: nil, Disk: &compute.Disk{Type: "pd-ssd"}},
+				},
+				isGroupSnapshot: false,
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ExplicitKMSLocationMatch",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:      "test-disk-name",
+				DataDiskZone:      "us-central1-a",
+				SourceSnapshot:    "test-snapshot",
+				TargetKMSKey:      "my-kms",
+				TargetKMSKeyring:  "my-keyring",
+				TargetKMSLocation: "us-central1",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+					GetDiskCallResp:     &fakeDisksGetCall{Err: nil, Disk: &compute.Disk{Type: "pd-ssd"}},
+				},
+				isGroupSnapshot: false,
+			},
+			exec:    scaleupExec,
+			wantErr: nil,
+		},
+		{
+			name: "DataDiskZoneAndCloudPropertiesNil",
+			cp:   nil,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName: "test-disk-name",
+				DataDiskZone: "",
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ExplicitKMSLocationEmptyDiskRegion",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:     "test-disk-name",
+				DataDiskZone:     "zone",
+				TargetKMSKey:     "my-kms",
+				TargetKMSKeyring: "my-keyring",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+			},
+			exec:    scaleupExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "ExplicitKMSEmptyLocationMatchesRegion",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:      "test-disk-name",
+				DataDiskZone:      "us-central1-a",
+				SourceSnapshot:    "test-snapshot",
+				TargetKMSKey:      "my-kms",
+				TargetKMSKeyring:  "my-keyring",
+				TargetKMSLocation: "",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+					GetDiskCallResp:     &fakeDisksGetCall{Err: nil, Disk: &compute.Disk{Type: "pd-ssd"}},
+				},
+				isGroupSnapshot: false,
+			},
+			exec:    scaleupExec,
+			wantErr: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -2206,6 +2335,7 @@ func TestVerifySnapshotPresence(t *testing.T) {
 	tests := []struct {
 		name    string
 		r       *Restorer
+		region  string
 		wantErr error
 	}{
 		{
@@ -2257,7 +2387,7 @@ func TestVerifySnapshotPresence(t *testing.T) {
 				isGroupSnapshot:          true,
 				UseSnapshotGroupWorkflow: true,
 				disks: []*multiDisks{
-					&multiDisks{},
+					{},
 				},
 				sgService: &fakeSGService{
 					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
@@ -2286,7 +2416,7 @@ func TestVerifySnapshotPresence(t *testing.T) {
 				isGroupSnapshot:          true,
 				UseSnapshotGroupWorkflow: false,
 				disks: []*multiDisks{
-					&multiDisks{},
+					{},
 				},
 				gceService: &fake.TestGCE{
 					SnapshotList: &compute.SnapshotList{
@@ -2301,10 +2431,216 @@ func TestVerifySnapshotPresence(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "GroupSnapshotCMEKLocationMismatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-east1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotCMEKLocationMatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-central1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NotGroupSnapshotCMEKLocationMismatch",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-east1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NotGroupSnapshotCMEKLocationMatch",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-central1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "NotGroupSnapshotCMEKExplicitKMSKeyBypass",
+			r: &Restorer{
+				isGroupSnapshot:  false,
+				TargetKMSKey:     "my-kms-key",
+				TargetKMSKeyring: "my-kms-key-ring",
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-central1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "GroupSnapshotWorkflowGetSnapshotFailure",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Err: cmpopts.AnyError},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotWorkflowSnapshotLengthMismatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotWorkflowNilComputeService",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: nil,
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "GroupSnapshotLegacyWorkflowLocationMismatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: false,
+				disks: []*multiDisks{
+					{},
+				},
+				gceService: &fake.TestGCE{
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Labels: map[string]string{"goog-sapagent-isg": "group-snapshot"},
+								SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+									KmsKeyName: "projects/p/locations/us-east1/keyRings/k/cryptoKeys/k",
+								},
+							},
+						},
+					},
+				},
+				GroupSnapshot: "group-snapshot",
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name:   "SnapshotCMEKLocationMismatchEmptyDiskRegion",
+			region: "NONE",
+			r: &Restorer{
+				isGroupSnapshot: false,
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us-east1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: cmpopts.AnyError,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.r.verifySnapshotPresence(context.Background())
+			region := tc.region
+			if region == "NONE" {
+				region = ""
+			} else if region == "" {
+				region = "us-central1"
+			}
+			err := tc.r.verifySnapshotPresence(context.Background(), region)
 			if diff := cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("verifySnapshotPresence() returned diff (-want +got):\n%s", diff)
 			}

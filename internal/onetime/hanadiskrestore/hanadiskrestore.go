@@ -792,12 +792,36 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		if ok, err := r.multiDisksAttachedToInstance(ctx, cp, exec); err != nil {
 			return fmt.Errorf("failed to verify if disks are attached to the instance: %v", err)
 		} else if !ok {
-			return fmt.Errorf("the disks are not attached to the instance, please pass the verify the disks provided are attached to the instance")
+			return fmt.Errorf("the disks are not attached to the instance, please verify that the disks provided are attached to the instance")
+		}
+	}
+
+	zone := r.DataDiskZone
+	var diskRegion string
+	if zone == "" {
+		if cp == nil {
+			return fmt.Errorf("cloud properties is nil, cannot determine target disk zone")
+		}
+		zone = cp.GetZone()
+	}
+	parts := strings.Split(zone, "-")
+	if len(parts) >= 2 {
+		diskRegion = strings.Join(parts[:len(parts)-1], "-")
+	}
+
+	if r.TargetKMSKey != "" && r.TargetKMSKeyring != "" {
+		if diskRegion == "" {
+			return fmt.Errorf("target disk zone is empty, cannot determine target disk region for CMEK validation")
+		}
+		if r.TargetKMSLocation == "" {
+			r.TargetKMSLocation = diskRegion
+		} else if r.TargetKMSLocation != diskRegion {
+			return fmt.Errorf("target KMS location %q does not match the target disk region %q", r.TargetKMSLocation, diskRegion)
 		}
 	}
 
 	// Verify the snapshot is present.
-	if err := r.verifySnapshotPresence(ctx); err != nil {
+	if err := r.verifySnapshotPresence(ctx, diskRegion); err != nil {
 		return err
 	}
 
@@ -860,7 +884,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 }
 
 // verifySnapshotPresence checks if the source snapshot(s) exist and extracts labels.
-func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
+func (r *Restorer) verifySnapshotPresence(ctx context.Context, diskRegion string) error {
 	if !r.isGroupSnapshot {
 		if r.computeService == nil {
 			return fmt.Errorf("compute service is nil")
@@ -870,6 +894,9 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 			return fmt.Errorf("failed to check if source-snapshot=%v is present: %v", r.SourceSnapshot, err)
 		}
 		r.extractLabels(ctx, snapshot)
+		if err := r.validateSnapshotCMEKLocation(ctx, snapshot, diskRegion); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -895,6 +922,9 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 			return fmt.Errorf("failed to fetch snapshot %q: %v", sItems[0].Name, err)
 		}
 		r.extractLabels(ctx, snapshot)
+		if err := r.validateSnapshotCMEKLocation(ctx, snapshot, diskRegion); err != nil {
+			return err
+		}
 	} else {
 		snapshotList, err := r.gceService.ListSnapshots(ctx, r.Project)
 		if err != nil {
@@ -905,12 +935,50 @@ func (r *Restorer) verifySnapshotPresence(ctx context.Context) error {
 		for _, snapshot := range snapshotList.Items {
 			if snapshot.Labels["goog-sapagent-isg"] == r.GroupSnapshot {
 				r.extractLabels(ctx, snapshot)
+				if err := r.validateSnapshotCMEKLocation(ctx, snapshot, diskRegion); err != nil {
+					return err
+				}
 				numOfSnapshots++
 			}
 		}
 		if numOfSnapshots != len(r.disks) {
 			return fmt.Errorf("did not get required number of snapshots for restoration, wanted: %v, got: %v", len(r.disks), numOfSnapshots)
 		}
+	}
+	return nil
+}
+
+// parseKMSKeyLocation parses the KMS location from a full KMS key resource URI.
+func parseKMSKeyLocation(keyURI string) string {
+	parts := strings.Split(keyURI, "/")
+	for i, part := range parts {
+		if part == "locations" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+// validateSnapshotCMEKLocation checks if the snapshot's CMEK matches the target disk's region.
+func (r *Restorer) validateSnapshotCMEKLocation(ctx context.Context, snapshot *compute.Snapshot, diskRegion string) error {
+	if r.TargetKMSKey != "" && r.TargetKMSKeyring != "" {
+		// Explicit target KMS key is specified; The explicit target KMS key is always used, so no need to check the snapshot's CMEK location.
+		// KMS key location has been verified in checkPreConditions().
+		return nil
+	}
+	if snapshot.SnapshotEncryptionKey == nil || snapshot.SnapshotEncryptionKey.KmsKeyName == "" {
+		return nil
+	}
+
+	kmsLocation := parseKMSKeyLocation(snapshot.SnapshotEncryptionKey.KmsKeyName)
+	if kmsLocation == "" {
+		return nil
+	}
+	if diskRegion == "" {
+		return fmt.Errorf("source snapshot is CMEK-encrypted in location %q, but target disk region is empty/unknown", kmsLocation)
+	}
+	if kmsLocation != diskRegion {
+		return fmt.Errorf("source snapshot CMEK location %q does not match the target disk region %q, key location needs to be the same as the disk region", kmsLocation, diskRegion)
 	}
 	return nil
 }
