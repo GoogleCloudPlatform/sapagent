@@ -48,6 +48,7 @@ import (
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/iam"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
@@ -215,6 +216,11 @@ func (s *Status) Init(ctx context.Context) error {
 	s.createDBHandle = databaseconnector.CreateDBHandle
 	if s.Feature == "" {
 		s.Feature = allFeatures
+	}
+	s.gceService, err = gce.NewGCEClient(ctx)
+	if err != nil {
+		log.CtxLogger(ctx).Errorw("Could not create GCE client", "error", err)
+		return err
 	}
 	s.iamService, err = iam.NewIAMClient(ctx)
 	if err != nil {
