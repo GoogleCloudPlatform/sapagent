@@ -872,7 +872,7 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		}
 		if r.TargetKMSLocation == "" {
 			r.TargetKMSLocation = diskRegion
-		} else if r.TargetKMSLocation != diskRegion {
+		} else if !isValidKMSLocation(ctx, r.TargetKMSLocation, diskRegion) {
 			return fmt.Errorf("target KMS location %q does not match the target disk region %q", r.TargetKMSLocation, diskRegion)
 		}
 	}
@@ -1016,6 +1016,24 @@ func parseKMSKeyLocation(keyURI string) string {
 	return ""
 }
 
+// isValidKMSLocation verifies whether a Cloud KMS key location is valid for encrypting
+// a GCE persistent disk in the specified diskRegion.
+func isValidKMSLocation(ctx context.Context, kmsLocation, diskRegion string) bool {
+	if kmsLocation == diskRegion || kmsLocation == "global" {
+		return true
+	}
+	// If kmsLocation is not an exact regional match or global, check if it is a multi-region.
+	// All GCP single regions contain at least one hyphen (e.g., us-central1, europe-west1).
+	// Cloud KMS multi-regions (e.g., us, europe, nam4, eur3, asia, au) do not contain hyphens,
+	// with the exception of nam-eur-asia1.
+	if !strings.Contains(kmsLocation, "-") || strings.Contains(kmsLocation, "nam-eur-asia") {
+		log.CtxLogger(ctx).Infow("KMS key location is a multi-region; disk creation may or may not succeed", "kmsLocation", kmsLocation, "diskRegion", diskRegion)
+		return true
+	}
+	log.CtxLogger(ctx).Warnw("KMS key location is a single region that does not match the target disk region", "kmsLocation", kmsLocation, "diskRegion", diskRegion)
+	return false
+}
+
 // validateSnapshotCMEKLocation checks if the snapshot's CMEK matches the target disk's region.
 func (r *Restorer) validateSnapshotCMEKLocation(ctx context.Context, snapshot *compute.Snapshot, diskRegion string) error {
 	if r.TargetKMSKey != "" && r.TargetKMSKeyring != "" {
@@ -1034,8 +1052,8 @@ func (r *Restorer) validateSnapshotCMEKLocation(ctx context.Context, snapshot *c
 	if diskRegion == "" {
 		return fmt.Errorf("source snapshot is CMEK-encrypted in location %q, but target disk region is empty/unknown", kmsLocation)
 	}
-	if kmsLocation != diskRegion {
-		return fmt.Errorf("source snapshot CMEK location %q does not match the target disk region %q, key location needs to be the same as the disk region", kmsLocation, diskRegion)
+	if !isValidKMSLocation(ctx, kmsLocation, diskRegion) {
+		return fmt.Errorf("source snapshot CMEK location %q does not match the target disk region %q, key location needs to be the same as the disk region or a valid multi-region", kmsLocation, diskRegion)
 	}
 	return nil
 }

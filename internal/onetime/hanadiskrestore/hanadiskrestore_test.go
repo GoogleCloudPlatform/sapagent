@@ -1942,6 +1942,36 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "ExplicitKMSLocationMultiRegionMatch",
+			cp:   defaultCloudProperties,
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "c", nil
+			},
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "d", nil
+			},
+			r: &Restorer{
+				DataDiskName:      "test-disk-name",
+				DataDiskZone:      "us-central1-a",
+				SourceSnapshot:    "test-snapshot",
+				TargetKMSKey:      "my-kms",
+				TargetKMSKeyring:  "my-keyring",
+				TargetKMSLocation: "us",
+				gceService: &fake.TestGCE{
+					IsDiskAttached:                   true,
+					DiskAttachedToInstanceErr:        nil,
+					DiskAttachedToInstanceDeviceName: "test-device-name",
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{Snapshot: &compute.Snapshot{}, Err: nil},
+					GetDiskCallResp:     &fakeDisksGetCall{Err: nil, Disk: &compute.Disk{Type: "pd-ssd"}},
+				},
+				isGroupSnapshot: false,
+			},
+			exec:    scaleupExec,
+			wantErr: nil,
+		},
+		{
 			name: "DataDiskZoneAndCloudPropertiesNil",
 			cp:   nil,
 			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
@@ -2566,6 +2596,58 @@ func TestVerifySnapshotPresence(t *testing.T) {
 						Snapshot: &compute.Snapshot{
 							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
 								KmsKeyName: "projects/p/locations/us-central1/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "GroupSnapshotCMEKLocationMultiRegionMatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/us/keyRings/k/cryptoKeys/k",
+							},
+						},
+						Err: nil,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "GroupSnapshotCMEKLocationGlobalMatch",
+			r: &Restorer{
+				isGroupSnapshot:          true,
+				UseSnapshotGroupWorkflow: true,
+				disks: []*multiDisks{
+					{},
+				},
+				sgService: &fakeSGService{
+					ListSnapshotsFromSGResp: []snapshotgroup.SnapshotItem{
+						{Name: "my-shot"},
+					},
+				},
+				computeService: &fakeComputeService{
+					GetSnapshotCallResp: &fakeSnapshotsGetCall{
+						Snapshot: &compute.Snapshot{
+							SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+								KmsKeyName: "projects/p/locations/global/keyRings/k/cryptoKeys/k",
 							},
 						},
 						Err: nil,
@@ -4012,6 +4094,127 @@ func TestValidateEncryptionKeys(t *testing.T) {
 				if tc.client.lastRequestedKey != wantKey {
 					t.Errorf("validateEncryptionKeys() requested key = %q, want %q", tc.client.lastRequestedKey, wantKey)
 				}
+			}
+		})
+	}
+}
+
+func TestIsValidKMSLocation(t *testing.T) {
+	tests := []struct {
+		name        string
+		kmsLocation string
+		diskRegion  string
+		want        bool
+	}{
+		// 1. Exact regional match
+		{
+			name:        "ExactMatch",
+			kmsLocation: "us-central1",
+			diskRegion:  "us-central1",
+			want:        true,
+		},
+		// 2. Global match
+		{
+			name:        "Global",
+			kmsLocation: "global",
+			diskRegion:  "us-central1",
+			want:        true,
+		},
+		// 3. Multi-regions without hyphens (!strings.Contains(kmsLocation, "-"))
+		{
+			name:        "USMultiRegion",
+			kmsLocation: "us",
+			diskRegion:  "us-east1",
+			want:        true,
+		},
+		{
+			name:        "NAM4MultiRegion",
+			kmsLocation: "nam4",
+			diskRegion:  "us-central1",
+			want:        true,
+		},
+		{
+			name:        "EuropeMultiRegion",
+			kmsLocation: "europe",
+			diskRegion:  "europe-west1",
+			want:        true,
+		},
+		{
+			name:        "EUR4MultiRegion",
+			kmsLocation: "eur4",
+			diskRegion:  "europe-west4",
+			want:        true,
+		},
+		{
+			name:        "AsiaMultiRegion",
+			kmsLocation: "asia",
+			diskRegion:  "asia-east1",
+			want:        true,
+		},
+		{
+			name:        "CAMultiRegion",
+			kmsLocation: "ca",
+			diskRegion:  "northamerica-northeast1",
+			want:        true,
+		},
+		{
+			name:        "AUMultiRegion",
+			kmsLocation: "au",
+			diskRegion:  "australia-southeast1",
+			want:        true,
+		},
+		{
+			name:        "INMultiRegion",
+			kmsLocation: "in",
+			diskRegion:  "asia-south1",
+			want:        true,
+		},
+		{
+			name:        "DEMultiRegion",
+			kmsLocation: "de",
+			diskRegion:  "europe-west3",
+			want:        true,
+		},
+		{
+			name:        "NAM10MultiRegion",
+			kmsLocation: "nam10",
+			diskRegion:  "us-west3",
+			want:        true,
+		},
+		{
+			name:        "MultiRegionDelegation",
+			kmsLocation: "australia",
+			diskRegion:  "australia-southeast1",
+			want:        true,
+		},
+		// 4. Multi-regions with hyphens matching "nam-eur-asia" (strings.Contains(kmsLocation, "nam-eur-asia"))
+		{
+			name:        "NamEurAsia1MultiRegion",
+			kmsLocation: "nam-eur-asia1",
+			diskRegion:  "us-central1",
+			want:        true,
+		},
+		{
+			name:        "NamEurAsia2MultiRegion",
+			kmsLocation: "nam-eur-asia2",
+			diskRegion:  "us-central1",
+			want:        true,
+		},
+		// 5. Single region mismatch (falls through both checks)
+		{
+			name:        "SingleRegionMismatch",
+			kmsLocation: "europe-west1",
+			diskRegion:  "us-central1",
+			want:        false,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isValidKMSLocation(ctx, tc.kmsLocation, tc.diskRegion)
+			if got != tc.want {
+				t.Errorf("isValidKMSLocation(%q, %q) = %v, want %v", tc.kmsLocation, tc.diskRegion, got, tc.want)
 			}
 		})
 	}
