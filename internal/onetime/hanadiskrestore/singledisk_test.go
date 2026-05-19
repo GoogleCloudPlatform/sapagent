@@ -185,6 +185,7 @@ func TestDiskRestore(t *testing.T) {
 			r: &Restorer{
 				SourceSnapshot:  "test-snapshot",
 				DataDiskVG:      "vg",
+				DataDiskLV:      "lv",
 				baseDataPath:    "/hana/data",
 				logicalDataPath: "/dev/mapper/vg-lv",
 				computeService: &fakeComputeService{
@@ -207,6 +208,11 @@ func TestDiskRestore(t *testing.T) {
 				if params.Executable == "/sbin/pvs" {
 					return commandlineexecutor.Result{
 						StdOut: "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						StdOut: "  lv\n",
 					}
 				}
 				if params.Executable == "/sbin/vgdisplay" && params.ArgsToSplit == "vg" {

@@ -2978,6 +2978,147 @@ func TestFetchVG(t *testing.T) {
 	}
 }
 
+func TestFetchLV(t *testing.T) {
+	tests := []struct {
+		name    string
+		r       *Restorer
+		cp      *ipb.CloudProperties
+		exec    commandlineexecutor.Execute
+		wantLV  string
+		wantErr error
+	}{
+		{
+			name: "Fail",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0, StdErr: "fail", Error: cmpopts.AnyError,
+				}
+			},
+			wantLV:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NoLV1",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "",
+				}
+			},
+			wantLV:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			cp:   defaultCloudProperties,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+					StdOut:   "  lv_hana\n",
+				}
+			},
+			wantLV:  "lv_hana",
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotLV, err := tc.r.fetchLV(ctx, tc.cp, tc.exec, "vg_1")
+			if gotLV != tc.wantLV {
+				t.Errorf("fetchLV() = %v, want %v", gotLV, tc.wantLV)
+			}
+			if cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()) != "" {
+				t.Errorf("fetchLV() returned diff (-want +got):\n%s", cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()))
+			}
+		})
+	}
+}
+
+func TestEnsureVGRenameSuccessful(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		wantErr error
+	}{
+		{
+			name: "VGScanFail",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgscan" {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UdevadmFail",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/udevadm" {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "VGSWaitFail",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/vgs" {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			wantErr: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ensureVGRenameSuccessful(ctx, tc.exec, "vg_1")
+			if cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()) != "" {
+				t.Errorf("ensureVGRenameSuccessful() returned diff (-want +got):\n%s", cmp.Diff(err, tc.wantErr, cmpopts.EquateErrors()))
+			}
+		})
+	}
+}
+
 func TestRestoreFromSnapshot(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -3238,8 +3379,16 @@ func TestRenameLVM(t *testing.T) {
 					ListDisksErr:              []error{nil},
 				},
 				DataDiskVG: "my_vg",
+				DataDiskLV: "my_lv",
 			},
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "  my_lv\n",
+					}
+				}
 				return commandlineexecutor.Result{
 					ExitCode: 0,
 					Error:    nil,
@@ -3261,6 +3410,7 @@ func TestRenameLVM(t *testing.T) {
 					ListDisksErr:              []error{nil},
 				},
 				DataDiskVG: "vg_1",
+				DataDiskLV: "lv_1",
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/sbin/pvs" {
@@ -3290,6 +3440,7 @@ func TestRenameLVM(t *testing.T) {
 					ListDisksErr:              []error{nil},
 				},
 				DataDiskVG: "vg_1",
+				DataDiskLV: "my_lv",
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				if params.Executable == "/sbin/pvs" {
@@ -3297,6 +3448,129 @@ func TestRenameLVM(t *testing.T) {
 						ExitCode: 0,
 						Error:    nil,
 						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "  my_lv\n",
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: nil,
+		},
+		{
+			name: "FetchLVFail",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+				DataDiskVG: "vg_1",
+				DataDiskLV: "my_lv",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "LVRenameFail",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+				DataDiskVG: "vg_1",
+				DataDiskLV: "lv_target",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "  lv_source\n",
+					}
+				}
+				if params.Executable == "/sbin/lvrename" {
+					return commandlineexecutor.Result{
+						ExitCode: 1,
+						Error:    cmpopts.AnyError,
+					}
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					Error:    nil,
+				}
+			},
+			cp:      defaultCloudProperties,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "LVRenameSuccess",
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					IsDiskAttached:            true,
+					DiskAttachedToInstanceErr: nil,
+					GetInstanceResp:           defaultGetInstanceResp,
+					GetInstanceErr:            []error{nil},
+					ListDisksResp:             defaultListDisksResp,
+					ListDisksErr:              []error{nil},
+				},
+				DataDiskVG: "vg_1",
+				DataDiskLV: "lv_target",
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "/sbin/pvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "PV         VG    Fmt  Attr PSize   PFree\n/dev/sdd  my_vg lvm2 a--  500.00g 300.00g",
+					}
+				}
+				if params.Executable == "/sbin/lvs" {
+					return commandlineexecutor.Result{
+						ExitCode: 0,
+						Error:    nil,
+						StdOut:   "  lv_source\n",
 					}
 				}
 				return commandlineexecutor.Result{

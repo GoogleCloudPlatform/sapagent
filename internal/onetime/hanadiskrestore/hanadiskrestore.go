@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"flag"
+	"github.com/cenkalti/backoff/v4"
 	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/monitoring/apiv3/v2"
 	"google.golang.org/api/compute/v1"
@@ -218,7 +219,7 @@ type (
 		DataDiskZone, SourceSnapshot, GroupSnapshot, NewDiskType   string
 		SourceDisks                                                string
 		disks                                                      []*multiDisks
-		DataDiskVG                                                 string
+		DataDiskVG, DataDiskLV                                     string
 		gceService                                                 gceInterface
 		computeService                                             computeServiceInterface
 		sgService                                                  SGInterface
@@ -578,6 +579,80 @@ func (r *Restorer) fetchVG(ctx context.Context, cp *ipb.CloudProperties, exec co
 	return fields[1], nil
 }
 
+func (r *Restorer) fetchLV(ctx context.Context, cp *ipb.CloudProperties, exec commandlineexecutor.Execute, vgName string) (string, error) {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/sbin/lvs",
+		ArgsToSplit: fmt.Sprintf("--noheadings -o lv_name %s", vgName),
+	})
+	if result.Error != nil {
+		return "", fmt.Errorf("failure fetching LV, stderr: %s, err: %s", result.StdErr, result.Error)
+	}
+
+	lvName := strings.TrimSpace(result.StdOut)
+	if lvName == "" {
+		return "", fmt.Errorf("failure fetching LV, VG %s does not contain any lv", vgName)
+	}
+	return lvName, nil
+}
+
+func waitForVG(ctx context.Context, exec commandlineexecutor.Execute, vgName string) error {
+	result := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/sbin/vgs",
+		ArgsToSplit: vgName,
+	})
+	if result.Error != nil || result.ExitCode != 0 {
+		return fmt.Errorf("VG %s not ready yet, stderr: %s, err: %s", vgName, result.StdErr, result.Error)
+	}
+	return nil
+}
+
+func waitForVGWithRetry(ctx context.Context, exec commandlineexecutor.Execute, vgName string) error {
+	constantBackoff := backoff.NewConstantBackOff(1 * time.Second)
+	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, 60), ctx)
+	return backoff.Retry(func() error { return waitForVG(ctx, exec, vgName) }, bo)
+}
+
+// ensureVGRenameSuccessful ensures that the LVM volume group is renamed successfully by forcing an
+// LVM rescan, waiting for udev events to settle, and verifying the Volume Group presence.
+func ensureVGRenameSuccessful(ctx context.Context, exec commandlineexecutor.Execute, vgName string) error {
+	// 1. Force LVM Rescan and Node Creation
+	// This command rescans all physical volumes for LVM metadata, updates the LVM cache,
+	// and crucially, creates any missing device nodes (/dev entries) for the logical volumes.
+	// This ensures the kernel and system utilities can see the LVM components correctly after the rename.
+	res := exec(ctx, commandlineexecutor.Params{
+		Executable:  "/sbin/vgscan",
+		ArgsToSplit: "--mknodes",
+	})
+	if res.Error != nil {
+		log.CtxLogger(ctx).Errorw("Failed to rescan volume groups and create nodes using vgscan", "err", res.StdErr)
+		return fmt.Errorf("failed to rescan volume groups after renaming VG: %v", res.StdErr)
+	}
+	log.CtxLogger(ctx).Info("Successfully executed 'vgscan --mknodes': LVM rescan complete, device nodes for logical volumes are present.")
+
+	// 2. Wait for udev Events
+	// This command waits for the udev event queue to be empty. udev manages device events and
+	// creates/updates device nodes and symlinks (e.g., in /dev/mapper). Settling ensures
+	// all changes triggered by vgscan and the VG rename are fully reflected in the /dev filesystem.
+	res = exec(ctx, commandlineexecutor.Params{
+		Executable:  "/sbin/udevadm",
+		ArgsToSplit: "settle",
+	})
+	if res.Error != nil {
+		log.CtxLogger(ctx).Errorw("Failed to wait for udev events using udevadm settle", "err", res.StdErr)
+		return fmt.Errorf("failed to wait for udev events using udevadm settle: %v", res.StdErr)
+	}
+	log.CtxLogger(ctx).Info("Successfully executed 'udevadm settle': udev events processed, device nodes are updated.")
+
+	// 3. Verification (Retryable)
+	if err := waitForVGWithRetry(ctx, exec, vgName); err != nil {
+		log.CtxLogger(ctx).Errorw("Failed to verify Volume Group presence after rename", "vg", vgName, "err", err)
+		return fmt.Errorf("failed to verify Volume Group presence after rename for VG %q: %w", vgName, err)
+	}
+	log.CtxLogger(ctx).Infow("Successfully verified Volume Group presence after rename", "vg", vgName)
+
+	return nil
+}
+
 // prepare stops HANA, unmounts data directory and detaches old data disk.
 func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitForIndexServerStop waitForIndexServerToStopWithRetry, exec commandlineexecutor.Execute) error {
 	mountPath, err := hanabackup.ReadDataDirMountPath(ctx, r.baseDataPath, exec)
@@ -600,6 +675,12 @@ func (r *Restorer) prepare(ctx context.Context, cp *ipb.CloudProperties, waitFor
 			return err
 		}
 		r.DataDiskVG = vg
+
+		lv, err := r.fetchLV(ctx, cp, exec, r.DataDiskVG)
+		if err != nil {
+			return err
+		}
+		r.DataDiskLV = lv
 	}
 
 	if !r.isGroupSnapshot {
@@ -776,8 +857,8 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 	return nil
 }
 
-// renameLVM renames the LVM volume group of the newly restored disk to
-// that of the target disk.
+// renameLVM renames the LVM volume group and logical volume of the newly restored disk to match
+// the expected configuration of the target system.
 func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execute, cp *ipb.CloudProperties, deviceName string) error {
 	var err error
 	var instanceProperties *ipb.InstanceProperties
@@ -810,6 +891,28 @@ func (r *Restorer) renameLVM(ctx context.Context, exec commandlineexecutor.Execu
 			return fmt.Errorf("failed to rename volume group of restored disk '%s' from %s to %s: %v", restoredDiskPV, restoredDiskVG, r.DataDiskVG, result.StdErr)
 		}
 		log.CtxLogger(ctx).Infow("Renaming volume group of restored disk", "Name of TargetDisk VG", r.DataDiskVG, "Name of RestoredDisk VG", restoredDiskVG)
+
+		if err := ensureVGRenameSuccessful(ctx, exec, r.DataDiskVG); err != nil {
+			return err
+		}
+	}
+
+	restoredDiskLV, err := r.fetchLV(ctx, cp, exec, r.DataDiskVG)
+	log.CtxLogger(ctx).Infow("Fetching lv", "restoredDiskLV", restoredDiskLV, "err", err)
+	if err != nil {
+		return err
+	}
+
+	if restoredDiskLV != r.DataDiskLV {
+		result := exec(ctx, commandlineexecutor.Params{
+			Executable:  "/sbin/lvrename",
+			ArgsToSplit: fmt.Sprintf("%s %s %s", r.DataDiskVG, restoredDiskLV, r.DataDiskLV),
+		})
+		if result.Error != nil {
+			log.CtxLogger(ctx).Errorw("Failed to rename logical volume of restored disk", "err", result.StdErr)
+			return fmt.Errorf("failed to rename logical volume of restored disk '%s' in VG %s from %s to %s: %v", restoredDiskPV, r.DataDiskVG, restoredDiskLV, r.DataDiskLV, result.StdErr)
+		}
+		log.CtxLogger(ctx).Infow("Renaming logical volume of restored disk", "VG", r.DataDiskVG, "Name of TargetDisk LV", r.DataDiskLV, "Name of RestoredDisk LV", restoredDiskLV)
 	}
 
 	return nil
