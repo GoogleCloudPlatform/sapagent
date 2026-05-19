@@ -387,6 +387,7 @@ func (r *Restorer) validateParameters(os string, cp *ipb.CloudProperties) error 
 		}
 		r.Project = cp.GetProjectId()
 	}
+	r.Sid = strings.ToUpper(r.Sid)
 	if r.HanaSidAdm == "" {
 		r.HanaSidAdm = strings.ToLower(r.Sid) + "adm"
 	}

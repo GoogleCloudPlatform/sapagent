@@ -726,6 +726,7 @@ func (s *Snapshot) updateSnapshotName() {
 }
 
 func (s *Snapshot) validateParameters(os string, cp *ipb.CloudProperties) error {
+	s.Sid = strings.ToUpper(s.Sid)
 	if s.SkipDBSnapshotForChangeDiskType {
 		log.Logger.Debug("Skipping parameter validation for change disk type workflow.")
 		return nil
