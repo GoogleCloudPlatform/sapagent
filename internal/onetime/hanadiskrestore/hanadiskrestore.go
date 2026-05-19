@@ -1363,25 +1363,30 @@ func (r *Restorer) validateEncryptionKeys(ctx context.Context, kmsClient kmsClie
 	}
 
 	var uniqueKeys []kmsKeyValidationInfo
-	seenKeys := make(map[string]bool)
+	seenKeys := make(map[kmsKeyValidationInfo]bool)
 	for _, k := range keysToValidate {
-		if !seenKeys[k.uri] {
-			seenKeys[k.uri] = true
+		if !seenKeys[k] {
+			seenKeys[k] = true
 			uniqueKeys = append(uniqueKeys, k)
 		}
 	}
+
+	var inaccessibleKeys []string
 
 	for _, info := range uniqueKeys {
 		kmsURI := info.uri
 		_, err := kmsClient.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: kmsURI})
 		if err != nil {
-			return fmt.Errorf("target or inferred KMS key %q does not exist or cannot be accessed: %w", kmsURI, err)
+			log.CtxLogger(ctx).Errorw("Failed to get KMS key", "error", err, "kmsURI", kmsURI)
+			inaccessibleKeys = append(inaccessibleKeys, kmsURI)
+			continue
 		}
 
 		serviceAccount := info.serviceAccount
 		if serviceAccount == "" {
 			if cp.GetNumericProjectId() == "" {
-				r.oteLogger.LogMessageToFileAndConsole(ctx, "WARNING: Missing numeric project ID in cloud properties, skipping IAM role binding validation for default compute engine service agent...")
+				log.CtxLogger(ctx).Errorw("Numeric project ID is empty, cannot determine service account")
+				inaccessibleKeys = append(inaccessibleKeys, kmsURI)
 				continue
 			}
 			serviceAccount = fmt.Sprintf("service-%s@compute-system.iam.gserviceaccount.com", cp.GetNumericProjectId())
@@ -1389,7 +1394,8 @@ func (r *Restorer) validateEncryptionKeys(ctx context.Context, kmsClient kmsClie
 
 		policy, err := kmsClient.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: kmsURI})
 		if err != nil {
-			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: Failed to retrieve IAM Policy for KMS key %q (caller might lack policy read permission), skipping role binding validation. Error: %v", kmsURI, err))
+			log.CtxLogger(ctx).Errorw("Failed to get KMS key IAM policy", "error", err, "kmsURI", kmsURI)
+			inaccessibleKeys = append(inaccessibleKeys, kmsURI)
 			continue
 		}
 
@@ -1417,6 +1423,21 @@ func (r *Restorer) validateEncryptionKeys(ctx context.Context, kmsClient kmsClie
 		if !hasCombinedRole && !(hasEncrypter && hasDecrypter) {
 			r.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("WARNING: Service account %q lacks the required predefined encryption/decryption roles ('roles/cloudkms.cryptoKeyEncrypterDecrypter', or both 'roles/cloudkms.cryptoKeyEncrypter' and 'roles/cloudkms.cryptoKeyDecrypter') on KMS key %q. Disk creation might fail if fine-grained permissions are not granted through custom roles.", serviceAccount, kmsURI))
 		}
+	}
+
+	if len(inaccessibleKeys) > 0 {
+		var deduplicatedInaccessible []string
+		seenInaccessible := make(map[string]bool)
+		for _, k := range inaccessibleKeys {
+			if !seenInaccessible[k] {
+				seenInaccessible[k] = true
+				deduplicatedInaccessible = append(deduplicatedInaccessible, k)
+			}
+		}
+		r.oteLogger.LogMessageToFileAndConsole(
+			ctx,
+			fmt.Sprintf("WARNING: Encryption/decryption roles ('roles/cloudkms.cryptoKeyEncrypterDecrypter', or both 'roles/cloudkms.cryptoKeyEncrypter' and 'roles/cloudkms.cryptoKeyDecrypter') could not be verified for the following KMS keys: [%s]. This could be due to missing permissions or the keys not existing. Proceeding with the restore.", strings.Join(deduplicatedInaccessible, ", ")),
+		)
 	}
 
 	return nil

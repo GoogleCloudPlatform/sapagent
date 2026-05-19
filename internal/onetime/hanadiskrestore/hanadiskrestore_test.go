@@ -3762,8 +3762,9 @@ func TestValidateEncryptionKeys(t *testing.T) {
 			},
 			client: &fakeKMSClient{
 				getCryptoKeyErr: errors.New("not found"),
+				getIamPolicyErr: errors.New("not found"),
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "PolicyRetrievalErrorLogsWarningContinues",
@@ -3950,6 +3951,43 @@ func TestValidateEncryptionKeys(t *testing.T) {
 						{
 							Role:    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
 							Members: []string{"serviceAccount:custom-sa@project.iam.gserviceaccount.com"},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "GroupSnapshotMultipleServiceAccountsSameKey",
+			r: &Restorer{
+				GroupSnapshot: "group-snap-multi-sa",
+				gceService: &fake.TestGCE{
+					SnapshotList: &compute.SnapshotList{
+						Items: []*compute.Snapshot{
+							{
+								Labels: map[string]string{"goog-sapagent-isg": "group-snap-multi-sa"},
+								SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+									KmsKeyName:           "same-key",
+									KmsKeyServiceAccount: "sa1@project.iam.gserviceaccount.com",
+								},
+							},
+							{
+								Labels: map[string]string{"goog-sapagent-isg": "group-snap-multi-sa"},
+								SnapshotEncryptionKey: &compute.CustomerEncryptionKey{
+									KmsKeyName:           "same-key",
+									KmsKeyServiceAccount: "sa2@project.iam.gserviceaccount.com",
+								},
+							},
+						},
+					},
+				},
+			},
+			client: &fakeKMSClient{
+				policy: &iampb.Policy{
+					Bindings: []*iampb.Binding{
+						{
+							Role:    "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+							Members: []string{"serviceAccount:sa1@project.iam.gserviceaccount.com", "serviceAccount:sa2@project.iam.gserviceaccount.com"},
 						},
 					},
 				},
