@@ -249,6 +249,7 @@ type (
 		TargetKMSKey, TargetKMSKeyring                             string
 		TargetKMSLocation, TargetKMSProject                        string
 		TargetKMSServiceAccount                                    string
+		usesCMEK                                                   bool
 	}
 )
 
@@ -746,6 +747,9 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 
 	op, err := r.computeService.InsertDisk(r.Project, r.DataDiskZone, disk).Do()
 	if err != nil {
+		if r.usesCMEK {
+			r.oteLogger.LogUsageError(usagemetrics.CMEKDiskRestoreFailure)
+		}
 		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
 	}
@@ -1380,6 +1384,8 @@ func (r *Restorer) validateEncryptionKeys(ctx context.Context, kmsClient kmsClie
 	if len(keysToValidate) == 0 {
 		return nil
 	}
+	r.usesCMEK = true
+	r.oteLogger.LogUsageAction(usagemetrics.CMEKDiskRestoreStarted)
 
 	var uniqueKeys []kmsKeyValidationInfo
 	seenKeys := make(map[kmsKeyValidationInfo]bool)

@@ -283,6 +283,9 @@ func TestErrorConstants(t *testing.T) {
 	if LogCollectionFailure != 87 {
 		t.Errorf("LogCollectionFailure = %v, want 87", LogCollectionFailure)
 	}
+	if CMEKDiskRestoreFailure != 88 {
+		t.Errorf("CMEKDiskRestoreFailure = %v, want 88", CMEKDiskRestoreFailure)
+	}
 }
 
 func TestActionConstants(t *testing.T) {
@@ -564,5 +567,8 @@ func TestActionConstants(t *testing.T) {
 	}
 	if LogCollectionStarted != 92 {
 		t.Errorf("LogCollectionStarted = %v, want 92", LogCollectionStarted)
+	}
+	if CMEKDiskRestoreStarted != 93 {
+		t.Errorf("CMEKDiskRestoreStarted = %v, want 93", CMEKDiskRestoreStarted)
 	}
 }

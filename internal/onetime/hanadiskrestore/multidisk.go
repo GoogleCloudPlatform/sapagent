@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/api/compute/v1"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanabackup"
+	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -233,6 +234,9 @@ func (r *Restorer) createAttachAndConfigureDisks(ctx context.Context, exec comma
 		}
 	} else {
 		if err := r.bulkInsertDisksFromSG(ctx); err != nil {
+			if r.usesCMEK {
+				r.oteLogger.LogUsageError(usagemetrics.CMEKDiskRestoreFailure)
+			}
 			return err
 		}
 		r.oteLogger.LogMessageToFileAndConsole(ctx, "Successfully created new disks from snapshot group...")
@@ -242,6 +246,9 @@ func (r *Restorer) createAttachAndConfigureDisks(ctx context.Context, exec comma
 	for _, snapshotItem := range r.snapshotItems {
 		dev, err := r.restoreAndConfigureDisk(ctx, exec, cp, snapshotItem, shouldRecreateDisk, newDiskNames)
 		if err != nil {
+			if r.usesCMEK {
+				r.oteLogger.LogUsageError(usagemetrics.CMEKDiskRestoreFailure)
+			}
 			return err
 		}
 		restoredDiskPV = dev

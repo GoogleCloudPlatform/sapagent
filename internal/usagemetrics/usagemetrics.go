@@ -126,6 +126,7 @@ const (
 	RemoteValidationOTEFailure                     = 85 //	RemoteValidationFailure
 	SupportBundleUploadFailure                     = 86 //	SupportBundleUploadFailure
 	LogCollectionFailure                           = 87 //	LogCollectionFailure
+	CMEKDiskRestoreFailure                         = 88 //	CMEKDiskRestoreFailure
 )
 
 // Agent wide action mappings - Only append the action codes at the end of the list.
@@ -225,6 +226,7 @@ const (
 	SupportBundleUploadStarted              = 90 //	SupportBundleUploadStarted
 	SupportBundleLocalCollection            = 91 //	SupportBundleLocalCollection
 	LogCollectionStarted                    = 92 //	LogCollectionStarted
+	CMEKDiskRestoreStarted                  = 93 //	CMEKDiskRestoreStarted
 )
 
 // projectNumbers contains known project numbers for test instances.
