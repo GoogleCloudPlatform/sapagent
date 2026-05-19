@@ -535,7 +535,6 @@ func (r *Restorer) handleRestoreFailure(ctx context.Context, exec commandlineexe
 		}
 	}
 
-	r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from group snapshot failed,", err)
 	for _, d := range r.disks {
 		if attachDiskErr := r.gceService.AttachDisk(ctx, d.disk.DiskName, d.instanceName, r.Project, r.DataDiskZone); attachDiskErr != nil {
 			r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: Reattaching old disk failed,", attachDiskErr)

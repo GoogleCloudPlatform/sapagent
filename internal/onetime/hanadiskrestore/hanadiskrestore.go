@@ -831,7 +831,6 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		if r.usesCMEK {
 			r.oteLogger.LogUsageError(usagemetrics.CMEKDiskRestoreFailure)
 		}
-		r.oteLogger.LogErrorToFileAndConsole(ctx, "ERROR: HANA restore from snapshot failed,", err)
 		return fmt.Errorf("failed to insert new data disk: %v", err)
 	}
 	if err := r.gceService.WaitForDiskOpCompletionWithRetry(ctx, op, r.Project, r.DataDiskZone); err != nil {
