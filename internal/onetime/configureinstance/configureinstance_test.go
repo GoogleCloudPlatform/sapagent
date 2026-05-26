@@ -309,6 +309,14 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			want:            subcommands.ExitFailure,
 			wantMsgFragment: "ReadFile failed",
 		},
+		{
+			name: "x5RecognizedButNotImplemented",
+			c: ConfigureInstance{
+				MachineType: "x5-megamem-96",
+			},
+			want:            subcommands.ExitUsageError,
+			wantMsgFragment: "recognized but not yet fully supported",
+		},
 	}
 	for _, test := range tests {
 		test.c.oteLogger = onetime.CreateOTELogger(false)
@@ -866,6 +874,44 @@ func TestSetDefaults(t *testing.T) {
 			tc.c.setDefaults()
 			if !cmp.Equal(tc.want, tc.c, cmpopts.IgnoreUnexported(ConfigureInstance{})) {
 				t.Errorf("setDefaults() yielded %v, want: %v", tc.c, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsSupportedMachineType(t *testing.T) {
+	tests := []struct {
+		name        string
+		machineType string
+		want        bool
+	}{
+		{
+			name:        "x4Supported",
+			machineType: "x4-megamem-1920",
+			want:        true,
+		},
+		{
+			name:        "x5Supported",
+			machineType: "x5-megamem-96",
+			want:        true,
+		},
+		{
+			name:        "n2Unsupported",
+			machineType: "n2-standard-8",
+			want:        false,
+		},
+		{
+			name:        "EmptyUnsupported",
+			machineType: "",
+			want:        false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := ConfigureInstance{MachineType: tc.machineType}
+			got := c.IsSupportedMachineType()
+			if got != tc.want {
+				t.Errorf("IsSupportedMachineType() on machine type %q = %v, want: %v", tc.machineType, got, tc.want)
 			}
 		})
 	}

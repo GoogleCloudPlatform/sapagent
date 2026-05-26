@@ -46,7 +46,7 @@ type (
 	// ReadFileFunc provides a testable replacement for os.ReadFile.
 	ReadFileFunc func(string) ([]byte, error)
 
-	// MkdirAllFunc provides a testable replacement for os.MkDirAll.
+	// MkdirAllFunc provides a testable replacement for os.MkdirAll.
 	MkdirAllFunc func(string, os.FileMode) error
 )
 
@@ -177,10 +177,14 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 	return status
 }
 
+/* LINT.IfChange(supported_machine_types) */
+
 // IsSupportedMachineType checks if the configureinstance subcommand provides support for the machine type.
 func (c *ConfigureInstance) IsSupportedMachineType() bool {
-	return strings.HasPrefix(c.MachineType, "x4")
+	return strings.HasPrefix(c.MachineType, "x4") || strings.HasPrefix(c.MachineType, "x5")
 }
+
+/* LINT.ThenChange(:configure_handler_machine_types) */
 
 // Run performs the functionality specified by the configureinstance subcommand.
 //
@@ -224,14 +228,19 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	var err error
 
 	log.CtxLogger(ctx).Infof("Using machine type: %s", c.MachineType)
+	/* LINT.IfChange(configure_handler_machine_types) */
 	switch {
-	case c.IsSupportedMachineType():
+	case strings.HasPrefix(c.MachineType, "x4"):
 		if rebootRequired, err = c.configureX4(ctx); err != nil {
 			return subcommands.ExitFailure, err.Error()
 		}
+	case strings.HasPrefix(c.MachineType, "x5"):
+		// TODO: Route to configureX5 once implemented in a subsequent CL.
+		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: machine type %s is recognized but not yet fully supported", c.MachineType)
 	default:
 		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
+	/* LINT.ThenChange(:supported_machine_types) */
 
 	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceFinished)
 	if c.Check {
