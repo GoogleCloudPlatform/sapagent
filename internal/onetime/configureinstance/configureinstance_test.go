@@ -310,12 +310,26 @@ func TestConfigureInstanceHandler(t *testing.T) {
 			wantMsgFragment: "ReadFile failed",
 		},
 		{
-			name: "x5RecognizedButNotImplemented",
+			name: "x5SuccessApply",
 			c: ConfigureInstance{
 				MachineType: "x5-megamem-96",
+				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=SLES", string(googleX5Conf), "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
+				WriteFile:   defaultWriteFile(5),
+				MkdirAll:    defaultMkdirAll(5),
+				Apply:       true,
 			},
-			want:            subcommands.ExitUsageError,
-			wantMsgFragment: "recognized but not yet fully supported",
+			want:            subcommands.ExitSuccess,
+			wantMsgFragment: "",
+		},
+		{
+			name: "x5Fail",
+			c: ConfigureInstance{
+				MachineType: "x5-megamem-96",
+				ReadFile:    defaultReadFile([]error{fmt.Errorf("ReadFile failed")}, []string{""}),
+			},
+			want:            subcommands.ExitFailure,
+			wantMsgFragment: "ReadFile failed",
 		},
 	}
 	for _, test := range tests {

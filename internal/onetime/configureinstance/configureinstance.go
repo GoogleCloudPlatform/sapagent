@@ -235,8 +235,9 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 			return subcommands.ExitFailure, err.Error()
 		}
 	case strings.HasPrefix(c.MachineType, "x5"):
-		// TODO: Route to configureX5 once implemented in a subsequent CL.
-		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: machine type %s is recognized but not yet fully supported", c.MachineType)
+		if rebootRequired, err = c.configureX5(ctx); err != nil {
+			return subcommands.ExitFailure, err.Error()
+		}
 	default:
 		return subcommands.ExitUsageError, fmt.Sprintf("ConfigureInstance Usage Error: this machine type (%s) is not currently supported for automatic configuration", c.MachineType)
 	}
