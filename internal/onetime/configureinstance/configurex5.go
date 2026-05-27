@@ -32,7 +32,7 @@ var (
 	//go:embed google-x5.conf
 	googleX5Conf []byte
 
-	//go:embed tuned.conf
+	//go:embed tuned-x5.conf
 	googleX5TunedConf []byte
 
 	// TODO: Verify if X5 system requirements alter execution/timeouts.

@@ -32,7 +32,7 @@ var (
 	//go:embed google-x4.conf
 	googleX4Conf []byte
 
-	//go:embed tuned.conf
+	//go:embed tuned-x4.conf
 	googleX4TunedConf []byte
 
 	systemConf       = []string{"DefaultTimeoutStartSec=300s", "DefaultTimeoutStopSec=300s", "DefaultTasksMax=infinity"}
