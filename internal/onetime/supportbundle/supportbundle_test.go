@@ -746,6 +746,7 @@ func TestSOSReportHandler(t *testing.T) {
 			name: "FaultInExtractingErrors",
 			sosr: &SupportBundle{
 				Sid:          "DEH",
+				TenantSid:    "TEN",
 				InstanceNums: "00 11",
 				Hostname:     "sample_host",
 			},

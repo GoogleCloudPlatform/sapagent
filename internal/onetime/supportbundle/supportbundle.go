@@ -72,6 +72,7 @@ var (
 // SupportBundle is the structure for the support bundle command.
 type SupportBundle struct {
 	Sid                    string                        `json:"sid"`
+	TenantSid              string                        `json:"tenant-sid"`
 	InstanceNums           string                        `json:"instance-numbers"`
 	instanceNumsAfterSplit []string                      `json:"-"`
 	Hostname               string                        `json:"hostname"`
@@ -402,8 +403,8 @@ func (*SupportBundle) Synopsis() string {
 
 // Usage implements the subcommand interface for support bundle report collection for support team.
 func (*SupportBundle) Usage() string {
-	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-instance-numbers=<Instance numbers>]
-	[-hostname=<Hostname>] [agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false] [-mask-ips=true|false]
+	return `Usage: supportbundle [-sid=<SAP System Identifier>] [-tenant-sid=<Tenant SAP System Identifier>] [-instance-numbers=<Instance numbers>]
+	[-hostname=<Hostname>] [-agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false] [-mask-ips=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<info|warn|error>]
 	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
@@ -413,6 +414,7 @@ func (*SupportBundle) Usage() string {
 // SetFlags implements the subcommand interface for support bundle report collection.
 func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Sid, "sid", "", "SAP System Identifier - optional. If not provided, it will be fetched from SAP system discovery.")
+	fs.StringVar(&s.TenantSid, "tenant-sid", "", "Tenant SAP System Identifier - optional. If not provided, the main system SID will be used.")
 	fs.StringVar(&s.InstanceNums, "instance-numbers", "", "Instance numbers - optional. If not provided, it will be fetched from SAP system discovery.")
 	fs.StringVar(&s.Hostname, "hostname", "", "Hostname - optional. If not provided, it will be fetched from SAP system discovery.s")
 	fs.BoolVar(&s.PacemakerDiagnosis, "pacemaker-diagnosis", false, "Indicate if pacemaker support files are to be collected")
@@ -498,6 +500,11 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 			return fmt.Sprintf("Failed to process discovery data: %v", err), subcommands.ExitFailure
 		}
 	}
+
+	if s.TenantSid == "" {
+		s.TenantSid = s.Sid
+	}
+
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
 
@@ -511,7 +518,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		if isError := s.extractSystemDBErrors(ctx, destFilesPath, s.Hostname, hanaPaths, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting system DB errors")
 		}
-		if isError := s.extractTenantDBErrors(ctx, destFilesPath, s.Sid, s.Hostname, hanaPaths, exec, fs); isError {
+		if isError := s.extractTenantDBErrors(ctx, destFilesPath, s.TenantSid, s.Hostname, hanaPaths, exec, fs); isError {
 			failureMsgs = append(failureMsgs, "Error while extracting tenant DB errors")
 		}
 		if isError := s.extractBackintErrors(ctx, destFilesPath, globalPath, s.Hostname, exec, fs); isError {
@@ -1004,7 +1011,7 @@ func (s *SupportBundle) extractSystemDBErrors(ctx context.Context, destFilesPath
 			Executable:  "grep",
 			ArgsToSplit: fmt.Sprintf("-w ERROR %s/trace/backup.log", hanaPath),
 		}
-		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+hanaPath+"/trace/backup.log")
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR "+hanaPath+"/trace/backup.log")
 		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, systemDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
@@ -1013,11 +1020,11 @@ func (s *SupportBundle) extractSystemDBErrors(ctx context.Context, destFilesPath
 }
 
 // extractTenantDBErrors extracts the errors from tenant DB backup logs.
-func (s *SupportBundle) extractTenantDBErrors(ctx context.Context, destFilesPath, sid, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
+func (s *SupportBundle) extractTenantDBErrors(ctx context.Context, destFilesPath, tenantSID, hostname string, hanaPaths []string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting errors from TenantDB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
-		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, sid)
+		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, tenantSID)
 		p := commandlineexecutor.Params{
 			Executable:  "grep",
 			ArgsToSplit: "-w ERROR " + filePath,
