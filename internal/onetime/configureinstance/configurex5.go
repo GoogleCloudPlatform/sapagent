@@ -143,25 +143,12 @@ func (c *ConfigureInstance) transparentHugePageAdviseX5(ctx context.Context) boo
 // grubBootLoaderX5 checks if boot loader specification (BLS) needs to update.
 // Returns true if grub should update the BLS, false if not.
 func (c *ConfigureInstance) grubBootLoaderX5(ctx context.Context) bool {
-	osRelease, err := c.ReadFile("/etc/os-release")
-	log.CtxLogger(ctx).Infof("osRelease: %s", string(osRelease))
-	if err != nil {
-		return false
-	}
-	matches := versionRegex.FindStringSubmatch(string(osRelease))
-	if len(matches) != 2 || matches[1] == "" {
-		return false
-	}
-	version, err := semver.NewVersion(matches[1])
-	if err != nil {
-		return false
-	}
-
-	// This is only needed for RHEL 9.0 and higher.
-	if strings.Contains(string(osRelease), "Red Hat Enterprise Linux") {
-		return version.GreaterThanEqual(rhelMinVersionBLS)
-	}
-	return false
+	res := c.ExecuteFunc(ctx, commandlineexecutor.Params{
+		Executable:  "grub2-mkconfig",
+		ArgsToSplit: "--help",
+		Timeout:     c.TimeoutSec,
+	})
+	return strings.Contains(res.StdOut, "update-bls-cmdline") || strings.Contains(res.StdErr, "update-bls-cmdline")
 }
 
 // configureX5SLES checks and applies OS settings for X5 running on SLES.
