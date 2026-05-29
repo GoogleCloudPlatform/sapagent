@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 )
 
 func TestConfigureX4(t *testing.T) {
@@ -120,7 +121,7 @@ func TestConfigureX4(t *testing.T) {
 			name: "FailGrub2Mkconfig",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", ""}),
-				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
 				Apply:       true,
@@ -132,7 +133,7 @@ func TestConfigureX4(t *testing.T) {
 			name: "FailGrub2MkconfigWithBLS",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil, nil, nil, nil, nil}, []string{"Name=RHEL", "", "", "", "", "Name=Red Hat Enterprise Linux\nVERSION_ID=\"9.2\""}),
-				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "update-bls-cmdline", ""}),
 				WriteFile:   defaultWriteFile(5),
 				MkdirAll:    defaultMkdirAll(5),
 				Apply:       true,
@@ -713,6 +714,50 @@ func TestTunedReapply(t *testing.T) {
 			gotErr := tc.c.tunedReapply(context.Background(), tc.tunedReapply)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("tunedReapply(%v) returned error: %v, want error: %v", tc.tunedReapply, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestGrubBootLoader(t *testing.T) {
+	tests := []struct {
+		name string
+		c    ConfigureInstance
+		want bool
+	}{
+		{
+			name: "BLSSupportedByHelpCommandX4",
+			c: ConfigureInstance{
+				ExecuteFunc: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdOut: "update-bls-cmdline"}
+				},
+			},
+			want: true,
+		},
+		{
+			name: "BLSSupportedByHelpCommandX4_StdErr",
+			c: ConfigureInstance{
+				ExecuteFunc: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{StdErr: "update-bls-cmdline"}
+				},
+			},
+			want: true,
+		},
+		{
+			name: "BLSUnsupportedByHelpCommandX4",
+			c: ConfigureInstance{
+				ExecuteFunc: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					return commandlineexecutor.Result{}
+				},
+			},
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.c.grubBootLoader(context.Background())
+			if got != tc.want {
+				t.Errorf("grubBootLoader() = %v, want: %v", got, tc.want)
 			}
 		})
 	}
