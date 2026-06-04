@@ -329,6 +329,13 @@ func (r *Restorer) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
+	if len(f.Args()) > 0 {
+		unexpectedArgs := strings.Join(f.Args(), " ")
+		errMsg := fmt.Sprintf("ERROR: Unexpected arguments provided for %s. Please ensure all flags start with a hyphen (-) and are placed before any positional arguments: %s", r.Name(), unexpectedArgs)
+		log.Print(errMsg)
+		return subcommands.ExitUsageError
+	}
+
 	return r.Run(ctx, onetime.CreateRunOptions(cp, false))
 }
 

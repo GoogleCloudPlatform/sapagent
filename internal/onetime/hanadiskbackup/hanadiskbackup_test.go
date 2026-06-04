@@ -2689,6 +2689,8 @@ func TestExecuteSnapshot(t *testing.T) {
 		snapshot Snapshot
 		want     subcommands.ExitStatus
 		args     []any
+		fs       *flag.FlagSet
+		wantArgs []string
 	}{
 		{
 			name: "FailLengthArgs",
@@ -2768,13 +2770,39 @@ func TestExecuteSnapshot(t *testing.T) {
 				&ipb.CloudProperties{},
 			},
 		},
+		{
+			name:     "UnexpectedArgs",
+			snapshot: Snapshot{},
+			want:     subcommands.ExitUsageError,
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+			fs: func() *flag.FlagSet {
+				fs := flag.NewFlagSet("test", flag.ContinueOnError)
+				s := Snapshot{}
+				s.SetFlags(fs)
+				fs.Parse([]string{"-log-path=sample-path", "new-disk-names=disk1,disk2", "-target-kms-key=test-key"})
+				return fs
+			}(),
+			wantArgs: []string{"new-disk-names=disk1,disk2", "-target-kms-key=test-key"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.snapshot.oteLogger = defaultOTELogger
-			got := test.snapshot.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.args...)
+			fs := test.fs
+			if fs == nil {
+				fs = &flag.FlagSet{Usage: func() { return }}
+			}
+			got := test.snapshot.Execute(context.Background(), fs, test.args...)
 			if got != test.want {
 				t.Errorf("Execute(%v, %v)=%v, want %v", test.snapshot, test.args, got, test.want)
+			}
+			gotArgs := fs.Args()
+			if !cmp.Equal(gotArgs, test.wantArgs, cmpopts.EquateEmpty()) {
+				t.Errorf("fs.Args() = %v, want %v", gotArgs, test.wantArgs)
 			}
 		})
 	}

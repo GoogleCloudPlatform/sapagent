@@ -329,6 +329,13 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 		return exitStatus
 	}
 
+	if len(f.Args()) > 0 {
+		unexpectedArgs := strings.Join(f.Args(), " ")
+		errMsg := fmt.Sprintf("ERROR: Unexpected arguments provided for %s. Please ensure all flags start with a hyphen (-) and are placed before any positional arguments: %s", s.Name(), unexpectedArgs)
+		log.Print(errMsg)
+		return subcommands.ExitUsageError
+	}
+
 	_, status := s.Run(ctx, onetime.CreateRunOptions(cp, false))
 	if status == subcommands.ExitFailure {
 		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())

@@ -906,6 +906,8 @@ func TestExecute(t *testing.T) {
 		name     string
 		r        Restorer
 		testArgs []any
+		fs       *flag.FlagSet
+		wantArgs []string
 		want     subcommands.ExitStatus
 	}{
 		{
@@ -949,13 +951,35 @@ func TestExecute(t *testing.T) {
 			testArgs: []any{"subcommdand_name", log.Parameters{}, &ipb.CloudProperties{}},
 			want:     subcommands.ExitSuccess,
 		},
+		{
+			name:     "UnexpectedArgs",
+			r:        defaultRestorer,
+			testArgs: []any{"subcommand_name", log.Parameters{}, &ipb.CloudProperties{}},
+			fs: func() *flag.FlagSet {
+				fs := flag.NewFlagSet("test", flag.ContinueOnError)
+				r := Restorer{}
+				r.SetFlags(fs)
+				fs.Parse([]string{"-log-path=sample-path", "new-disk-names=disk1,disk2", "-target-kms-key=test-key"})
+				return fs
+			}(),
+			wantArgs: []string{"new-disk-names=disk1,disk2", "-target-kms-key=test-key"},
+			want:     subcommands.ExitUsageError,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := test.r.Execute(context.Background(), &flag.FlagSet{Usage: func() { return }}, test.testArgs...)
+			fs := test.fs
+			if fs == nil {
+				fs = &flag.FlagSet{Usage: func() { return }}
+			}
+			got := test.r.Execute(context.Background(), fs, test.testArgs...)
 			if got != test.want {
 				t.Errorf("Execute() = %v, want %v", got, test.want)
+			}
+			gotArgs := fs.Args()
+			if !cmp.Equal(gotArgs, test.wantArgs) {
+				t.Errorf("fs.Args() = %v, want %v", gotArgs, test.wantArgs)
 			}
 		})
 	}
