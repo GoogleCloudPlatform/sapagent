@@ -157,7 +157,18 @@ func main() {
 			Scopes:           cp.Scopes,
 		}
 	}
-	lp.CloudLoggingClient = log.CloudLoggingClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())
+	client, err := log.CreateClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())
+	if err != nil {
+		subcommand := ""
+		if len(os.Args) > 1 {
+			subcommand = os.Args[1]
+		}
+		if subcommand != "hanadiskrestore" && subcommand != "hanadiskbackup" {
+			log.Print(fmt.Sprintf("WARNING: Could not create cloud logging client with user agent: %v", err))
+		}
+	} else {
+		lp.CloudLoggingClient = client
+	}
 	registerSubCommands(ctx, lp, cloudProps)
 	rc := int(subcommands.Execute(ctx, nil, lp, cloudProps))
 	// making sure we flush the cloud logs.
