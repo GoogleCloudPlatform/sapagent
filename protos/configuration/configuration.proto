@@ -45,7 +45,8 @@ message Configuration {
   DiscoveryConfiguration discovery_configuration = 10;
   SupportConfiguration support_configuration = 11;
   UAPConfiguration uap_configuration = 12;
-  GCBDRConfiguration gcbdr_configuration = 13;
+  reserved 13;
+  reserved "gcbdr_configuration";
   PubSubActions pub_sub_actions = 14;
   ParameterManagerConfig parameter_manager_config = 15;
 }
@@ -244,12 +245,6 @@ message SupportConfiguration {
 message UAPConfiguration {
   google.protobuf.BoolValue enabled = 1;
   google.protobuf.BoolValue test_channel_enabled = 2;
-}
-
-message GCBDRConfiguration {
-  google.protobuf.BoolValue communication_enabled = 1;
-  google.protobuf.BoolValue test_channel_enabled = 2;
-  TargetEnvironment environment = 3;
 }
 
 message PubSubActions {

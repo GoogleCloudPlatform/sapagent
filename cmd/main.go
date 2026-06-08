@@ -35,8 +35,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configure"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configurebackint"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/configureinstance"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/backup"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/gcbdr/discovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanachangedisktype"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskbackup"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/hanadiskrestore"
@@ -60,7 +58,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/validate"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/version"
 	"github.com/GoogleCloudPlatform/sapagent/internal/startdaemon"
-	"github.com/GoogleCloudPlatform/sapagent/internal/utils/filesystem"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -85,8 +82,6 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 		&configure.Configure{},
 		&configurebackint.ConfigureBackint{},
 		&configureinstance.ConfigureInstance{},
-		&backup.Backup{},
-		&discovery.Discovery{FSH: filesystem.Helper{}},
 		&hanachangedisktype.HanaChangeDiskType{},
 		&hanadiskbackup.Snapshot{},
 		&hanadiskrestore.Restorer{},

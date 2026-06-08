@@ -41,7 +41,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/agentmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/collectiondefinition"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
-	"github.com/GoogleCloudPlatform/sapagent/internal/gcbdractions"
 	"github.com/GoogleCloudPlatform/sapagent/internal/gcebeta"
 	"github.com/GoogleCloudPlatform/sapagent/internal/hanamonitoring"
 	"github.com/GoogleCloudPlatform/sapagent/internal/heartbeat"
@@ -499,12 +498,6 @@ func (d *Daemon) startGuestActions(cancel context.CancelFunc) {
 	// Start Guest Actions ACS Communication with a separate new context (not impacted by cancels).
 	guestActionsCtx := log.SetCtx(context.Background(), "context", "GuestActions")
 	sapguestactions.StartACSCommunication(guestActionsCtx, d.config)
-}
-
-func (d *Daemon) startGCBDRActions() {
-	// Start GCBDR ACS Communication with a separate new context (not impacted by cancels).
-	gcbdrActionsCtx := log.SetCtx(context.Background(), "context", "GCBDRActions")
-	gcbdractions.StartACSCommunication(gcbdrActionsCtx, d.config)
 }
 
 // startAgentMetricsService returns health monitor for services.

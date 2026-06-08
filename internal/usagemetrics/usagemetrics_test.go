@@ -250,20 +250,11 @@ func TestErrorConstants(t *testing.T) {
 	if ServiceEnableFailure != 76 {
 		t.Errorf("ServiceEnableFailure = %v, want 76", ServiceEnableFailure)
 	}
-	if GCBDRBackupFailure != 77 {
-		t.Errorf("GCBDRBackupFailure = %v, want 77", GCBDRBackupFailure)
-	}
-	if GCBDRDiscoveryFailure != 78 {
-		t.Errorf("GCBDRDiscoveryFailure = %v, want 78", GCBDRDiscoveryFailure)
-	}
 	if HANAInsightsOTEFailure != 79 {
 		t.Errorf("HANAInsightsOTEFailure = %v, want 79", HANAInsightsOTEFailure)
 	}
 	if MultipartUploadFailure != 80 {
 		t.Errorf("MultipartUploadFailure = %v, want 80", MultipartUploadFailure)
-	}
-	if GCBDRActionsFailure != 81 {
-		t.Errorf("GCBDRActionsFailure = %v, want 81", GCBDRActionsFailure)
 	}
 	if StatusCollectionFailure != 82 {
 		t.Errorf("StatusCollectionFailure = %v, want 82", StatusCollectionFailure)
@@ -475,12 +466,6 @@ func TestActionConstants(t *testing.T) {
 	if UAPConfigureInstanceCommand != 61 {
 		t.Errorf("UAPConfigureInstanceCommand = %v, want 61", UAPConfigureInstanceCommand)
 	}
-	if UAPGCBDRBackupCommand != 62 {
-		t.Errorf("UAPGCBDRBackupCommand = %v, want 62", UAPGCBDRBackupCommand)
-	}
-	if UAPGCBDRDiscoveryCommand != 63 {
-		t.Errorf("UAPGCBDRDiscoveryCommand = %v, want 63", UAPGCBDRDiscoveryCommand)
-	}
 	if UAPHANADiskBackupCommand != 64 {
 		t.Errorf("UAPHANADiskBackupCommand = %v, want 64", UAPHANADiskBackupCommand)
 	}
@@ -492,12 +477,6 @@ func TestActionConstants(t *testing.T) {
 	}
 	if UAPVersionCommand != 67 {
 		t.Errorf("UAPVersionCommand = %v, want 67", UAPVersionCommand)
-	}
-	if GCBDRBackupStarted != 68 {
-		t.Errorf("GCBDRBackupStarted = %v, want 68", GCBDRBackupStarted)
-	}
-	if GCBDRBackupFinished != 69 {
-		t.Errorf("GCBDRBackupFinished = %v, want 69", GCBDRBackupFinished)
 	}
 	if HANADiskGroupBackupStarted != 70 {
 		t.Errorf("HANADiskGroupBackupStarted = %v, want 70", HANADiskGroupBackupStarted)
@@ -520,12 +499,6 @@ func TestActionConstants(t *testing.T) {
 	if ConfigPollerStarted != 76 {
 		t.Errorf("ConfigPollerStarted = %v, want 76", ConfigPollerStarted)
 	}
-	if GCBDRDiscoveryStarted != 77 {
-		t.Errorf("GCBDRDiscoveryStarted = %v, want 77", GCBDRDiscoveryStarted)
-	}
-	if GCBDRDiscoveryFinished != 78 {
-		t.Errorf("GCBDRDiscoveryFinished = %v, want 78", GCBDRDiscoveryFinished)
-	}
 	if HANAInsightsOTEStarted != 79 {
 		t.Errorf("HANAInsightsOTEStarted = %v, want 79", HANAInsightsOTEStarted)
 	}
@@ -537,9 +510,6 @@ func TestActionConstants(t *testing.T) {
 	}
 	if MultipartUploadFinished != 82 {
 		t.Errorf("MultipartUploadFinished = %v, want 82", MultipartUploadFinished)
-	}
-	if GCBDRActionsStarted != 83 {
-		t.Errorf("GCBDRActionsStarted = %v, want 83", GCBDRActionsStarted)
 	}
 	if CollectStatus != 84 {
 		t.Errorf("CollectStatus = %v, want 84", CollectStatus)
