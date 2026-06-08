@@ -532,7 +532,15 @@ func TestCreateSG(t *testing.T) {
 		expectedError   bool
 		expectedBaseURL string
 	}{
-		// TODO: Add a success test.
+		{
+			name:    "success",
+			project: "test-project",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "status": "DONE"}`}}},
+			},
+			expectedError:   false,
+			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+		},
 		{
 			name:    "error_http",
 			project: "test-project",
