@@ -64,9 +64,8 @@ const (
 	projectName             = "sap-core-eng-products"
 	repositoryName          = "google-cloud-sap-agent-sles15-x86-64"
 	fetchLatestVersionError = "Error: could not fetch latest version"
-	// TODO: Implement status OTE check for WIF based authentications access to scopes.
-	requiredScope       = "https://www.googleapis.com/auth/cloud-platform"
-	hostMetricsEndpoint = "http://localhost:18181"
+	requiredScope           = "https://www.googleapis.com/auth/cloud-platform"
+	hostMetricsEndpoint     = "http://localhost:18181"
 	// Below outline the names of the services as defined in the iam permissions file.
 	hanaMonitoringLabel       = "HANA_MONITORING"
 	processMetricsLabel       = "PROCESS_METRICS"
