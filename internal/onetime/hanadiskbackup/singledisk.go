@@ -29,7 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
-func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {
+func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc, createSnapshot diskSnapshotFunc, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) (err error) {
 	if err := s.isDiskAttachedToInstance(ctx, s.Disk, cp); err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (s *Snapshot) runWorkflowForDiskSnapshot(ctx context.Context, run queryFunc
 
 	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
-		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, exec); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 			return err
 		}
