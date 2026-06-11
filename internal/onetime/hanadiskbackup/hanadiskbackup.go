@@ -79,7 +79,7 @@ type (
 		Fields(...googleapi.Field) *compute.DisksCreateSnapshotCall
 		GuestFlush(bool) *compute.DisksCreateSnapshotCall
 		Header() http.Header
-		RequestId(string) *compute.DisksCreateSnapshotCall
+		RequestID(string) *compute.DisksCreateSnapshotCall
 	}
 
 	// computeServiceInterface is a testable equivalent for compute.Service.
@@ -135,8 +135,16 @@ type computeClient struct {
 	service *compute.Service
 }
 
+type disksCreateSnapshotCallWrapper struct {
+	*compute.DisksCreateSnapshotCall
+}
+
+func (w *disksCreateSnapshotCallWrapper) RequestID(s string) *compute.DisksCreateSnapshotCall {
+	return w.RequestId(s)
+}
+
 func (c *computeClient) DisksCreateSnapshot(project, zone, disk string, snapshot *compute.Snapshot) fakeDiskCreateSnapshotCall {
-	return c.service.Disks.CreateSnapshot(project, zone, disk, snapshot)
+	return &disksCreateSnapshotCallWrapper{c.service.Disks.CreateSnapshot(project, zone, disk, snapshot)}
 }
 
 const (
@@ -457,7 +465,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Starting HANA disk snapshot workflow...")
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
-		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, cp)
+		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, commandlineexecutor.ExecuteCommand, cp)
 		if err != nil {
 			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -469,7 +477,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure
 		}
-	} else if err = s.runWorkflowForDiskSnapshot(ctx, runQuery, s.createSnapshot, cp); err != nil {
+	} else if err = s.runWorkflowForDiskSnapshot(ctx, runQuery, s.createSnapshot, commandlineexecutor.ExecuteCommand, cp); err != nil {
 		errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
@@ -813,8 +821,8 @@ func (s *Snapshot) createSnapshot(snapshot *compute.Snapshot) fakeDiskCreateSnap
 	return s.computeService.DisksCreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot)
 }
 
-func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {
-	err = s.prepareForChangeDiskTypeWorkflow(ctx, commandlineexecutor.ExecuteCommand)
+func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnapshot diskSnapshotFunc, exec commandlineexecutor.Execute, cp *ipb.CloudProperties) (err error) {
+	err = s.prepareForChangeDiskTypeWorkflow(ctx, exec)
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error preparing for change disk type workflow", err)
 		return err
@@ -828,7 +836,7 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnaps
 	}
 	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
-		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, exec); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 			return err
 		}

@@ -151,7 +151,7 @@ func (m *mockDiskCreateSnapshot) Header() http.Header {
 	return nil
 }
 
-func (m *mockDiskCreateSnapshot) RequestId(string) *compute.DisksCreateSnapshotCall {
+func (m *mockDiskCreateSnapshot) RequestID(string) *compute.DisksCreateSnapshotCall {
 	return &compute.DisksCreateSnapshotCall{}
 }
 
@@ -226,6 +226,21 @@ func TestSnapshotHandler(t *testing.T) {
 				return "", "", "", errors.New("failure verifying logical device, stderr: findmnt error, err: exit status 1")
 			},
 			want: subcommands.ExitFailure,
+		},
+		{
+			name: "Success",
+			snapshot: Snapshot{
+				oteLogger:                       defaultOTELogger,
+				Sid:                             "HDB",
+				SkipDBSnapshotForChangeDiskType: true,
+				GroupSnapshotName:               "", // ensure it skips group logic
+			},
+			fakeNewGCE:         func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) { return &compute.Service{}, nil },
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
+			},
+			want: subcommands.ExitFailure, // It will fail further down inside real execution (e.g. disk not joined)
 		},
 	}
 	for _, test := range tests {
@@ -316,6 +331,20 @@ func TestCompareVersions(t *testing.T) {
 			v2:      "3.11",
 			want:    true,
 			wantErr: false,
+		},
+		{
+			name:    "non-integer in v1 minor",
+			v1:      "3.a",
+			v2:      "3.10",
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name:    "non-integer in v2 major",
+			v1:      "3.9",
+			v2:      "a.10",
+			want:    false,
+			wantErr: true,
 		},
 	}
 
@@ -3283,7 +3312,7 @@ func TestRunWorkflowForDiskSnapshot(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.snapshot.oteLogger = defaultOTELogger
-			got := test.snapshot.runWorkflowForDiskSnapshot(context.Background(), test.run, test.createSnapshot, defaultCloudProperties)
+			got := test.snapshot.runWorkflowForDiskSnapshot(context.Background(), test.run, test.createSnapshot, commandlineexecutor.ExecuteCommand, defaultCloudProperties)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("runWorkflow()=%v, want=%v", got, test.want)
 			}
@@ -3489,6 +3518,7 @@ func TestCreateNewHANASnapshot(t *testing.T) {
 		{
 			name: "CreateSnapshotFailure",
 			snapshot: Snapshot{
+				groupSnapshot:     true,
 				GroupSnapshotName: "sample-group-snapshot",
 			},
 			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
@@ -3690,5 +3720,469 @@ func TestValidateUser(t *testing.T) {
 				t.Errorf("validateUser() sidadmUser got: %t, want: %t", tc.s.sidadmUser, tc.wantSidadmUser)
 			}
 		})
+	}
+}
+
+func TestRun(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		opts     *onetime.RunOptions
+		want     subcommands.ExitStatus
+		mockUser bool
+	}{
+		{
+			name:     "ValidateParametersFailure",
+			snapshot: Snapshot{},
+			opts:     onetime.CreateRunOptions(defaultCloudProperties, false),
+			want:     subcommands.ExitUsageError,
+		},
+		{
+			name:     "ValidateUserFailure",
+			snapshot: defaultSnapshot,
+			opts:     onetime.CreateRunOptions(defaultCloudProperties, false),
+			want:     subcommands.ExitUsageError,
+			mockUser: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.mockUser {
+				origUID := geteuid
+				origUser := currentUser
+				geteuid = func() int { return 1000 }
+				currentUser = func() (*user.User, error) { return nil, cmpopts.AnyError }
+				defer func() {
+					geteuid = origUID
+					currentUser = origUser
+				}()
+			}
+			test.snapshot.oteLogger = defaultOTELogger
+			_, got := test.snapshot.Run(context.Background(), test.opts)
+			if got != test.want {
+				t.Errorf("Run() got exit status %v want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestExecuteSnapshot_Failure(t *testing.T) {
+	origUID := geteuid
+	origUser := currentUser
+	geteuid = func() int { return 0 }
+	currentUser = func() (*user.User, error) { return &user.User{Username: "root"}, nil }
+	defer func() {
+		geteuid = origUID
+		currentUser = origUser
+	}()
+
+	s := Snapshot{}
+
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	s.SetFlags(fs)
+	fs.Parse([]string{
+		"-sid=HDB",
+		"-source-disk=pd-1",
+		"-source-disk-zone=us-central1-a",
+		"-hana-db-user=user",
+		"-password=password",
+		"-host=localhost",
+		"-port=30015",
+	})
+	got := s.Execute(context.Background(), fs, "test", log.Parameters{}, &ipb.CloudProperties{})
+	if got != subcommands.ExitFailure {
+		t.Errorf("Execute() got exit status %v want %v", got, subcommands.ExitFailure)
+	}
+}
+
+func TestPrepareForChangeDiskTypeWorkflow(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		exec     commandlineexecutor.Execute
+		wantErr  error
+	}{
+		{
+			name:     "StopHANAFailure",
+			snapshot: Snapshot{oteLogger: defaultOTELogger},
+			exec:     testCommandExecuteWithExitCode("", "", 1, errors.New("error")),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "Success",
+			snapshot: Snapshot{oteLogger: defaultOTELogger},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: nil,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.snapshot.prepareForChangeDiskTypeWorkflow(ctx, tc.exec)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("prepareForChangeDiskTypeWorkflow() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestRunWorkflowForChangeDiskType(t *testing.T) {
+	tests := []struct {
+		name           string
+		snapshot       Snapshot
+		createSnapshot diskSnapshotFunc
+		exec           commandlineexecutor.Execute
+		wantErr        error
+	}{
+		{
+			name:     "PrepareFailure",
+			snapshot: Snapshot{oteLogger: defaultOTELogger},
+			exec:     testCommandExecuteWithExitCode("", "", 1, errors.New("error")),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name: "DiskNotAttached",
+			snapshot: Snapshot{
+				oteLogger:  defaultOTELogger,
+				gceService: &fake.TestGCE{DiskAttachedToInstanceErr: cmpopts.AnyError},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DiskAttachedFalse",
+			snapshot: Snapshot{
+				oteLogger:  defaultOTELogger,
+				gceService: &fake.TestGCE{IsDiskAttached: false},
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CreateDiskSnapshotFailure",
+			snapshot: Snapshot{
+				oteLogger:      defaultOTELogger,
+				gceService:     &fake.TestGCE{IsDiskAttached: true},
+				computeService: &fakeComputeService{},
+				DiskKeyFile:    "/test/fake/key",
+			},
+			createSnapshot: createDiskSnapshotFail,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "UnFreezeXFSFailure",
+			snapshot: Snapshot{
+				oteLogger:        defaultOTELogger,
+				FreezeFileSystem: true,
+				gceService:       &fake.TestGCE{IsDiskAttached: true},
+				computeService:   &fakeComputeService{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				if params.Executable == "xfs_freeze" && len(params.Args) > 0 && params.Args[0] == "-u" {
+					return commandlineexecutor.Result{Error: errors.New("freeze err"), ExitCode: 1}
+				}
+				return commandlineexecutor.Result{Error: nil, ExitCode: 0}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "WaitForSnapshotUploadFailure",
+			snapshot: Snapshot{
+				oteLogger:      defaultOTELogger,
+				gceService:     &fake.TestGCE{IsDiskAttached: true, UploadCompletionErr: cmpopts.AnyError},
+				computeService: &fakeComputeService{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "Success",
+			snapshot: Snapshot{
+				oteLogger:      defaultOTELogger,
+				gceService:     &fake.TestGCE{IsDiskAttached: true},
+				computeService: &fakeComputeService{},
+			},
+			createSnapshot: createDiskSnapshotSuccess,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if strings.Contains(params.ArgsToSplit, "ps x | grep hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{ExitCode: 0}
+			},
+			wantErr: nil,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.snapshot.runWorkflowForChangeDiskType(ctx, tc.createSnapshot, tc.exec, defaultCloudProperties)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("runWorkflowForChangeDiskType() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateDiskSnapshot(t *testing.T) {
+	tests := []struct {
+		name           string
+		snapshot       Snapshot
+		createSnapshot diskSnapshotFunc
+		wantErr        error
+	}{
+		{
+			name: "ParseLabelsFailure",
+			snapshot: Snapshot{
+				oteLogger:     defaultOTELogger,
+				groupSnapshot: true, // Will fail if cgName etc. is empty depending on check
+			},
+			createSnapshot: createDiskSnapshotFail,
+			wantErr:        cmpopts.AnyError,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.snapshot.createDiskSnapshot(ctx, tc.createSnapshot, defaultCloudProperties.GetInstanceName())
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createDiskSnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMarkSnapshotAsSuccessful_GroupSnapshot(t *testing.T) {
+	tests := []struct {
+		name       string
+		snapshot   Snapshot
+		run        queryFunc
+		snapshotID string
+		wantErr    error
+	}{
+		{
+			name: "SuccessGroupSnapshot",
+			snapshot: Snapshot{
+				groupSnapshot:     true,
+				GroupSnapshotName: "group-snap",
+				oteLogger:         defaultOTELogger,
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if !strings.Contains(q, "group-snap") {
+					t.Errorf("Query did not contain group snapshot name: %s", q)
+				}
+				return "", nil
+			},
+			snapshotID: "uid-123",
+			wantErr:    nil,
+		},
+		{
+			name: "SuccessSingleSnapshot",
+			snapshot: Snapshot{
+				groupSnapshot: false,
+				SnapshotName:  "single-snap",
+				oteLogger:     defaultOTELogger,
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if !strings.Contains(q, "single-snap") {
+					t.Errorf("Query did not contain single snapshot name: %s", q)
+				}
+				return "", nil
+			},
+			snapshotID: "uid-124",
+			wantErr:    nil,
+		},
+		{
+			name: "Failure",
+			snapshot: Snapshot{
+				SnapshotName: "single-snap",
+				oteLogger:    defaultOTELogger,
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			snapshotID: "uid-125",
+			wantErr:    cmpopts.AnyError,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.snapshot.markSnapshotAsSuccessful(ctx, tc.run, tc.snapshotID)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("markSnapshotAsSuccessful() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateNewHANASnapshot_GroupSnapshot(t *testing.T) {
+	tests := []struct {
+		name     string
+		snapshot Snapshot
+		run      queryFunc
+		wantID   string
+		wantErr  error
+	}{
+		{
+			name: "SuccessGroupSnapshot",
+			snapshot: Snapshot{
+				groupSnapshot:     true,
+				GroupSnapshotName: "group-snap",
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.Contains(q, "CREATE SNAPSHOT") {
+					if !strings.Contains(q, "group-snap") {
+						t.Errorf("Query did not contain group snapshot name: %s", q)
+					}
+					return "", nil
+				}
+				return "group-id-123", nil
+			},
+			wantID:  "group-id-123",
+			wantErr: nil,
+		},
+		{
+			name: "FailureCreate",
+			snapshot: Snapshot{
+				SnapshotName: "single-snap",
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.Contains(q, "CREATE SNAPSHOT") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			wantID:  "",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailureSelect",
+			snapshot: Snapshot{
+				SnapshotName: "single-snap",
+			},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if strings.Contains(q, "SELECT") {
+					return "", cmpopts.AnyError
+				}
+				return "", nil
+			},
+			wantID:  "",
+			wantErr: cmpopts.AnyError,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotID, err := tc.snapshot.createNewHANASnapshot(ctx, tc.run)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("createNewHANASnapshot() err returned diff (-want +got):\n%s", diff)
+			}
+			if gotID != tc.wantID {
+				t.Errorf("createNewHANASnapshot() gotID = %v, want %v", gotID, tc.wantID)
+			}
+		})
+	}
+}
+
+func TestAbandonHANASnapshot(t *testing.T) {
+	tests := []struct {
+		name       string
+		snapshot   Snapshot
+		run        queryFunc
+		snapshotID string
+		wantErr    error
+	}{
+		{
+			name:     "Success",
+			snapshot: Snapshot{},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				if !strings.Contains(q, "UNSUCCESSFUL") {
+					t.Errorf("Query did not contain UNSUCCESSFUL")
+				}
+				return "", nil
+			},
+			snapshotID: "uid-123",
+			wantErr:    nil,
+		},
+		{
+			name:     "Failure",
+			snapshot: Snapshot{},
+			run: func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+				return "", cmpopts.AnyError
+			},
+			snapshotID: "uid-123",
+			wantErr:    cmpopts.AnyError,
+		},
+	}
+	ctx := context.Background()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.snapshot.abandonHANASnapshot(ctx, tc.run, tc.snapshotID)
+			if diff := cmp.Diff(tc.wantErr, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("abandonHANASnapshot() returned diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMockDiskCreateSnapshotMethods(t *testing.T) {
+	mock := &mockDiskCreateSnapshot{}
+	if mock.Context(context.Background()) == nil {
+		t.Errorf("Context() returned nil")
+	}
+	if mock.Fields() == nil {
+		t.Errorf("Fields() returned nil")
+	}
+	if mock.GuestFlush(true) == nil {
+		t.Errorf("GuestFlush() returned nil")
+	}
+	if mock.Header() != nil {
+		t.Errorf("Header() returned non-nil")
+	}
+	if mock.RequestID("id") == nil {
+		t.Errorf("RequestID() returned nil")
+	}
+}
+
+func TestFakeComputeServiceMethods(t *testing.T) {
+	fc := &fakeComputeService{}
+	if fc.DisksCreateSnapshot("p", "z", "d", &compute.Snapshot{}) == nil {
+		t.Errorf("fakeComputeService.DisksCreateSnapshot returned nil")
+	}
+
+	fcc := &fakeComputeServiceForCreateSnapshot{Call: &mockDiskCreateSnapshot{}}
+	if fcc.DisksCreateSnapshot("p", "z", "d", &compute.Snapshot{}) == nil {
+		t.Errorf("fakeComputeServiceForCreateSnapshot.DisksCreateSnapshot returned nil")
 	}
 }
