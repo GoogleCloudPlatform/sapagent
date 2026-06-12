@@ -186,6 +186,7 @@ func TestSnapshotHandler(t *testing.T) {
 		fakeNewGCE         onetime.GCEServiceFunc
 		fakeComputeService onetime.ComputeServiceFunc
 		checkDataDir       checkDataDirFunc
+		exec               commandlineexecutor.Execute
 		want               subcommands.ExitStatus
 	}{
 		{
@@ -227,13 +228,206 @@ func TestSnapshotHandler(t *testing.T) {
 			},
 			want: subcommands.ExitFailure,
 		},
+		{
+			name: "SkipDBSnapshotForChangeDiskTypeSuccess",
+			snapshot: Snapshot{
+				Project:                         "my-project",
+				Host:                            "localhost",
+				Port:                            "123",
+				Sid:                             "HDB",
+				HanaDBUser:                      "system",
+				Disk:                            "pd-1",
+				DiskZone:                        "us-east1-a",
+				Password:                        "password",
+				SkipDBSnapshotForChangeDiskType: true,
+				oteLogger:                       defaultOTELogger,
+				gceService:                      &fake.TestGCE{IsDiskAttached: true},
+				computeService:                  &fakeComputeService{},
+			},
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) {
+				return &compute.Service{}, nil
+			},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut: "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+					}
+				}
+				if strings.Contains(params.ArgsToSplit, "hdbindexs") {
+					return commandlineexecutor.Result{ExitCode: 1}
+				}
+				return commandlineexecutor.Result{StdOut: scaleupTopology}
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "GroupSnapshotSuccess",
+			snapshot: Snapshot{
+				Project:           "my-project",
+				Host:              "localhost",
+				Port:              "123",
+				Sid:               "HDB",
+				HanaDBUser:        "system",
+				Disks:             "pd-1, pd-2",
+				DiskZone:          "us-east1-a",
+				Password:          "password",
+				HDBUserstoreKey:   "my-key",
+				AbandonPrepared:   true,
+				GroupSnapshotName: "my-group-snapshot",
+				oteLogger:         defaultOTELogger,
+				gceService: &fake.TestGCE{
+					IsDiskAttached: true,
+					SnapshotList:   &compute.SnapshotList{},
+					GetDiskResp: []*compute.Disk{
+						{
+							Name:                  "pd-1",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							Users:                 []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+						{
+							Name:                  "pd-2",
+							Type:                  "/some/path/device-type",
+							ProvisionedIops:       100,
+							ProvisionedThroughput: 1000,
+							Users:                 []string{"https://www.googleapis.com/compute/v1/projects/my-project/zones/my-zone/instances/my-instance"},
+							ResourcePolicies:      []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+						},
+					},
+					GetDiskErr: []error{nil, nil},
+				},
+				computeService: &fakeComputeService{},
+				sgService:      &mockSGService{},
+				isgService:     &mockISGService{},
+			},
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) {
+				return &gce.GCE{}, nil
+			},
+			fakeComputeService: func(context.Context) (*compute.Service, error) {
+				return &compute.Service{}, nil
+			},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut: "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+					}
+				}
+				for _, arg := range params.Args {
+					if arg == "hdbsql" {
+						return commandlineexecutor.Result{StdOut: "1234\n"}
+					}
+				}
+				return commandlineexecutor.Result{StdOut: scaleoutTopology}
+			},
+			want: subcommands.ExitSuccess,
+		},
+		{
+			name: "DiskSnapshotSuccess",
+			snapshot: Snapshot{
+				Project:         "my-project",
+				Host:            "localhost",
+				Port:            "123",
+				Sid:             "HDB",
+				HanaDBUser:      "system",
+				Disk:            "pd-1",
+				DiskZone:        "us-east1-a",
+				Password:        "password",
+				HDBUserstoreKey: "my-key",
+				AbandonPrepared: true,
+				oteLogger:       defaultOTELogger,
+				gceService:      &fake.TestGCE{IsDiskAttached: true},
+				computeService:  &fakeComputeService{},
+				sgService:       &mockSGService{},
+				isgService:      &mockISGService{},
+			},
+			fakeNewGCE: func(context.Context) (*gce.GCE, error) { return &gce.GCE{}, nil },
+			fakeComputeService: func(context.Context) (*compute.Service, error) {
+				return &compute.Service{}, nil
+			},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "/hana/data", "/dev/mapper/hanavg-datalv", "/dev/sdb", nil
+			},
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "grep" {
+					return commandlineexecutor.Result{
+						StdOut: "systemctl --no-ask-password start SAPSID_00 # sapstartsrv pf=/usr/sap/SID/SYS/profile/SID_HDB00_my-instance\n",
+					}
+				}
+				for _, arg := range params.Args {
+					if arg == "hdbsql" {
+						return commandlineexecutor.Result{StdOut: "1234\n"}
+					}
+				}
+				return commandlineexecutor.Result{StdOut: scaleupTopology}
+			},
+			want: subcommands.ExitSuccess,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			test.snapshot.oteLogger = defaultOTELogger
-			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, test.checkDataDir, defaultCloudProperties)
+			exec := test.exec
+			if exec == nil {
+				exec = testCommandExecute(scaleupTopology, "", nil)
+			}
+
+			_, got := test.snapshot.snapshotHandler(context.Background(), test.fakeNewGCE, test.fakeComputeService, test.checkDataDir, defaultCloudProperties, exec)
 			if got != test.want {
 				t.Errorf("snapshotHandler(%v)=%v want %v", test.name, got, test.want)
+			}
+		})
+	}
+}
+
+func TestRunQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		exec    commandlineexecutor.Execute
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "QueryError",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: cmpopts.AnyError}
+			},
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name: "QuerySuccess",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "header\nvalue"}
+			},
+			want:    "value",
+			wantErr: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h, err := databaseconnector.NewCMDDBHandle(databaseconnector.Params{
+				SID:        "HDB",
+				HDBUserKey: "my-key",
+			})
+			if err != nil {
+				t.Fatalf("NewCMDDBHandle failed: %v", err)
+			}
+			got, err := runQuery(context.Background(), h, "SELECT * FROM table", test.exec)
+			if (err != nil) != test.wantErr {
+				t.Errorf("runQuery() error = %v, wantErr %v", err, test.wantErr)
+			}
+			if got != test.want {
+				t.Errorf("runQuery() got = %v, want %v", got, test.want)
 			}
 		})
 	}

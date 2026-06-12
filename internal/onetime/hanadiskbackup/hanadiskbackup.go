@@ -373,34 +373,36 @@ func (s *Snapshot) Run(ctx context.Context, opts *onetime.RunOptions) (string, s
 		s.UseSnapshotGroupWorkflow = false
 	}
 
-	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, hanabackup.CheckDataDir, opts.CloudProperties)
+	message, exitStatus := s.snapshotHandler(ctx, gce.NewGCEClient, onetime.NewComputeService, hanabackup.CheckDataDir, opts.CloudProperties, commandlineexecutor.ExecuteCommand)
 	if exitStatus != subcommands.ExitSuccess {
 		return message, subcommands.ExitFailure
 	}
 	return message, subcommands.ExitSuccess
 }
 
-func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, checkDataDir checkDataDirFunc, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetime.GCEServiceFunc, computeServiceCreator onetime.ComputeServiceFunc, checkDataDir checkDataDirFunc, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (string, subcommands.ExitStatus) {
 	var err error
 	s.status = false
 
 	defer s.sendStatusToMonitoring(ctx, cloudmonitoring.NewDefaultBackOffIntervals(), cp)
 
-	s.gceService, err = gceServiceCreator(ctx)
-	if err != nil {
-		errMessage := "ERROR: Failed to create GCE service"
-		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-		return errMessage, subcommands.ExitFailure
+	if s.gceService == nil {
+		s.gceService, err = gceServiceCreator(ctx)
+		if err != nil {
+			errMessage := "ERROR: Failed to create GCE service"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
 	}
 
 	// If the command is run as a non-root user, physical data path will be empty but error is nil.
-	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = checkDataDir(ctx, s.Sid, commandlineexecutor.ExecuteCommand); err != nil {
+	if s.hanaDataPath, s.logicalDataPath, s.physicalDataPath, err = checkDataDir(ctx, s.Sid, exec); err != nil {
 		errMessage := "ERROR: Failed to check preconditions"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
 	}
 
-	if msg, exitStatus := s.validateDisks(ctx, cp, commandlineexecutor.ExecuteCommand); exitStatus != subcommands.ExitSuccess {
+	if msg, exitStatus := s.validateDisks(ctx, cp, exec); exitStatus != subcommands.ExitSuccess {
 		return msg, exitStatus
 	}
 
@@ -446,30 +448,36 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 		return errMessage, subcommands.ExitFailure
 	}
 
-	cs, err := computeServiceCreator(ctx)
-	if err != nil {
-		errMessage := "ERROR: Failed to create compute service"
-		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-		return errMessage, subcommands.ExitFailure
+	if s.computeService == nil {
+		cs, err := computeServiceCreator(ctx)
+		if err != nil {
+			errMessage := "ERROR: Failed to create compute service"
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			return errMessage, subcommands.ExitFailure
+		}
+		s.computeService = &computeClient{service: cs}
 	}
-	s.computeService = &computeClient{service: cs}
+
+	runQueryClosure := func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+		return runQuery(ctx, h, q, exec)
+	}
 
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Starting HANA disk snapshot workflow...")
 	workflowStartTime := time.Now()
 	if s.SkipDBSnapshotForChangeDiskType {
-		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, cp)
+		err := s.runWorkflowForChangeDiskType(ctx, s.createSnapshot, cp, exec)
 		if err != nil {
 			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure
 		}
 	} else if s.groupSnapshot {
-		if err := s.runWorkflowForInstantSnapshotGroups(ctx, runQuery, cp); err != nil {
+		if err := s.runWorkflowForInstantSnapshotGroups(ctx, runQueryClosure, cp); err != nil {
 			errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure
 		}
-	} else if err = s.runWorkflowForDiskSnapshot(ctx, runQuery, s.createSnapshot, cp); err != nil {
+	} else if err = s.runWorkflowForDiskSnapshot(ctx, runQueryClosure, s.createSnapshot, cp); err != nil {
 		errMessage := "ERROR: Failed to run HANA disk snapshot workflow"
 		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 		return errMessage, subcommands.ExitFailure
@@ -540,18 +548,22 @@ func (s *Snapshot) validateScaleoutDisks(ctx context.Context, cp *ipb.CloudPrope
 	}
 
 	if s.UseSnapshotGroupWorkflow {
-		s.sgService = &snapshotgroup.SGService{}
-		if err := s.sgService.NewService(); err != nil {
-			errMessage := "ERROR: Failed to create Snapshot Group service"
+		if s.sgService == nil {
+			s.sgService = &snapshotgroup.SGService{}
+			if err := s.sgService.NewService(); err != nil {
+				errMessage := "ERROR: Failed to create Snapshot Group service"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+				return errMessage, subcommands.ExitFailure
+			}
+		}
+	}
+	if s.isgService == nil {
+		s.isgService = &instantsnapshotgroup.ISGService{}
+		if err := s.isgService.NewService(); err != nil {
+			errMessage := "ERROR: Failed to create Instant Snapshot Group service"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			return errMessage, subcommands.ExitFailure
 		}
-	}
-	s.isgService = &instantsnapshotgroup.ISGService{}
-	if err := s.isgService.NewService(); err != nil {
-		errMessage := "ERROR: Failed to create Instant Snapshot Group service"
-		s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-		return errMessage, subcommands.ExitFailure
 	}
 
 	disks := strings.Split(s.Disks, ",")
@@ -637,18 +649,22 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 			}
 
 			if s.UseSnapshotGroupWorkflow {
-				s.sgService = &snapshotgroup.SGService{}
-				if err := s.sgService.NewService(); err != nil {
-					errMessage := "ERROR: Failed to create Snapshot Group service"
+				if s.sgService == nil {
+					s.sgService = &snapshotgroup.SGService{}
+					if err := s.sgService.NewService(); err != nil {
+						errMessage := "ERROR: Failed to create Snapshot Group service"
+						s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+						return errMessage, subcommands.ExitFailure
+					}
+				}
+			}
+			if s.isgService == nil {
+				s.isgService = &instantsnapshotgroup.ISGService{}
+				if err := s.isgService.NewService(); err != nil {
+					errMessage := "ERROR: Failed to create Instant Snapshot Group service"
 					s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 					return errMessage, subcommands.ExitFailure
 				}
-			}
-			s.isgService = &instantsnapshotgroup.ISGService{}
-			if err := s.isgService.NewService(); err != nil {
-				errMessage := "ERROR: Failed to create Instant Snapshot Group service"
-				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
-				return errMessage, subcommands.ExitFailure
 			}
 			if err := s.validateDisksBelongToCG(ctx, s.disks); err != nil {
 				errMessage := fmt.Sprintf("ERROR: Failed to validate whether disks %v belong to consistency group", s.disks)
@@ -791,10 +807,10 @@ func (s *Snapshot) portValue() string {
 	return s.Port
 }
 
-func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
+func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string, exec commandlineexecutor.Execute) (string, error) {
 	execWithTimeout := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 		params.Timeout = 150
-		return commandlineexecutor.ExecuteCommand(ctx, params)
+		return exec(ctx, params)
 	}
 	rows, err := h.Query(ctx, q, execWithTimeout)
 	if err != nil {
@@ -813,8 +829,8 @@ func (s *Snapshot) createSnapshot(snapshot *compute.Snapshot) fakeDiskCreateSnap
 	return s.computeService.DisksCreateSnapshot(s.Project, s.DiskZone, s.Disk, snapshot)
 }
 
-func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties) (err error) {
-	err = s.prepareForChangeDiskTypeWorkflow(ctx, commandlineexecutor.ExecuteCommand)
+func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnapshot diskSnapshotFunc, cp *ipb.CloudProperties, exec commandlineexecutor.Execute) (err error) {
+	err = s.prepareForChangeDiskTypeWorkflow(ctx, exec)
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error preparing for change disk type workflow", err)
 		return err
@@ -828,7 +844,7 @@ func (s *Snapshot) runWorkflowForChangeDiskType(ctx context.Context, createSnaps
 	}
 	op, err := s.createDiskSnapshot(ctx, createSnapshot, cp.GetInstanceName())
 	if s.FreezeFileSystem {
-		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, commandlineexecutor.ExecuteCommand); err != nil {
+		if err := hanabackup.UnFreezeXFS(ctx, s.hanaDataPath, exec); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Error unfreezing XFS", err)
 			return err
 		}
