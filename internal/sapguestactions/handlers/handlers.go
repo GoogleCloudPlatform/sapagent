@@ -26,13 +26,15 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
+var jsonMarshal = json.Marshal
+
 // ParseAgentCommandParameters parses the command parameters from the
 // AgentCommand proto into the provided object, using the json marshal/unmarshal.
 // If json.Marshal fails, the object is not modified.
 // "obj" is expected to be a pointer to a Command struct.
 func ParseAgentCommandParameters(ctx context.Context, command *gpb.AgentCommand, obj subcommands.Command) {
 	params := command.GetParameters()
-	paramsJSON, err := json.Marshal(params)
+	paramsJSON, err := jsonMarshal(params)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Failed to marshal all command parameters to JSON", "error", err)
 		return

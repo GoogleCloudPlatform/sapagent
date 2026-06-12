@@ -18,6 +18,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -296,5 +297,26 @@ func TestParseAgentCommandParameters(t *testing.T) {
 				t.Errorf("ParseAgentCommandParameters() returned an unexpected diff (-want +got):\n%v", diff)
 			}
 		})
+	}
+}
+
+func TestParseAgentCommandParametersMarshalError(t *testing.T) {
+	origJSONMarshal := jsonMarshal
+	jsonMarshal = func(v any) ([]byte, error) {
+		return nil, errors.New("mock marshal error")
+	}
+	t.Cleanup(func() { jsonMarshal = origJSONMarshal })
+
+	command := &gpb.AgentCommand{
+		Parameters: map[string]string{
+			"key": "value",
+		},
+	}
+	obj := &supportbundle.SupportBundle{}
+	ParseAgentCommandParameters(context.Background(), command, obj)
+
+	want := &supportbundle.SupportBundle{}
+	if diff := cmp.Diff(want, obj, cmpopts.IgnoreUnexported(supportbundle.SupportBundle{})); diff != "" {
+		t.Errorf("ParseAgentCommandParameters() with marshal error returned unexpected diff (-want +got):\n%v", diff)
 	}
 }
