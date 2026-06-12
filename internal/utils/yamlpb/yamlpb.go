@@ -24,7 +24,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
-	"github.com/go-yaml/yaml"
+	"gopkg.in/yaml.v2"
 )
 
 // toJSONCompatibleValue recursively converts the YAML-compatible value to a

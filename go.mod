@@ -23,7 +23,7 @@ require (
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.54.0
   github.com/gammazero/workerpool v1.2.1
-  github.com/go-yaml/yaml v2.1.0+incompatible
+  gopkg.in/yaml.v2 v2.4.0
   github.com/google/go-cmp v0.7.0
   github.com/google/safetext v0.0.0-20260330151545-1fb717a317c5
   github.com/google/subcommands v1.2.0
@@ -102,7 +102,7 @@ require (
   go.opentelemetry.io/otel/sdk v1.43.0 // indirect
   go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
   go.opentelemetry.io/otel/trace v1.43.0 // indirect
-  golang.org/x/crypto v0.51.0 // indirect
+  golang.org/x/crypto v0.52.0 // indirect
   golang.org/x/mod v0.36.0 // indirect
   golang.org/x/net v0.55.0 // indirect
   golang.org/x/sync v0.20.0 // indirect
