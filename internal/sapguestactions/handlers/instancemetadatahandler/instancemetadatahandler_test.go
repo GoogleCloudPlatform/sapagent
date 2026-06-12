@@ -24,12 +24,14 @@ import (
 
 	apb "google.golang.org/protobuf/types/known/anypb"
 	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/instancemetadata"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/protostruct"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
 	impb "github.com/GoogleCloudPlatform/sapagent/protos/instancemetadata"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
@@ -86,5 +88,51 @@ func TestInstanceMetadataHandlerHelper(t *testing.T) {
 				t.Errorf("InstanceMetadataHandler(%v, %v) returned an unexpected diff (-want +got): %v", tc.command, tc.cp, diff)
 			}
 		})
+	}
+}
+
+func TestInstanceMetadataHandler(t *testing.T) {
+	ctx := context.Background()
+	command := &gpb.Command{
+		CommandType: &gpb.Command_AgentCommand{
+			AgentCommand: &gpb.AgentCommand{
+				Command:    "instancemetadata",
+				Parameters: map[string]string{},
+			},
+		},
+	}
+	cp := &metadataserver.CloudProperties{}
+
+	got := InstanceMetadataHandler(ctx, command, cp)
+	if got == nil {
+		t.Errorf("InstanceMetadataHandler(%v, %v) returned nil", command, cp)
+	}
+}
+
+func TestInstanceMetadataHandler_MarshalError(t *testing.T) {
+	ctx := context.Background()
+	command := &gpb.Command{
+		CommandType: &gpb.Command_AgentCommand{
+			AgentCommand: &gpb.AgentCommand{
+				Command:    "instancemetadata",
+				Parameters: map[string]string{},
+			},
+		},
+	}
+	cp := &metadataserver.CloudProperties{}
+
+	// Stub apbNew to force a marshaling error
+	originalApbNew := apbNew
+	apbNew = func(src proto.Message) (*apb.Any, error) {
+		return nil, fmt.Errorf("forced marshaling error")
+	}
+	defer func() { apbNew = originalApbNew }()
+
+	got := instanceMetadataHandlerHelper(ctx, command, cp, nil)
+	if got.ExitCode != int32(subcommands.ExitFailure) {
+		t.Errorf("expected exit code %d, got %d", subcommands.ExitFailure, got.ExitCode)
+	}
+	if got.Stderr == "" {
+		t.Error("expected non-empty Stderr for marshaling error")
 	}
 }

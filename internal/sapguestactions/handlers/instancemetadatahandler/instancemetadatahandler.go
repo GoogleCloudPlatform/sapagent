@@ -33,6 +33,8 @@ import (
 	gpb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/guestactions"
 )
 
+var apbNew = apb.New
+
 // InstanceMetadataHandler is the handler for instancemetadata command.
 func InstanceMetadataHandler(ctx context.Context, command *gpb.Command, cp *metadataserver.CloudProperties) *gpb.CommandResult {
 	return instanceMetadataHandlerHelper(ctx, command, cp, nil)
@@ -44,7 +46,7 @@ func instanceMetadataHandlerHelper(ctx context.Context, command *gpb.Command, cp
 	handlers.ParseAgentCommandParameters(ctx, command.GetAgentCommand(), im)
 	im.RC = frc
 	instanceMetaDataResponse, msg, exitStatus := im.Run(ctx, onetime.CreateRunOptions(protostruct.ConvertCloudPropertiesToProto(cp), true))
-	anyInstanceMetaDataResponse, err := apb.New(instanceMetaDataResponse)
+	anyInstanceMetaDataResponse, err := apbNew(instanceMetaDataResponse)
 	if err != nil {
 		failureMessage := fmt.Sprintf("failed to marshal response to any. Error: %v", err)
 		log.CtxLogger(ctx).Debug(failureMessage)
