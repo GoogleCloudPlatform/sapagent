@@ -99,7 +99,7 @@ func TestGetInstance(t *testing.T) {
 	}}
 
 	for _, tc := range tests {
-		responses := []fakehttp.HardCodedResponse{}
+		var responses []fakehttp.HardCodedResponse
 		if tc.want != nil {
 			response, err := (tc.want).MarshalJSON()
 			if err != nil {
@@ -222,5 +222,33 @@ func TestListNodeGroups(t *testing.T) {
 		if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreTypes(googleapi.ServerResponse{})); diff != "" {
 			t.Errorf("ListNodeGroups(%v, %v) returned an unexpected diff (-want +got): %v", tc.project, tc.zone, diff)
 		}
+	}
+}
+
+func TestNewGCEClient(t *testing.T) {
+	ctx := context.Background()
+	g, err := NewGCEClient(ctx)
+	if err == nil {
+		t.Fatalf("NewGCEClient(ctx) unexpectedly succeeded. This implies ADC might be available. Returned client: %+v", g)
+	}
+}
+
+func TestInitialized_ServiceNotInitialized(t *testing.T) {
+	g := &GCEBeta{}
+	if g.Initialized() {
+		t.Errorf("Initialized() got = true, want = false for a nil service")
+	}
+}
+
+func TestInitialized_ServiceInitialized(t *testing.T) {
+	ctx := context.Background()
+	g, s, err := newTestService(ctx, []fakehttp.HardCodedResponse{})
+	if err != nil {
+		t.Fatalf("newTestService() failed: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	if !g.Initialized() {
+		t.Errorf("Initialized() got = false, want = true for an initialized service")
 	}
 }
