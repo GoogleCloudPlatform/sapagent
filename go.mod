@@ -17,13 +17,12 @@ require (
   cloud.google.com/go/storage v1.62.2
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260302132144-7a203cf65cdd
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260623133240-f1305de549a8
   github.com/Masterminds/semver/v3 v3.5.0
   github.com/SAP/go-hdb v1.16.11
   github.com/cenkalti/backoff/v4 v4.3.0
   github.com/fsouza/fake-gcs-server v1.54.0
   github.com/gammazero/workerpool v1.2.1
-  gopkg.in/yaml.v2 v2.4.0
   github.com/google/go-cmp v0.7.0
   github.com/google/safetext v0.0.0-20260330151545-1fb717a317c5
   github.com/google/subcommands v1.2.0
@@ -41,12 +40,13 @@ require (
   google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7
   google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9
   google.golang.org/protobuf v1.36.11
+  gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
   cloud.google.com/go/kms v1.31.0
   cloud.google.com/go/pubsub v1.50.2
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260304143153-4729a3b634b7
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260623133240-f1305de549a8
   go.uber.org/multierr v1.11.0
 )
 
