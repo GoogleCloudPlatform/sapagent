@@ -422,7 +422,7 @@ func TestRunQuery(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewCMDDBHandle failed: %v", err)
 			}
-			got, err := runQuery(context.Background(), h, "SELECT * FROM table", test.exec)
+			got, err := runQuery(context.Background(), h, "SELECT * FROM table", test.exec, 600)
 			if (err != nil) != test.wantErr {
 				t.Errorf("runQuery() error = %v, wantErr %v", err, test.wantErr)
 			}
@@ -3653,7 +3653,7 @@ func TestSetFlagsForSnapshot(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	flags := []string{"project", "host", "port", "sid", "hana-db-user", "password", "password-secret",
 		"hdbuserstore-key", "snapshot-name", "source-disk", "source-disk-zone", "source-disk-key-file", "group-snapshot-name",
-		"snapshot-description", "send-metrics-to-monitoring", "storage-location", "confirm-data-snapshot-after-create"}
+		"snapshot-description", "send-metrics-to-monitoring", "storage-location", "confirm-data-snapshot-after-create", "hana-query-timeout"}
 	snapshot.SetFlags(fs)
 	for _, flag := range flags {
 		got := fs.Lookup(flag)

@@ -220,9 +220,13 @@ func (db *DBHandle) Query(ctx context.Context, query string, exec commandlineexe
 		Executable: "sudo",
 		Args:       args,
 	})
-	if result.Error != nil || result.ExitCode != 0 {
+	if result.Error != nil {
 		usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
-		return nil, fmt.Errorf("%s", result.StdErr)
+		return nil, fmt.Errorf("command execution failed: %w, stderr: %s", result.Error, result.StdErr)
+	}
+	if result.ExitCode != 0 {
+		usagemetrics.Error(usagemetrics.HDBUserstoreKeyFailure)
+		return nil, fmt.Errorf("command failed with exit code %d, stderr: %s", result.ExitCode, result.StdErr)
 	}
 
 	result.StdOut = strings.TrimSuffix(result.StdOut, "\n")

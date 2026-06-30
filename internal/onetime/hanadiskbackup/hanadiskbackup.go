@@ -222,6 +222,7 @@ type Snapshot struct {
 	ConfirmDataSnapshotAfterCreate         bool   `json:"confirm-data-snapshot-after-create,string"`
 	SnapshotPrefix                         string `json:"snapshot-prefix,string"`
 	GroupSnapshotName                      string `json:"group-snapshot-name,string"`
+	HANAQueryTimeout                       int    `json:"hana-query-timeout,string"`
 	disks                                  []string
 	db                                     *databaseconnector.DBHandle
 	gceService                             gceInterface
@@ -311,6 +312,7 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.Labels, "labels", "", "Labels to be added to the disk snapshot")
 	fs.StringVar(&s.GroupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to 'group-snapshot-timestampinutc-consistencygroupname'.)")
 	fs.StringVar(&s.SnapshotPrefix, "snapshot-prefix", "", "Prefix for the snapshot name. Eg: if snapshot-prefix is 'myprefix', the snapshot name will be 'myprefix-timestampinutc-diskname'. Snapshot names have a 63 character limit, and if the generated name exceeds this limit, it will be truncated.")
+	fs.IntVar(&s.HANAQueryTimeout, "hana-query-timeout", 600, "Timeout for HANA database queries in seconds. (optional) Default: 600")
 }
 
 // Execute executes the subcommand interface for hanadiskbackup.
@@ -459,7 +461,7 @@ func (s *Snapshot) snapshotHandler(ctx context.Context, gceServiceCreator onetim
 	}
 
 	runQueryClosure := func(ctx context.Context, h *databaseconnector.DBHandle, q string) (string, error) {
-		return runQuery(ctx, h, q, exec)
+		return runQuery(ctx, h, q, exec, s.HANAQueryTimeout)
 	}
 
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Starting HANA disk snapshot workflow...")
@@ -807,9 +809,9 @@ func (s *Snapshot) portValue() string {
 	return s.Port
 }
 
-func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string, exec commandlineexecutor.Execute) (string, error) {
+func runQuery(ctx context.Context, h *databaseconnector.DBHandle, q string, exec commandlineexecutor.Execute, timeout int) (string, error) {
 	execWithTimeout := func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-		params.Timeout = 150
+		params.Timeout = timeout
 		return exec(ctx, params)
 	}
 	rows, err := h.Query(ctx, q, execWithTimeout)

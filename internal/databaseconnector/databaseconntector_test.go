@@ -201,7 +201,6 @@ func TestQueryValid(t *testing.T) {
 		`3,"test4"`,
 		`5,"test6"`,
 	}
-	testName := "ValidQuery"
 	testQuery := "TEST VALID 'QUERY'"
 	fakeExec := func(ctx context.Context, cmdParams commandlineexecutor.Params) commandlineexecutor.Result {
 		if cmdParams.Args[len(cmdParams.Args)-1] == testQuery {
@@ -216,15 +215,13 @@ func TestQueryValid(t *testing.T) {
 		}
 	}
 
-	t.Run(testName, func(t *testing.T) {
-		gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
-		if gotErr != nil {
-			t.Fatalf("Query(%s) returns error=%s, want error=nil", testQuery, gotErr)
-		}
-		if !cmp.Equal(gotRes.cmdDBResult, testResultRows) {
-			t.Errorf("Query(%s).cmdDBResult=%v, want=%v", testQuery, gotRes.cmdDBResult, testResultRows)
-		}
-	})
+	gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
+	if gotErr != nil {
+		t.Fatalf("Query(%s) returns error=%s, want error=nil", testQuery, gotErr)
+	}
+	if !cmp.Equal(gotRes.cmdDBResult, testResultRows) {
+		t.Errorf("Query(%s).cmdDBResult=%v, want=%v", testQuery, gotRes.cmdDBResult, testResultRows)
+	}
 }
 
 func TestQueryInvalid(t *testing.T) {
@@ -233,7 +230,6 @@ func TestQueryInvalid(t *testing.T) {
 		HDBUserKey: "testHDBUserKey",
 	})
 
-	testName := "InvalidQuery"
 	testQuery := "TEST INVALID QUERY"
 	fakeExec := func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 		return commandlineexecutor.Result{
@@ -242,12 +238,10 @@ func TestQueryInvalid(t *testing.T) {
 		}
 	}
 
-	t.Run(testName, func(t *testing.T) {
-		gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
-		if gotRes != nil || gotErr == nil {
-			t.Errorf("Query(%s)=(%#v, %v), want=(nil, any error)", testQuery, gotRes, gotErr)
-		}
-	})
+	gotRes, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
+	if gotRes != nil || gotErr == nil {
+		t.Errorf("Query(%s)=(%#v, %v), want=(nil, any error)", testQuery, gotRes, gotErr)
+	}
 }
 
 func TestReadRow(t *testing.T) {
@@ -517,5 +511,29 @@ func TestIsAuthError(t *testing.T) {
 				t.Errorf("isAuthError(%v) = %v, want %v", tc.err, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestQueryExecutionError(t *testing.T) {
+	testCMDDBHandle, _ := NewCMDDBHandle(Params{
+		SID:        "testSID",
+		HDBUserKey: "testHDBUserKey",
+	})
+
+	testQuery := "TEST EXECUTION ERROR QUERY"
+	expectedError := errors.New("execution failed")
+	fakeExec := func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			Error:  expectedError,
+			StdErr: "some command error details",
+		}
+	}
+
+	_, gotErr := testCMDDBHandle.Query(context.Background(), testQuery, fakeExec)
+	if gotErr == nil {
+		t.Fatalf("Query(%s) returned nil error, want error", testQuery)
+	}
+	if !errors.Is(gotErr, expectedError) {
+		t.Errorf("Query(%s) error = %v, want to contain %v", testQuery, gotErr, expectedError)
 	}
 }
