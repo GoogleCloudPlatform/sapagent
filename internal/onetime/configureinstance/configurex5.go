@@ -63,9 +63,9 @@ func (c *ConfigureInstance) configureX5(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if rebootModprobe && c.Apply {
-		log.CtxLogger(ctx).Info("Regenerating modprobe by running 'usr/bin/dracut --force'.")
-		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "usr/bin/dracut", ArgsToSplit: "--force", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
-			return false, fmt.Errorf("'usr/bin/dracut --force' failed, code: %d, stderr: %s, stdout: %s", res.ExitCode, res.StdErr, res.StdOut)
+		log.CtxLogger(ctx).Info("Regenerating modprobe by running '/usr/bin/dracut --force'.")
+		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "/usr/bin/dracut", ArgsToSplit: "--force", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
+			return false, fmt.Errorf("'/usr/bin/dracut --force' failed, code: %d, stderr: %s, stdout: %s", res.ExitCode, res.StdErr, res.StdOut)
 		}
 	}
 	if c.HyperThreading == hyperThreadingOff && c.Apply {
@@ -178,6 +178,9 @@ func (c *ConfigureInstance) configureX5SLES(ctx context.Context) (bool, error) {
 	if err := c.saptuneReapplyX5(ctx, solutionReapply, noteReapply); err != nil {
 		return false, err
 	}
+	if err := c.saptuneVerifyX5(ctx); err != nil {
+		return false, err
+	}
 	log.CtxLogger(ctx).Info("SLES specific configurations complete.")
 	return solutionReapply || noteReapply, nil
 }
@@ -187,14 +190,20 @@ func (c *ConfigureInstance) configureX5SLES(ctx context.Context) (bool, error) {
 func (c *ConfigureInstance) saptuneServiceX5(ctx context.Context) error {
 	// sapconf must be disabled and stopped before saptune can run.
 	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf", Timeout: c.TimeoutSec})
-	if sapconfStatus.ExitCode != 4 {
-		sapconfDisable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "disable sapconf", Timeout: c.TimeoutSec})
-		if sapconfDisable.ExitCode != 0 {
-			return fmt.Errorf("sapconf service could not be disabled, code: %d, stderr: %s, stdout: %s", sapconfDisable.ExitCode, sapconfDisable.StdErr, sapconfDisable.StdOut)
+	if sapconfStatus.ExitCode == 0 {
+		if c.Check {
+			return fmt.Errorf("sapconf service is running, run 'configureinstance -apply' to disable and stop it")
 		}
-		sapconfStop := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "stop sapconf", Timeout: c.TimeoutSec})
-		if sapconfStop.ExitCode != 0 {
-			return fmt.Errorf("sapconf service could not be stopped, code: %d, stderr: %s, stdout: %s", sapconfStop.ExitCode, sapconfStop.StdErr, sapconfStop.StdOut)
+		// First, kill the running processes to prevent long timeouts.
+		// Do not check exit codes as the process may already be dead or not loaded.
+		c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "kill sapconf", Timeout: c.TimeoutSec})
+		c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "kill tuned", Timeout: c.TimeoutSec})
+		// Remove the lockfile.
+		c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "rm", ArgsToSplit: "-f /run/sapconf/active", Timeout: c.TimeoutSec})
+		// Takeover sapconf which disables and stops the service.
+		sapconfTakeover := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "service takeover", Timeout: c.TimeoutSec})
+		if sapconfTakeover.ExitCode != 0 {
+			return fmt.Errorf("sapconf service could not be taken over, code: %d, stderr: %s, stdout: %s", sapconfTakeover.ExitCode, sapconfTakeover.StdErr, sapconfTakeover.StdOut)
 		}
 		log.CtxLogger(ctx).Info("The sapconf service is disabled and stopped.")
 	}
@@ -204,7 +213,12 @@ func (c *ConfigureInstance) saptuneServiceX5(ctx context.Context) error {
 		return fmt.Errorf("saptune service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s, stdout: %s", saptuneStatus.ExitCode, saptuneStatus.StdErr, saptuneStatus.StdOut)
 	}
 	if saptuneStatus.ExitCode != 0 {
+		if c.Check {
+			return fmt.Errorf("saptune service is not running, run 'configureinstance -apply' to enable and start it")
+		}
 		log.CtxLogger(ctx).Info("Attempting to enable and start saptune.")
+		// Remove any lingering lockfile.
+		c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "rm", ArgsToSplit: "-f /run/sapconf/active", Timeout: c.TimeoutSec})
 		saptuneEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable saptune", Timeout: c.TimeoutSec})
 		if saptuneEnable.ExitCode != 0 {
 			return fmt.Errorf("saptune service could not be enabled, code: %d, stderr: %s, stdout: %s", saptuneEnable.ExitCode, saptuneEnable.StdErr, saptuneEnable.StdOut)
@@ -228,7 +242,7 @@ func (c *ConfigureInstance) saptuneSolutionsX5(ctx context.Context) (bool, bool)
 		solutionReapply = true
 	}
 	// TODO: Update saptune solutions check note when a custom X5 note is developed.
-	if match, _ := regexp.MatchString(`additional enabled Notes:\s*google-x5`, saptuneSolutions.StdOut); !match {
+	if match, _ := regexp.MatchString(`additional enabled Notes:.*\bgoogle-x5\b`, saptuneSolutions.StdOut); !match {
 		log.CtxLogger(ctx).Info("Enabled note is not `google-x5`, SAPTune note re-apply required.")
 		noteReapply = true
 	}
@@ -259,6 +273,28 @@ func (c *ConfigureInstance) saptuneReapplyX5(ctx context.Context, solutionReappl
 		}
 		if res := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note apply google-x5", Timeout: c.TimeoutSec}); res.ExitCode != 0 {
 			return fmt.Errorf("'saptune note apply google-x5' failed, code: %d, err: %v, stderr: %s, stdout: %s", res.ExitCode, res.Error, res.StdErr, res.StdOut)
+		}
+	}
+	return nil
+}
+
+// saptuneVerifyX5 verifies the solution and note are configured correctly, and
+// checks if saptune is still applying changes after a reboot.
+func (c *ConfigureInstance) saptuneVerifyX5(ctx context.Context) error {
+	verifySolution := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution verify HANA", Timeout: c.TimeoutSec})
+	if verifySolution.ExitCode != 0 {
+		return fmt.Errorf("'saptune solution verify HANA' failed, code: %d, err: %v, stderr: %s, stdout: %s", verifySolution.ExitCode, verifySolution.Error, verifySolution.StdErr, verifySolution.StdOut)
+	}
+	verifyNote := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note verify google-x5", Timeout: c.TimeoutSec})
+	if verifyNote.ExitCode != 0 {
+		return fmt.Errorf("'saptune note verify google-x5' failed, code: %d, err: %v, stderr: %s, stdout: %s", verifyNote.ExitCode, verifyNote.Error, verifyNote.StdErr, verifyNote.StdOut)
+	}
+	// Saptune can take a while to apply changes after a reboot. Alert the
+	// user to re-run configureinstance after a few minutes if saptune is running.
+	if c.Check {
+		checkRunning := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "pgrep", ArgsToSplit: "-f saptune", Timeout: c.TimeoutSec})
+		if checkRunning.ExitCode == 0 {
+			return fmt.Errorf("saptune is still applying changes after a reboot. Re-run configureinstance after a few minutes. Saptune process found: %s", checkRunning.StdOut)
 		}
 	}
 	return nil
@@ -319,6 +355,9 @@ func (c *ConfigureInstance) tunedServiceX5(ctx context.Context) error {
 		return fmt.Errorf("tuned service could not be found, ensure it is installed before running 'configureinstance', code: %d, stderr: %s, stdout: %s", tunedStatus.ExitCode, tunedStatus.StdErr, tunedStatus.StdOut)
 	}
 	if tunedStatus.ExitCode != 0 {
+		if c.Check {
+			return fmt.Errorf("tuned service is not running, run 'configureinstance -apply' to enable and start it")
+		}
 		log.CtxLogger(ctx).Info("Attempting to enable and start tuned.")
 		tunedEnable := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "enable tuned", Timeout: c.TimeoutSec})
 		if tunedEnable.ExitCode != 0 {

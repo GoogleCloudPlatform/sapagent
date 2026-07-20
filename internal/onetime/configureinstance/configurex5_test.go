@@ -330,10 +330,19 @@ func TestConfigureX5SLES(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "FailedSaptuneVerify",
+			c: ConfigureInstance{
+				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX5Conf)}),
+				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 1}, []string{"", "", "", "", "", "", ""}),
+			},
+			want:    false,
+			wantErr: cmpopts.AnyError,
+		},
+		{
 			name: "Success",
 			c: ConfigureInstance{
 				ReadFile:    defaultReadFile([]error{nil, nil}, []string{"Name=SLES", string(googleX5Conf)}),
-				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", "", "", "", "", "", ""}),
 			},
 			want:    true,
 			wantErr: nil,
@@ -359,18 +368,32 @@ func TestSaptuneServiceX5(t *testing.T) {
 		want error
 	}{
 		{
-			name: "SapconfFailDisable",
+			name: "KillFailStillSucceeds",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 1, 1, 0, 0, 0}, []string{"", "", "", "", "", ""}),
+			},
+			want: nil,
+		},
+		{
+			name: "RemoveLockfileFailStillSucceeds",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 1, 0, 0}, []string{"", "", "", "", "", ""}),
+			},
+			want: nil,
+		},
+		{
+			name: "SapconfFailTakeover",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 1}, []string{"", "", "", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
-			name: "SapconfFailStop",
+			name: "SapconfTakenOverSuccess",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
+				ExecuteFunc: defaultExecute([]int{0, 0, 0, 0, 0, 0}, []string{"", "", "", "", "", ""}),
 			},
-			want: cmpopts.AnyError,
+			want: nil,
 		},
 		{
 			name: "ServiceNotFound",
@@ -382,21 +405,21 @@ func TestSaptuneServiceX5(t *testing.T) {
 		{
 			name: "ServiceFailedToEnable",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{4, 1, 1}, []string{"", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 1, 0, 1}, []string{"", "", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceFailedToStart",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{4, 1, 0, 1}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 1, 0, 0, 1}, []string{"", "", "", "", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
 		{
 			name: "ServiceStartedAfterStopped",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{4, 0, 0, 0}, []string{"", "", "", ""}),
+				ExecuteFunc: defaultExecute([]int{4, 1, 0, 0, 0}, []string{"", "", "", "", ""}),
 			},
 			want: nil,
 		},
@@ -406,6 +429,22 @@ func TestSaptuneServiceX5(t *testing.T) {
 				ExecuteFunc: defaultExecute([]int{4, 0}, []string{"", ""}),
 			},
 			want: nil,
+		},
+		{
+			name: "SapconfRunningCheckMode",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "SaptuneNotRunningCheckMode",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{4, 1}, []string{"", ""}),
+			},
+			want: cmpopts.AnyError,
 		},
 	}
 	for _, tc := range tests {
@@ -444,7 +483,7 @@ func TestSaptuneSolutionsX5(t *testing.T) {
 		{
 			name: "NoteUpdate",
 			c: ConfigureInstance{
-				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: NOT_google-x5"}),
+				ExecuteFunc: defaultExecute([]int{0}, []string{"enabled Solution: HANA\nadditional enabled Notes: other-note"}),
 			},
 			wantSolution: false,
 			wantNote:     true,
@@ -530,6 +569,58 @@ func TestSaptuneReapplyX5(t *testing.T) {
 			gotErr := tc.c.saptuneReapplyX5(context.Background(), tc.solutionReapply, tc.noteReapply)
 			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
 				t.Errorf("saptuneReapplyX5(%v, %v) returned error: %v, want error: %v", tc.solutionReapply, tc.noteReapply, gotErr, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestSaptuneVerifyX5(t *testing.T) {
+	tests := []struct {
+		name    string
+		c       ConfigureInstance
+		wantErr error
+	}{
+		{
+			name: "FailVerifySolution",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "FailVerifyNote",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CheckModeSaptuneRunning",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0, 0}, []string{"", "", "1234 saptune"}),
+			},
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "CheckModeSaptuneNotRunning",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
+			},
+		},
+		{
+			name: "Success",
+			c: ConfigureInstance{
+				ExecuteFunc: defaultExecute([]int{0, 0}, []string{"", ""}),
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotErr := tc.c.saptuneVerifyX5(context.Background())
+			if !cmp.Equal(gotErr, tc.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("saptuneVerifyX5() returned error: %v, want error: %v", gotErr, tc.wantErr)
 			}
 		})
 	}
@@ -676,6 +767,14 @@ func TestTunedServiceX5(t *testing.T) {
 				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
 			},
 			want: nil,
+		},
+		{
+			name: "ServiceNotRunningCheckMode",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{1}, []string{""}),
+			},
+			want: cmpopts.AnyError,
 		},
 	}
 	for _, tc := range tests {
