@@ -402,7 +402,7 @@ func TestSaptuneService(t *testing.T) {
 			name: "SapconfRunningCheckMode",
 			c: ConfigureInstance{
 				Check:       true,
-				ExecuteFunc: defaultExecute([]int{0}, []string{""}),
+				ExecuteFunc: defaultExecute([]int{1, 0}, []string{"", ""}),
 			},
 			want: cmpopts.AnyError,
 		},
@@ -410,9 +410,25 @@ func TestSaptuneService(t *testing.T) {
 			name: "SaptuneNotRunningCheckMode",
 			c: ConfigureInstance{
 				Check:       true,
-				ExecuteFunc: defaultExecute([]int{4, 1}, []string{"", ""}),
+				ExecuteFunc: defaultExecute([]int{1, 4, 1}, []string{"", "", ""}),
 			},
 			want: cmpopts.AnyError,
+		},
+		{
+			name: "CheckModeSaptuneRunning",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{0}, []string{"ActiveState=activating"}),
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name: "CheckModeSaptuneNotRunning",
+			c: ConfigureInstance{
+				Check:       true,
+				ExecuteFunc: defaultExecute([]int{1, 4, 0}, []string{"", "", ""}),
+			},
+			want: nil,
 		},
 	}
 	for _, tc := range tests {
@@ -561,21 +577,6 @@ func TestSaptuneVerify(t *testing.T) {
 				ExecuteFunc: defaultExecute([]int{0, 1}, []string{"", ""}),
 			},
 			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "CheckModeSaptuneRunning",
-			c: ConfigureInstance{
-				Check:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0, 0}, []string{"", "", "1234 saptune"}),
-			},
-			wantErr: cmpopts.AnyError,
-		},
-		{
-			name: "CheckModeSaptuneNotRunning",
-			c: ConfigureInstance{
-				Check:       true,
-				ExecuteFunc: defaultExecute([]int{0, 0, 1}, []string{"", "", ""}),
-			},
 		},
 		{
 			name: "Success",

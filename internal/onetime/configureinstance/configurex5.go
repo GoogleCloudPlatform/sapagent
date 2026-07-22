@@ -188,11 +188,21 @@ func (c *ConfigureInstance) configureX5SLES(ctx context.Context) (bool, error) {
 // saptuneServiceX5 checks if saptune service is running. If it is not running,
 // it will attempt to enable and start it through systemctl.
 func (c *ConfigureInstance) saptuneServiceX5(ctx context.Context) error {
+	// Saptune can take a while to apply changes after a reboot. Alert the
+	// user to run configureinstance after a few minutes if saptune is activating.
+	if c.Check {
+		checkRunning := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState saptune", Timeout: c.TimeoutSec})
+		if strings.Contains(checkRunning.StdOut, "activating") {
+			return fmt.Errorf("saptune is still applying changes after a reboot. Run configureinstance after a few minutes")
+		}
+	}
+
 	// sapconf must be disabled and stopped before saptune can run.
 	sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "status sapconf", Timeout: c.TimeoutSec})
 	if sapconfStatus.ExitCode == 0 {
 		if c.Check {
-			return fmt.Errorf("sapconf service is running, run 'configureinstance -apply' to disable and stop it")
+			log.CtxLogger(ctx).Info("sapconf service is running")
+			return fmt.Errorf("SLES specific configurations are not compliant, please run 'configureinstance -apply' to fix")
 		}
 		// First, kill the running processes to prevent long timeouts.
 		// Do not check exit codes as the process may already be dead or not loaded.
@@ -278,8 +288,7 @@ func (c *ConfigureInstance) saptuneReapplyX5(ctx context.Context, solutionReappl
 	return nil
 }
 
-// saptuneVerifyX5 verifies the solution and note are configured correctly, and
-// checks if saptune is still applying changes after a reboot.
+// saptuneVerifyX5 verifies the solution and note are configured correctly.
 func (c *ConfigureInstance) saptuneVerifyX5(ctx context.Context) error {
 	verifySolution := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "solution verify HANA", Timeout: c.TimeoutSec})
 	if verifySolution.ExitCode != 0 {
@@ -288,14 +297,6 @@ func (c *ConfigureInstance) saptuneVerifyX5(ctx context.Context) error {
 	verifyNote := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "note verify google-x5", Timeout: c.TimeoutSec})
 	if verifyNote.ExitCode != 0 {
 		return fmt.Errorf("'saptune note verify google-x5' failed, code: %d, err: %v, stderr: %s, stdout: %s", verifyNote.ExitCode, verifyNote.Error, verifyNote.StdErr, verifyNote.StdOut)
-	}
-	// Saptune can take a while to apply changes after a reboot. Alert the
-	// user to re-run configureinstance after a few minutes if saptune is running.
-	if c.Check {
-		checkRunning := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "pgrep", ArgsToSplit: "-f saptune", Timeout: c.TimeoutSec})
-		if checkRunning.ExitCode == 0 {
-			return fmt.Errorf("saptune is still applying changes after a reboot. Re-run configureinstance after a few minutes. Saptune process found: %s", checkRunning.StdOut)
-		}
 	}
 	return nil
 }
