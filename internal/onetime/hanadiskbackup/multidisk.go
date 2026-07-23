@@ -231,7 +231,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if err := s.isgService.CreateISG(ctx, s.Project, s.DiskZone, data); err != nil {
 		return err
 	}
-	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.GroupSnapshotName)
+	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.GroupSnapshotName)
 	if err := s.isgService.WaitForISGUploadCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}

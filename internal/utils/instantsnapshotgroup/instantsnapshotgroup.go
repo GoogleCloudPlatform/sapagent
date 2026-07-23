@@ -85,11 +85,12 @@ type (
 
 	// ISGResponse is the response for ISG.
 	ISGResponse struct {
-		Kind     string    `json:"kind"`
-		ID       string    `json:"id"`
-		Items    []ISGItem `json:"items"`
-		SelfLink string    `json:"selfLink"`
-		Etag     string    `json:"etag"`
+		Kind          string    `json:"kind"`
+		ID            string    `json:"id"`
+		NextPageToken string    `json:"nextPageToken"`
+		Items         []ISGItem `json:"items"`
+		SelfLink      string    `json:"selfLink"`
+		Etag          string    `json:"etag"`
 	}
 
 	// ISGItem is the item for ISG.
@@ -190,7 +191,7 @@ func (s *ISGService) getProcessStatus(ctx context.Context, baseURL string) (stri
 // CreateISG creates an instant snapshot group.
 func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data []byte) error {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	}
 
 	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)
@@ -231,7 +232,7 @@ func (s *ISGService) CreateISG(ctx context.Context, project, zone string, data [
 // ListInstantSnapshotGroups returns the list of instant snapshot groups for a given project and zone.
 func (s *ISGService) ListInstantSnapshotGroups(ctx context.Context, project, zone string) ([]ISGItem, error) {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshotGroups", project, zone)
 	}
 	baseURL := s.baseURL
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
@@ -242,13 +243,33 @@ func (s *ISGService) ListInstantSnapshotGroups(ctx context.Context, project, zon
 	}
 	s.baseURL = ""
 
+	var isgItems []ISGItem
 	var isgResp ISGResponse
 	if err := json.Unmarshal(bodyBytes, &isgResp); err != nil {
 		return nil, err
 	}
 
-	log.CtxLogger(ctx).Debugw("ISGResp", "isgResp.Items", isgResp.Items)
-	return isgResp.Items, nil
+	pageToken := ""
+	for {
+		isgItems = append(isgItems, isgResp.Items...)
+		if isgResp.NextPageToken != "" {
+			pageToken = isgResp.NextPageToken
+		} else {
+			break
+		}
+		isgResp = ISGResponse{}
+
+		bodyBytes, err := s.GetResponse(ctx, "GET", baseURL+"?pageToken="+pageToken, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list instant snapshot groups, err: %w", err)
+		}
+		if err := json.Unmarshal(bodyBytes, &isgResp); err != nil {
+			return nil, err
+		}
+	}
+
+	log.CtxLogger(ctx).Debugw("ISGResp", "isgResp.Items", isgItems)
+	return isgItems, nil
 }
 
 // parseInstantSnapshotGroupURL parses the URL of instant snapshot group and returns the zone and
@@ -266,7 +287,7 @@ func parseInstantSnapshotGroupURL(cgURL string) (string, string, error) {
 
 func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string) error {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/operations/%s", project, zone, opName)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/operations/%s", project, zone, opName)
 	}
 	bodyBytes, err := s.GetResponse(ctx, "GET", s.baseURL, nil)
 	log.CtxLogger(ctx).Debugw("isgExists", "baseURL", s.baseURL, "bodyBytes", string(bodyBytes))
@@ -295,7 +316,7 @@ func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string
 // DescribeInstantSnapshots returns the list of instant snapshots for a given group snapshot.
 func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone, isg string) ([]ISItem, error) {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshots", project, zone)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshots", project, zone)
 	}
 	baseURL := s.baseURL
 	bodyBytes, err := s.GetResponse(ctx, "GET", baseURL, nil)
@@ -348,7 +369,7 @@ func (s *ISGService) DescribeInstantSnapshots(ctx context.Context, project, zone
 // DeleteISG deletes the given instant snapshot group.
 func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName string) error {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshotGroups/%s", project, zone, isgName)
 	}
 
 	constantBackoff := backoff.NewConstantBackOff(20 * time.Second)

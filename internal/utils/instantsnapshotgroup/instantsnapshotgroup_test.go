@@ -441,7 +441,15 @@ func TestListInstantSnapshotGroups(t *testing.T) {
 			w.Write([]byte(`{"key": "success_value"`))
 		case "/test/success":
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"items": [{"name": "test-isg", "sourceConsistencyGroup": "https://www.googleapis.com/compute/alpha/projects/test-project/regions/test-region/resourcePolicies/cg-1"}]}`))
+			w.Write([]byte(`{"items": [{"name": "test-isg", "sourceConsistencyGroup": "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-1"}]}`))
+		case "/test/paginated":
+			if r.URL.Query().Get("pageToken") == "token2" {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"items": [{"name": "test-isg-2", "sourceConsistencyGroup": "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-2"}]}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"nextPageToken": "token2", "items": [{"name": "test-isg-1", "sourceConsistencyGroup": "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-1"}]}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -520,7 +528,37 @@ func TestListInstantSnapshotGroups(t *testing.T) {
 			wantItems: []ISGItem{
 				{
 					Name:                   "test-isg",
-					SourceConsistencyGroup: "https://www.googleapis.com/compute/alpha/projects/test-project/regions/test-region/resourcePolicies/cg-1",
+					SourceConsistencyGroup: "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-1",
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "PaginatedSuccess",
+			s: &ISGService{
+				baseURL: ts.URL + "/test/paginated",
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			project: "test-project",
+			zone:    "test-zone",
+			wantItems: []ISGItem{
+				{
+					Name:                   "test-isg-1",
+					SourceConsistencyGroup: "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-1",
+				},
+				{
+					Name:                   "test-isg-2",
+					SourceConsistencyGroup: "https://www.googleapis.com/compute/v1/projects/test-project/regions/test-region/resourcePolicies/cg-2",
 				},
 			},
 			wantErr: nil,
