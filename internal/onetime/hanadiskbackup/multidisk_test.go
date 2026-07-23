@@ -133,15 +133,25 @@ func TestDeleteStaleISGs(t *testing.T) {
 		{
 			name: "DeleteISGFailure",
 			s: &Snapshot{
+				cgName: "test-cg",
+				disks:  []string{"disk-1"},
 				isgService: &mockISGService{
 					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
 						{
-							Name:   "test-isg",
-							Status: "READY",
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/test-cg",
 						},
 						{
-							Name:   "test-isg-1",
-							Status: "READY",
+							Name:                   "test-isg-1",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/test-cg",
+						},
+					},
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name:       "test-is",
+							SourceDisk: "projects/test/zones/test/disks/disk-1",
 						},
 					},
 					listInstantSnapshotGroupsErr: nil,
@@ -153,14 +163,112 @@ func TestDeleteStaleISGs(t *testing.T) {
 		{
 			name: "DeleteISGSuccess",
 			s: &Snapshot{
+				cgName: "test-cg",
+				disks:  []string{"disk-1"},
 				isgService: &mockISGService{
 					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
 						{
-							Name: "test-isg",
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/test-cg",
+						},
+					},
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name:       "test-is",
+							SourceDisk: "projects/test/zones/test/disks/disk-1",
 						},
 					},
 					listInstantSnapshotGroupsErr: nil,
 					deleteISGErr:                 nil,
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SkipDifferentConsistencyGroup",
+			s: &Snapshot{
+				cgName: "test-cg",
+				disks:  []string{"disk-1"},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/other-cg",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SkipSubstringConsistencyGroup",
+			s: &Snapshot{
+				cgName: "sap-cg",
+				disks:  []string{"disk-1"},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/prod-sap-cg/",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SkipNoDiskOverlap",
+			s: &Snapshot{
+				cgName: "test-cg",
+				disks:  []string{"disk-1"},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/test-cg",
+						},
+					},
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name:       "test-is",
+							SourceDisk: "projects/test/zones/test/disks/other-disk",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "SkipPartialDiskOverlap",
+			s: &Snapshot{
+				cgName: "test-cg",
+				disks:  []string{"disk-1", "disk-2"},
+				isgService: &mockISGService{
+					listInstantSnapshotGroupsResp: []instantsnapshotgroup.ISGItem{
+						{
+							Name:                   "test-isg",
+							Status:                 "READY",
+							SourceConsistencyGroup: "projects/test/regions/test/resourcePolicies/test-cg",
+						},
+					},
+					describeInstantSnapshotsResp: []instantsnapshotgroup.ISItem{
+						{
+							Name:       "test-is-1",
+							SourceDisk: "projects/test/zones/test/disks/disk-1",
+						},
+						{
+							Name:       "test-is-2",
+							SourceDisk: "projects/test/zones/test/disks/other-disk",
+						},
+					},
+					listInstantSnapshotGroupsErr: nil,
 				},
 			},
 			want: nil,

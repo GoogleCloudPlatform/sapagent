@@ -48,10 +48,44 @@ func (s *Snapshot) deleteStaleISGs(ctx context.Context) error {
 		return err
 	}
 
+	vmDisks := make(map[string]bool)
+	for _, d := range s.disks {
+		vmDisks[d] = true
+	}
+
 	var deleteErr error
 	for _, isg := range isgList {
 		if isg.Status != "READY" {
 			log.CtxLogger(ctx).Debugw("Instant snapshot group is not ready, skipping deletion", "ISG Name", isg.Name)
+			continue
+		}
+		cgParts := strings.Split(strings.TrimSuffix(isg.SourceConsistencyGroup, "/"), "/")
+		if cgParts[len(cgParts)-1] != s.cgName {
+			log.CtxLogger(ctx).Debugw("Instant snapshot group does not belong to target consistency group, skipping deletion", "ISG Name", isg.Name, "SourceConsistencyGroup", isg.SourceConsistencyGroup, "TargetConsistencyGroup", s.cgName)
+			continue
+		}
+		snapshots, err := s.isgService.DescribeInstantSnapshots(ctx, s.Project, s.DiskZone, isg.Name)
+		if err != nil {
+			log.CtxLogger(ctx).Warnw("Error describing instant snapshots for ISG, skipping deletion", "isg", isg.Name, "error", err)
+			continue
+		}
+
+		if len(snapshots) != len(s.disks) {
+			log.CtxLogger(ctx).Debugw("Instant snapshot group disk count does not match current VM disk count, skipping deletion", "ISG Name", isg.Name, "ISG Disk Count", len(snapshots), "VM Disk Count", len(s.disks))
+			continue
+		}
+
+		allDisksMatch := true
+		for _, is := range snapshots {
+			parts := strings.Split(is.SourceDisk, "/")
+			diskName := parts[len(parts)-1]
+			if !vmDisks[diskName] {
+				allDisksMatch = false
+				break
+			}
+		}
+		if !allDisksMatch {
+			log.CtxLogger(ctx).Debugw("Instant snapshot group contains snapshots for disks not currently attached to VM, skipping deletion", "ISG Name", isg.Name)
 			continue
 		}
 		if err = s.isgService.DeleteISG(ctx, s.Project, s.DiskZone, isg.Name); err != nil {
