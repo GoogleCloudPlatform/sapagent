@@ -165,6 +165,89 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			},
 		},
 		{
+			name: "DescribeAndCheckSupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Check:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeAndApplySupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Apply:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeCheckAndApplySupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Check:    true,
+				Apply:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "InvalidFormatSupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Describe: true,
+				Format:   "invalid",
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeSuccessCSV",
+			want: subcommands.ExitSuccess,
+			c: ConfigureInstance{
+				Describe:       true,
+				Format:         "csv",
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeSuccessJSON",
+			want: subcommands.ExitSuccess,
+			c: ConfigureInstance{
+				Describe:       true,
+				Format:         "json",
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
 			name: "InvalidHyperThreading",
 			want: subcommands.ExitUsageError,
 			c: ConfigureInstance{
@@ -856,6 +939,7 @@ func TestSetDefaults(t *testing.T) {
 			name: "EmptyStruct",
 			c:    ConfigureInstance{},
 			want: ConfigureInstance{
+				Format:         "csv",
 				HyperThreading: hyperThreadingOn,
 				TimeoutSec:     300,
 			},
@@ -867,6 +951,7 @@ func TestSetDefaults(t *testing.T) {
 				TimeoutSec:     0,
 			},
 			want: ConfigureInstance{
+				Format:         "csv",
 				HyperThreading: hyperThreadingOn,
 				TimeoutSec:     300,
 			},
@@ -874,10 +959,12 @@ func TestSetDefaults(t *testing.T) {
 		{
 			name: "AlreadySet",
 			c: ConfigureInstance{
+				Format:         "json",
 				HyperThreading: "already_set",
 				TimeoutSec:     123,
 			},
 			want: ConfigureInstance{
+				Format:         "json",
 				HyperThreading: "already_set",
 				TimeoutSec:     123,
 			},
@@ -928,5 +1015,158 @@ func TestIsSupportedMachineType(t *testing.T) {
 				t.Errorf("IsSupportedMachineType() on machine type %q = %v, want: %v", tc.machineType, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSetFlagsDescribe(t *testing.T) {
+	c := &ConfigureInstance{}
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	c.SetFlags(fs)
+
+	if err := fs.Parse([]string{"-describe", "-format=json"}); err != nil {
+		t.Fatalf("fs.Parse() failed: %v", err)
+	}
+	if !c.Describe {
+		t.Errorf("c.Describe = false, want true")
+	}
+	if c.Format != "json" {
+		t.Errorf("c.Format = %q, want 'json'", c.Format)
+	}
+}
+
+func TestReadCurrentLineValue(t *testing.T) {
+	c := ConfigureInstance{
+		ReadFile: func(path string) ([]byte, error) {
+			if path == "error.conf" {
+				return nil, cmpopts.AnyError
+			}
+			return []byte("DefaultTimeoutStartSec=300s\n#UserTasksMax=10\nbarekey_line\n"), nil
+		},
+	}
+
+	if got := c.readCurrentLineValue("error.conf", "DefaultTimeoutStartSec"); got != "NOT_SET" {
+		t.Errorf("readCurrentLineValue(error.conf) = %q, want 'NOT_SET'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "DefaultTimeoutStartSec"); got != "300s" {
+		t.Errorf("readCurrentLineValue(test.conf) = %q, want '300s'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "UserTasksMax"); got != "<COMMENTED_OUT>" {
+		t.Errorf("readCurrentLineValue(test.conf commented) = %q, want '<COMMENTED_OUT>'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "barekey"); got != "barekey_line" {
+		t.Errorf("readCurrentLineValue(test.conf barekey) = %q, want 'barekey_line'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "MissingKey"); got != "NOT_SET" {
+		t.Errorf("readCurrentLineValue(test.conf missing) = %q, want 'NOT_SET'", got)
+	}
+}
+
+func TestFormatDescribeOutput(t *testing.T) {
+	rules := []ConfigRule{
+		{
+			Category:       "Systemd",
+			TargetFile:     "/etc/systemd/system.conf",
+			ParameterKey:   "DefaultTimeoutStartSec",
+			ExpectedValue:  "300s",
+			CurrentValue:   "300s",
+			RebootRequired: true,
+		},
+		{
+			Category:       "Sysctl",
+			TargetFile:     "google-x4.conf",
+			ParameterKey:   "net.core.rmem_max",
+			ExpectedValue:  "83886080",
+			CurrentValue:   "NOT_SET",
+			RebootRequired: false,
+		},
+	}
+
+	t.Run("CSVFormat", func(t *testing.T) {
+		c := ConfigureInstance{Format: "csv"}
+		status, got := c.formatDescribeOutput("X4", rules)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("formatDescribeOutput(csv) status = %v, want ExitSuccess", status)
+		}
+		wantHeader := "Series,Category,TargetFile,ParameterKey,ExpectedValue,CurrentValue,RebootRequired\n"
+		wantRow1 := "X4,Systemd,/etc/systemd/system.conf,DefaultTimeoutStartSec,300s,300s,YES\n"
+		wantRow2 := "X4,Sysctl,google-x4.conf,net.core.rmem_max,83886080,NOT_SET,NO\n"
+		if !strings.Contains(got, wantHeader) || !strings.Contains(got, wantRow1) || !strings.Contains(got, wantRow2) {
+			t.Errorf("formatDescribeOutput(csv) = %q, want rows to contain header and rows", got)
+		}
+	})
+
+	t.Run("JSONFormat", func(t *testing.T) {
+		c := ConfigureInstance{Format: "json"}
+		status, got := c.formatDescribeOutput("X4", rules)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("formatDescribeOutput(json) status = %v, want ExitSuccess", status)
+		}
+		if !strings.Contains(got, `"series": "X4"`) || !strings.Contains(got, `"DefaultTimeoutStartSec"`) {
+			t.Errorf("formatDescribeOutput(json) = %q, want JSON to contain series and rule key", got)
+		}
+	})
+}
+
+func TestReadCurrentFileContent(t *testing.T) {
+	c := ConfigureInstance{
+		ReadFile: func(path string) ([]byte, error) {
+			if path == "error.conf" {
+				return nil, cmpopts.AnyError
+			}
+			return []byte("blacklist idxd\nblacklist hpilo\n"), nil
+		},
+	}
+
+	if got := c.readCurrentFileContent("error.conf"); got != "NOT_SET" {
+		t.Errorf("readCurrentFileContent(error.conf) = %q, want 'NOT_SET'", got)
+	}
+	if got := c.readCurrentFileContent("test.conf"); got != "blacklist idxd\nblacklist hpilo" {
+		t.Errorf("readCurrentFileContent(test.conf) = %q, want file content", got)
+	}
+}
+
+func TestDescribeHandlerX4andX5(t *testing.T) {
+	ctx := context.Background()
+	c4 := ConfigureInstance{
+		Describe:    true,
+		Format:      "csv",
+		MachineType: "x4-megamem-1920",
+	}
+	status4, got4 := c4.configureInstanceHandler(ctx)
+	if status4 != subcommands.ExitSuccess || !strings.Contains(got4, "Series,Category") {
+		t.Errorf("configureInstanceHandler(x4) = status:%v, msg:%q, want ExitSuccess and CSV header", status4, got4)
+	}
+
+	c5 := ConfigureInstance{
+		Describe:    true,
+		Format:      "json",
+		MachineType: "x5-megamem-96",
+	}
+	status5, got5 := c5.configureInstanceHandler(ctx)
+	if status5 != subcommands.ExitSuccess || !strings.Contains(got5, `"series": "X5"`) {
+		t.Errorf("configureInstanceHandler(x5) = status:%v, msg:%q, want ExitSuccess and JSON series X5", status5, got5)
+	}
+}
+
+func TestRunSetDefaultsApplied(t *testing.T) {
+	c := ConfigureInstance{
+		Describe:    true,
+		MachineType: "x4-megamem-1920",
+		// HyperThreading and TimeoutSec left empty so setDefaults MUST run
+	}
+	opts := &onetime.RunOptions{
+		CloudProperties: &ipb.CloudProperties{
+			MachineType: "x4-megamem-1920",
+		},
+	}
+	status, _ := c.Run(context.Background(), opts)
+	if status != subcommands.ExitSuccess {
+		t.Fatalf("Run() status = %v, want ExitSuccess", status)
+	}
+	if c.HyperThreading != hyperThreadingOn {
+		t.Errorf("c.HyperThreading = %q, want %q", c.HyperThreading, hyperThreadingOn)
+	}
+	if c.TimeoutSec != 300 {
+		t.Errorf("c.TimeoutSec = %d, want 300", c.TimeoutSec)
 	}
 }
