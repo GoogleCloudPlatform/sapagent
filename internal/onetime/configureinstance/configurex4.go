@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
@@ -45,6 +46,16 @@ var (
 	rhelMinVersionTHP = semver.MustParse("9.2")
 	rhelMinVersionBLS = semver.MustParse("9.0")
 )
+
+const (
+	defaultTimeoutStartSec = "300s"
+	defaultTimeoutStopSec  = "300s"
+	defaultTasksMax        = "infinity"
+	userTasksMax           = "<REMOVE>"
+	modprobeBlacklist      = "<BLACKLIST>"
+)
+
+/* LINT.IfChange(x4_apply) */
 
 // configureX4 checks and applies OS settings on X4.
 // Returns true if a reboot is required.
@@ -388,3 +399,163 @@ func (c *ConfigureInstance) tunedReapply(ctx context.Context, tunedReapply bool)
 	}
 	return nil
 }
+
+/* LINT.ThenChange(:x4_describe) */
+
+/* LINT.IfChange(x4_describe) */
+// describeX4 collects and outputs configuration rules for X4 machines.
+func (c *ConfigureInstance) describeX4(ctx context.Context) (subcommands.ExitStatus, string) {
+	var rules []ConfigRule
+
+	// Systemd rules
+	for _, sysConf := range []string{"DefaultTimeoutStartSec", "DefaultTimeoutStopSec", "DefaultTasksMax"} {
+		curr := c.readCurrentLineValue("/etc/systemd/system.conf", sysConf)
+		exp := defaultTimeoutStartSec
+		if sysConf == "DefaultTimeoutStopSec" {
+			exp = defaultTimeoutStopSec
+		} else if sysConf == "DefaultTasksMax" {
+			exp = defaultTasksMax
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Systemd",
+			TargetFile:     "/etc/systemd/system.conf",
+			ParameterKey:   sysConf,
+			ExpectedValue:  exp,
+			CurrentValue:   curr,
+			RebootRequired: true,
+		})
+	}
+	currUserTasks := c.readCurrentLineValue("/etc/systemd/logind.conf", "UserTasksMax")
+	rules = append(rules, ConfigRule{
+		Category:       "Systemd",
+		TargetFile:     "/etc/systemd/logind.conf",
+		ParameterKey:   "UserTasksMax",
+		ExpectedValue:  userTasksMax,
+		CurrentValue:   currUserTasks,
+		RebootRequired: true,
+	})
+
+	// Modprobe rules
+	for _, mp := range []string{"blacklist idxd", "blacklist hpilo", "blacklist acpi_cpufreq", "blacklist qat_4xxx", "blacklist intel_qat"} {
+		curr := c.readCurrentLineValue("/etc/modprobe.d/google-x4.conf", mp)
+		rules = append(rules, ConfigRule{
+			Category:       "Modprobe",
+			TargetFile:     "/etc/modprobe.d/google-x4.conf",
+			ParameterKey:   mp,
+			ExpectedValue:  modprobeBlacklist,
+			CurrentValue:   curr,
+			RebootRequired: true,
+		})
+	}
+
+	// Grub rules
+	currGrub := c.readCurrentLineValue("/etc/default/grub", "GRUB_CMDLINE_LINUX_DEFAULT")
+	rules = append(rules, ConfigRule{
+		Category:       "Grub",
+		TargetFile:     "/etc/default/grub",
+		ParameterKey:   "GRUB_CMDLINE_LINUX_DEFAULT",
+		ExpectedValue:  grubLinuxDefault,
+		CurrentValue:   currGrub,
+		RebootRequired: true,
+	})
+
+	// Sysctl rules from embedded google-x4.conf
+	for _, line := range strings.Split(string(googleX4Conf), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			curr := c.readCurrentLineValue("/etc/sysctl.d/google-x4.conf", key)
+			rules = append(rules, ConfigRule{
+				Category:       "Sysctl",
+				TargetFile:     "/etc/sysctl.d/google-x4.conf",
+				ParameterKey:   key,
+				ExpectedValue:  val,
+				CurrentValue:   curr,
+				RebootRequired: false,
+			})
+		}
+	}
+
+	// Services & OS-specific rules (SLES / RHEL)
+	osRelease := c.readCurrentFileContent("/etc/os-release")
+	if strings.Contains(osRelease, "SLES") {
+		sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState sapconf", Timeout: c.TimeoutSec})
+		sapconfVal := strings.TrimSpace(sapconfStatus.StdOut)
+		if sapconfVal == "" {
+			sapconfVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "sapconf",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "inactive",
+			CurrentValue:   sapconfVal,
+			RebootRequired: false,
+		})
+
+		saptuneStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState saptune", Timeout: c.TimeoutSec})
+		saptuneVal := strings.TrimSpace(saptuneStatus.StdOut)
+		if saptuneVal == "" {
+			saptuneVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "saptune",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "active",
+			CurrentValue:   saptuneVal,
+			RebootRequired: false,
+		})
+
+		saptuneProf := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status", Timeout: c.TimeoutSec})
+		profVal := strings.TrimSpace(saptuneProf.StdOut)
+		if profVal == "" {
+			profVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "SaptuneProfile",
+			TargetFile:     "saptune",
+			ParameterKey:   "EnabledSolution",
+			ExpectedValue:  "HANA (or NETWEAVER+HANA / S4HANA)",
+			CurrentValue:   profVal,
+			RebootRequired: false,
+		})
+	} else if strings.Contains(osRelease, "Red Hat Enterprise Linux") {
+		tunedStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState tuned", Timeout: c.TimeoutSec})
+		tunedVal := strings.TrimSpace(tunedStatus.StdOut)
+		if tunedVal == "" {
+			tunedVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "tuned",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "active",
+			CurrentValue:   tunedVal,
+			RebootRequired: false,
+		})
+
+		tunedProf := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "active", Timeout: c.TimeoutSec})
+		profVal := strings.TrimSpace(tunedProf.StdOut)
+		if profVal == "" {
+			profVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "TunedProfile",
+			TargetFile:     "tuned-adm",
+			ParameterKey:   "ActiveProfile",
+			ExpectedValue:  "google-x4",
+			CurrentValue:   profVal,
+			RebootRequired: false,
+		})
+	}
+
+	return c.formatDescribeOutput("X4", rules)
+}
+
+/* LINT.ThenChange(:x4_apply) */
