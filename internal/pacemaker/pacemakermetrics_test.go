@@ -1885,31 +1885,31 @@ func TestSetPacemakerHanaOperations(t *testing.T) {
 				},
 				{
 					Name:    "start",
-					Timeout: "1",
+					Timeout: "1s",
 				},
 				{
 					Name:    "stop",
-					Timeout: "2",
+					Timeout: "2s",
 				},
 				{
 					Name:    "promote",
-					Timeout: "3",
+					Timeout: "3s",
 				},
 				{
 					Name:    "demote",
-					Timeout: "4",
+					Timeout: "4s",
 				},
 				{
 					Name:     "monitor",
 					Role:     "Master",
-					Interval: "5",
-					Timeout:  "6",
+					Interval: "5s",
+					Timeout:  "6s",
 				},
 				{
 					Name:     "monitor",
 					Role:     "Slave",
-					Interval: "7",
-					Timeout:  "8",
+					Interval: "7s",
+					Timeout:  "8s",
 				},
 			},
 			want: map[string]string{
@@ -1959,16 +1959,16 @@ func TestPacemakerHanaTopology(t *testing.T) {
 			ops: []Op{
 				{
 					Name:    "start",
-					Timeout: "1",
+					Timeout: "1s",
 				},
 				{
 					Name:    "stop",
-					Timeout: "2",
+					Timeout: "2s",
 				},
 				{
 					Name:     "monitor",
-					Timeout:  "600",
-					Interval: "30",
+					Timeout:  "600s",
+					Interval: "30s",
 				},
 			},
 			want: map[string]string{
@@ -2979,7 +2979,7 @@ func TestSetOPOptions(t *testing.T) {
 			opOptions: ClusterPropertySet{
 				ID: "op-options",
 				NVPairs: []NVPair{
-					{Name: "timeout", Value: "600"},
+					{Name: "timeout", Value: "600s"},
 				},
 			},
 			want: map[string]string{
@@ -3027,7 +3027,7 @@ func TestSetPacemakerStonithClusterProperty(t *testing.T) {
 					ID: "cib-bootstrap-options",
 					NVPairs: []NVPair{
 						{Name: "stonith-enabled", Value: "true"},
-						{Name: "stonith-timeout", Value: "10"},
+						{Name: "stonith-timeout", Value: "10s"},
 					},
 				},
 			},

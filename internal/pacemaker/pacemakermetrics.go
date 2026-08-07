@@ -327,21 +327,21 @@ func setPacemakerHanaOperations(labels map[string]string, sapHanaOperations []Op
 		name := sapHanaOperation.Name
 		switch name {
 		case "start":
-			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "stop":
-			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "promote":
-			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "demote":
-			labels["saphana_"+name+"_timeout"] = sapHanaOperation.Timeout
+			labels["saphana_"+name+"_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "monitor":
 			switch sapHanaOperation.Role {
 			case "Master":
-				labels["saphana_primary_monitor_interval"] = sapHanaOperation.Interval
-				labels["saphana_primary_monitor_timeout"] = sapHanaOperation.Timeout
+				labels["saphana_primary_monitor_interval"] = strings.ReplaceAll(sapHanaOperation.Interval, "s", "")
+				labels["saphana_primary_monitor_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 			case "Slave":
-				labels["saphana_secondary_monitor_interval"] = sapHanaOperation.Interval
-				labels["saphana_secondary_monitor_timeout"] = sapHanaOperation.Timeout
+				labels["saphana_secondary_monitor_interval"] = strings.ReplaceAll(sapHanaOperation.Interval, "s", "")
+				labels["saphana_secondary_monitor_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 			}
 		default:
 			// fall through
@@ -588,12 +588,12 @@ func pacemakerHanaTopology(labels map[string]string, sapHanaOperations []Op) {
 	for _, sapHanaOperation := range sapHanaOperations {
 		switch sapHanaOperation.Name {
 		case "monitor":
-			labels["saphanatopology_monitor_interval"] = sapHanaOperation.Interval
-			labels["saphanatopology_monitor_timeout"] = sapHanaOperation.Timeout
+			labels["saphanatopology_monitor_interval"] = strings.ReplaceAll(sapHanaOperation.Interval, "s", "")
+			labels["saphanatopology_monitor_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "start":
-			labels["saphanatopology_start_timeout"] = sapHanaOperation.Timeout
+			labels["saphanatopology_start_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "stop":
-			labels["saphanatopology_stop_timeout"] = sapHanaOperation.Timeout
+			labels["saphanatopology_stop_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		}
 	}
 }
@@ -903,8 +903,8 @@ ASCSLoop:
 		}
 		for _, op := range primitive.Operations {
 			if op.Name == "monitor" {
-				labels["ascs_monitor_interval"] = op.Interval
-				labels["ascs_monitor_timeout"] = op.Timeout
+				labels["ascs_monitor_interval"] = strings.ReplaceAll(op.Interval, "s", "")
+				labels["ascs_monitor_timeout"] = strings.ReplaceAll(op.Timeout, "s", "")
 			}
 		}
 	}
@@ -970,8 +970,8 @@ ERSLoop:
 		}
 		for _, op := range primitive.Operations {
 			if op.Name == "monitor" {
-				labels["ers_monitor_interval"] = op.Interval
-				labels["ers_monitor_timeout"] = op.Timeout
+				labels["ers_monitor_interval"] = strings.ReplaceAll(op.Interval, "s", "")
+				labels["ers_monitor_timeout"] = strings.ReplaceAll(op.Timeout, "s", "")
 			}
 		}
 	}
