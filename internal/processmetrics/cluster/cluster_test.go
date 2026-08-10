@@ -429,6 +429,75 @@ func TestCollectResourceState(t *testing.T) {
 			wantMetricCount: 4,
 		},
 		{
+			name:       "SuccessPromotedUnpromoted",
+			properties: defaultInstanceProperties,
+			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {
+				rs := []pacemaker.Resource{
+					{
+						Name: "resource1",
+						Role: "Promoted",
+						Node: "test-instance-1",
+					},
+					{
+						Name: "resource2",
+						Role: "Unpromoted",
+						Node: "test-instance-2",
+					},
+				}
+				return rs, nil
+			},
+			wantMetrics: []*mrpb.TimeSeries{
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":           "",
+							"resource":      "resource1",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-1",
+							"instance_name": "test-instance",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarted,
+								},
+							},
+						},
+					},
+				},
+				{
+					Metric: &metricpb.Metric{
+						Type: "workload.googleapis.com/sap/cluster/resources",
+						Labels: map[string]string{
+							"sid":           "",
+							"resource":      "resource2",
+							"type":          "INSTANCE_TYPE_UNDEFINED",
+							"node":          "test-instance-2",
+							"instance_name": "test-instance",
+						},
+					},
+					MetricKind: metricpb.MetricDescriptor_GAUGE,
+					Resource:   defaultResource(),
+					Points: []*mrpb.Point{
+						{
+							Value: &cpb.TypedValue{
+								Value: &cpb.TypedValue_Int64Value{
+									Int64Value: resourceStarted,
+								},
+							},
+						},
+					},
+				},
+			},
+			wantValues:      []int{resourceStarted, resourceStarted},
+			wantMetricCount: 2,
+		},
+		{
 			name:       "SuccessStoppedFailedUnknown",
 			properties: defaultInstanceProperties,
 			fakeResourceState: func(crm *pacemaker.CRMMon) ([]pacemaker.Resource, error) {

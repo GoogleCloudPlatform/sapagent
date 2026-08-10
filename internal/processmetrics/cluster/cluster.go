@@ -96,12 +96,14 @@ var (
 		"standbyOnFail": nodeStandbyOnFail,
 	}
 	resourceStates = map[string]int{
-		"Started":  resourceStarted,
-		"Master":   resourceStarted,
-		"Slave":    resourceStarted,
-		"Starting": resourceStarting,
-		"Stopped":  resourceStopped,
-		"Failed":   resourceFailed,
+		"Started":    resourceStarted,
+		"Master":     resourceStarted,
+		"Slave":      resourceStarted,
+		"Promoted":   resourceStarted,
+		"Unpromoted": resourceStarted,
+		"Starting":   resourceStarting,
+		"Stopped":    resourceStopped,
+		"Failed":     resourceFailed,
 	}
 )
 

@@ -1923,6 +1923,53 @@ func TestSetPacemakerHanaOperations(t *testing.T) {
 				"saphana_secondary_monitor_timeout":  "8",
 			},
 		},
+		{
+			name: "TestSetPacemakerHanaOperationsMatchesPromotedUnpromoted",
+			ops: []Op{
+				{
+					Name:    "dud",
+					Timeout: "0",
+				},
+				{
+					Name:    "start",
+					Timeout: "1",
+				},
+				{
+					Name:    "stop",
+					Timeout: "2",
+				},
+				{
+					Name:    "promote",
+					Timeout: "3",
+				},
+				{
+					Name:    "demote",
+					Timeout: "4",
+				},
+				{
+					Name:     "monitor",
+					Role:     "Promoted",
+					Interval: "5",
+					Timeout:  "6",
+				},
+				{
+					Name:     "monitor",
+					Role:     "Unpromoted",
+					Interval: "7",
+					Timeout:  "8",
+				},
+			},
+			want: map[string]string{
+				"saphana_start_timeout":              "1",
+				"saphana_stop_timeout":               "2",
+				"saphana_promote_timeout":            "3",
+				"saphana_demote_timeout":             "4",
+				"saphana_primary_monitor_interval":   "5",
+				"saphana_primary_monitor_timeout":    "6",
+				"saphana_secondary_monitor_interval": "7",
+				"saphana_secondary_monitor_timeout":  "8",
+			},
+		},
 	}
 
 	for _, test := range tests {

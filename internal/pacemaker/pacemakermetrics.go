@@ -336,10 +336,10 @@ func setPacemakerHanaOperations(labels map[string]string, sapHanaOperations []Op
 			labels["saphana_"+name+"_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 		case "monitor":
 			switch sapHanaOperation.Role {
-			case "Master":
+			case "Master", "Promoted":
 				labels["saphana_primary_monitor_interval"] = strings.ReplaceAll(sapHanaOperation.Interval, "s", "")
 				labels["saphana_primary_monitor_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
-			case "Slave":
+			case "Slave", "Unpromoted":
 				labels["saphana_secondary_monitor_interval"] = strings.ReplaceAll(sapHanaOperation.Interval, "s", "")
 				labels["saphana_secondary_monitor_timeout"] = strings.ReplaceAll(sapHanaOperation.Timeout, "s", "")
 			}
