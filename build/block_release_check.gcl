@@ -1,0 +1,6 @@
+// Block releases until the checks are completed.
+
+// block on all Rapid projects that include this file.
+ALL = [
+  'rapid_checks',
+]
