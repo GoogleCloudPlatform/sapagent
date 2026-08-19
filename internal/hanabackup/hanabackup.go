@@ -268,7 +268,7 @@ func RescanVolumeGroups(ctx context.Context, exec commandlineexecutor.Execute) e
 
 	result = exec(ctx, commandlineexecutor.Params{
 		Executable:  "/sbin/vgscan",
-		ArgsToSplit: "-v --mknodes",
+		ArgsToSplit: "--mknodes",
 	})
 	if result.Error != nil || result.StdErr != "" {
 		return fmt.Errorf("failure scanning volume groups using vgscan, stderr: %s, err: %s", result.StdErr, result.Error)

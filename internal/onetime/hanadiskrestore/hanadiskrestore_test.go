@@ -35,6 +35,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
+	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
@@ -2847,10 +2848,13 @@ func TestVerifySnapshotPresence(t *testing.T) {
 
 func TestReadDiskMapping(t *testing.T) {
 	tests := []struct {
-		name     string
-		restorer *Restorer
-		f        fakeDiskMapper
-		want     error
+		name             string
+		restorer         *Restorer
+		f                fakeDiskMapper
+		want             error
+		wantDataDiskName string
+		wantDataDiskZone string
+		wantDisks        []*multiDisks
 	}{
 		{
 			name: "Failure",
@@ -2881,6 +2885,20 @@ func TestReadDiskMapping(t *testing.T) {
 				DataDiskZone:     "test-zone-1",
 			},
 			want: nil,
+			wantDisks: []*multiDisks{
+				{
+					disk: &ipb.Disk{
+						Type:                  "PERSISTENT",
+						DeviceType:            "device-type",
+						DeviceName:            "disk-device-name",
+						DiskName:              "disk-name",
+						Mapping:               "disk-device-name",
+						ProvisionedIops:       100,
+						ProvisionedThroughput: 1000,
+					},
+					instanceName: "",
+				},
+			},
 		},
 		{
 			name: "DataDiskProvided",
@@ -2897,7 +2915,8 @@ func TestReadDiskMapping(t *testing.T) {
 				DataDiskName:     "test-data-disk-name-1",
 				physicalDataPath: "disk-device-name",
 			},
-			want: nil,
+			want:             nil,
+			wantDataDiskName: "test-data-disk-name-1",
 		},
 		{
 			name: "Success",
@@ -2913,7 +2932,60 @@ func TestReadDiskMapping(t *testing.T) {
 				},
 				physicalDataPath: "disk-device-name",
 			},
-			want: nil,
+			want:             nil,
+			wantDataDiskName: "disk-name",
+		},
+		{
+			name: "EmptyGetMapping",
+			f: fakeDiskMapper{
+				deviceName: []string{""},
+			},
+			restorer: &Restorer{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+				},
+				physicalDataPath: "disk-device-name",
+			},
+			want:             nil,
+			wantDataDiskName: "",
+		},
+		{
+			name: "GetMappingMismatch",
+			f: fakeDiskMapper{
+				deviceName: []string{"other-device"},
+			},
+			restorer: &Restorer{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+				},
+				physicalDataPath: "disk-device-name",
+			},
+			want:             nil,
+			wantDataDiskName: "",
+		},
+		{
+			name: "DataDiskNameMatches",
+			f: fakeDiskMapper{
+				deviceName: []string{"disk-device-name"},
+			},
+			restorer: &Restorer{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{nil},
+					ListDisksResp:   defaultListDisksResp,
+					ListDisksErr:    []error{nil},
+				},
+				physicalDataPath: "disk-device-name",
+				DataDiskName:     "disk-name",
+			},
+			want:             nil,
+			wantDataDiskName: "disk-name",
 		},
 	}
 	for _, test := range tests {
@@ -2921,6 +2993,15 @@ func TestReadDiskMapping(t *testing.T) {
 			got := test.restorer.readDiskMapping(context.Background(), defaultCloudProperties, &test.f)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("readDiskMapping()=%v, want=%v", got, test.want)
+			}
+			if test.restorer.DataDiskName != test.wantDataDiskName {
+				t.Errorf("readDiskMapping() got DataDiskName=%q, want=%q", test.restorer.DataDiskName, test.wantDataDiskName)
+			}
+			if test.restorer.DataDiskZone != test.wantDataDiskZone {
+				t.Errorf("readDiskMapping() got DataDiskZone=%q, want=%q", test.restorer.DataDiskZone, test.wantDataDiskZone)
+			}
+			if diff := cmp.Diff(test.wantDisks, test.restorer.disks, cmp.AllowUnexported(multiDisks{}), protocmp.Transform()); diff != "" {
+				t.Errorf("readDiskMapping() got disks diff (-want +got):\n%s", diff)
 			}
 		})
 	}
