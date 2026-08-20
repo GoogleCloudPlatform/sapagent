@@ -67,6 +67,8 @@ var (
 	indexServerRegex          = regexp.MustCompile(`indexserver.*[0-9]\.[0-9][0-9][0-9]\.trc`)
 	backupLogRegex            = regexp.MustCompile(`backup(.*?).log`)
 	backintLogRegex           = regexp.MustCompile(`backint(.*?).log`)
+	rteDumpRegex              = regexp.MustCompile(`.*rtedump.*\.trc$`)
+	sidRegex                  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]{2}$`)
 )
 
 // SupportBundle is the structure for the support bundle command.
@@ -504,6 +506,8 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	if s.TenantSid == "" {
 		s.TenantSid = s.Sid
 	}
+	s.TenantSid = strings.ToUpper(s.TenantSid)
+
 
 	reqFilePaths := []string{linuxConfigFilePath}
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
@@ -543,7 +547,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 			failureMsgs = append(failureMsgs, "Error while fetching systemd services")
 		}
 		reqFilePaths = append(reqFilePaths, s.nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
-		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
+		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.TenantSid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.dotFiles(ctx, hanaPaths, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.backintLogs(ctx, globalPath, s.Sid, fs)...)
@@ -873,10 +877,10 @@ func (s *SupportBundle) nameServerTracesAndBackupLogs(ctx context.Context, hanaP
 	return res
 }
 
-func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, sid string, fs filesystem.FileSystem) []string {
+func (s *SupportBundle) tenantDBNameServerTracesAndBackupLogs(ctx context.Context, hanaPaths []string, tenantSid string, fs filesystem.FileSystem) []string {
 	var res []string
 	for _, hanaPath := range hanaPaths {
-		tracePath := fmt.Sprintf("%s/trace/DB_%s", hanaPath, sid)
+		tracePath := fmt.Sprintf("%s/trace/DB_%s", hanaPath, tenantSid)
 		res = append(res, s.fetchLogPaths(ctx, tracePath, fs, matchNameServerTraceAndBackup)...)
 	}
 	return res
@@ -892,7 +896,11 @@ func (s *SupportBundle) dotFiles(ctx context.Context, hanaPaths []string, fs fil
 }
 
 func matchNameServerTraceAndBackup(name string) bool {
-	return nameServerTraceRegex.MatchString(name) || indexServerRegex.MatchString(name) || backupLogRegex.MatchString(name) || backintLogRegex.MatchString(name)
+	return nameServerTraceRegex.MatchString(name) ||
+		indexServerRegex.MatchString(name) ||
+		backupLogRegex.MatchString(name) ||
+		backintLogRegex.MatchString(name) ||
+		rteDumpRegex.MatchString(name)
 }
 
 // backintLogs returns the list of backint logs to be collected.
@@ -1717,6 +1725,12 @@ func (s *SupportBundle) validateParams() []string {
 	var errs []string
 	if s.AgentLogsOnly {
 		return errs
+	}
+	if s.Sid != "" && !sidRegex.MatchString(s.Sid) {
+		errs = append(errs, fmt.Sprintf("invalid SID %s, must be 3 alphanumeric characters starting with a letter", s.Sid))
+	}
+	if s.TenantSid != "" && !sidRegex.MatchString(s.TenantSid) {
+		errs = append(errs, fmt.Sprintf("invalid tenant SID %s, must be 3 alphanumeric characters starting with a letter", s.TenantSid))
 	}
 	if s.InstanceNums != "" {
 		s.instanceNumsAfterSplit = strings.Split(s.InstanceNums, " ")

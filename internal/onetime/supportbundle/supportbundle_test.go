@@ -679,6 +679,16 @@ func TestValidateParams(t *testing.T) {
 			sosrc: SupportBundle{Sid: "DEH", InstanceNums: "00 01", Hostname: ""},
 		},
 		{
+			name:  "InvalidSid",
+			sosrc: SupportBundle{Sid: "123", InstanceNums: "00 01", Hostname: "sample_host"},
+			want:  []string{"invalid SID 123, must be 3 alphanumeric characters starting with a letter"},
+		},
+		{
+			name:  "InvalidTenantSid",
+			sosrc: SupportBundle{Sid: "DEH", TenantSid: "123", InstanceNums: "00 01", Hostname: "sample_host"},
+			want:  []string{"invalid tenant SID 123, must be 3 alphanumeric characters starting with a letter"},
+		},
+		{
 			name: "NoTimestamp",
 			sosrc: SupportBundle{
 				Sid:          "DEH",
@@ -699,6 +709,16 @@ func TestValidateParams(t *testing.T) {
 			name: "AllLogsAndTraces",
 			sosrc: SupportBundle{
 				Sid:          "DEH",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
+			},
+			want: []string{},
+		},
+		{
+			name: "ValidTenantSid",
+			sosrc: SupportBundle{
+				Sid:          "DEH",
+				TenantSid:    "TEN",
 				InstanceNums: "00 11",
 				Hostname:     "sample_host",
 			},
@@ -726,7 +746,40 @@ func TestSOSReportHandler(t *testing.T) {
 		z              zipper.Zipper
 		wantMessage    string
 		wantExitStatus subcommands.ExitStatus
+		wantTenantSid  string
 	}{
+		{
+			name: "InvalidSid",
+			sosr: &SupportBundle{
+				Sid:          "123",
+				TenantSid:    "TEN",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
+			},
+			destFilePrefix: "samplefile",
+			ctx:            context.Background(),
+			exec:           fakeExec,
+			fs:             mockedfilesystem{},
+			z:              mockedZipper{},
+			wantMessage:    "must be 3 alphanumeric characters starting with a letter",
+			wantExitStatus: subcommands.ExitUsageError,
+		},
+		{
+			name: "InvalidTenantSid",
+			sosr: &SupportBundle{
+				Sid:          "DEH",
+				TenantSid:    "123",
+				InstanceNums: "00 11",
+				Hostname:     "sample_host",
+			},
+			destFilePrefix: "samplefile",
+			ctx:            context.Background(),
+			exec:           fakeExec,
+			fs:             mockedfilesystem{},
+			z:              mockedZipper{},
+			wantMessage:    "must be 3 alphanumeric characters starting with a letter",
+			wantExitStatus: subcommands.ExitUsageError,
+		},
 		{
 			name: "MkdirError",
 			sosr: &SupportBundle{
@@ -746,7 +799,7 @@ func TestSOSReportHandler(t *testing.T) {
 			name: "FaultInExtractingErrors",
 			sosr: &SupportBundle{
 				Sid:          "DEH",
-				TenantSid:    "TEN",
+				TenantSid:    "ten",
 				InstanceNums: "00 11",
 				Hostname:     "sample_host",
 			},
@@ -757,6 +810,7 @@ func TestSOSReportHandler(t *testing.T) {
 			z:              mockedZipper{},
 			wantMessage:    "Error while extracting system DB errors\nError while extracting tenant DB errors\nError while extracting journalctl logs\nError while copying var log messages to bundle\nError while extracting HANA version\nError while fetching package info\nError while fetching OS processes\nError while fetching systemd services\nError while copying file: /etc/google-cloud-sap-agent/configuration.json\nError while copying file: /usr/sap/DEH/SYS/global/hdb/custom/config/global.ini",
 			wantExitStatus: subcommands.ExitFailure,
+			wantTenantSid:  "TEN",
 		},
 		{
 			name: "Success",
@@ -815,6 +869,9 @@ func TestSOSReportHandler(t *testing.T) {
 			}
 			if exitStatus != test.wantExitStatus {
 				t.Errorf("sosReportHandler() = %v; want %v", exitStatus, test.wantExitStatus)
+			}
+			if test.wantTenantSid != "" && test.sosr.TenantSid != test.wantTenantSid {
+				t.Errorf("sosReportHandler() TenantSid = %v; want %v", test.sosr.TenantSid, test.wantTenantSid)
 			}
 		})
 	}
@@ -1323,6 +1380,16 @@ func TestNameservertraceAndBackupLog(t *testing.T) {
 			},
 			want: []string{path.Join("success/trace", "backup.log")},
 		},
+		{
+			name:     "SuccessRteDump",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc", isDir: false},
+			},
+			},
+			want: []string{path.Join("success/trace", "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc")},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1370,6 +1437,26 @@ func TestTenantDBNameservertraceAndBackupLog(t *testing.T) {
 			},
 			},
 			want: []string{path.Join("success/trace/DB_DEH/", "backup.log")},
+		},
+		{
+			name:     "SuccessRteDump",
+			hanaPath: []string{"success"},
+			sid:      "DEH",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc", isDir: false},
+			},
+			},
+			want: []string{path.Join("success/trace/DB_DEH/", "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc")},
+		},
+		{
+			name:     "SuccessRteDumpDifferentTenantSid",
+			hanaPath: []string{"success"},
+			sid:      "TEN",
+			fu: mockedfilesystem{readDirContent: []fs.FileInfo{
+				mockedFileInfo{name: "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc", isDir: false},
+			},
+			},
+			want: []string{path.Join("success/trace/DB_TEN/", "indexserver_sparta.30003.rtedump.20231010-120000.1234.oom.trc")},
 		},
 	}
 	for _, test := range tests {
