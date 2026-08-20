@@ -1315,3 +1315,70 @@ func TestUnmount(t *testing.T) {
 		})
 	}
 }
+
+func TestDiskMatches(t *testing.T) {
+	tests := []struct {
+		name             string
+		physicalDataPath string
+		mapping          string
+		want             bool
+	}{
+		{
+			name:             "EmptyPhysicalDataPath",
+			physicalDataPath: "",
+			mapping:          "sdb",
+			want:             false,
+		},
+		{
+			name:             "EmptyMapping",
+			physicalDataPath: "/dev/sdb",
+			mapping:          "",
+			want:             false,
+		},
+		{
+			name:             "ExactMatchSingleDisk",
+			physicalDataPath: "/dev/sdb",
+			mapping:          "sdb",
+			want:             true,
+		},
+		{
+			name:             "ExactMatchWithDevPrefix",
+			physicalDataPath: "/dev/sdb",
+			mapping:          "/dev/sdb",
+			want:             true,
+		},
+		{
+			name:             "MultiDiskMatch",
+			physicalDataPath: "/dev/nvme0n2\n/dev/nvme0n3\n/dev/nvme0n4",
+			mapping:          "nvme0n3",
+			want:             true,
+		},
+		{
+			name:             "MultiDiskWhitespaceSeparated",
+			physicalDataPath: "/dev/nvme0n2 /dev/nvme0n3 /dev/nvme0n4",
+			mapping:          "nvme0n4",
+			want:             true,
+		},
+		{
+			name:             "AvoidPrefixSubstringCollisionBootDisk",
+			physicalDataPath: "/dev/nvme0n10\n/dev/nvme0n11\n/dev/nvme0n12",
+			mapping:          "nvme0n1",
+			want:             false,
+		},
+		{
+			name:             "NoMatchDifferentDisk",
+			physicalDataPath: "/dev/nvme0n2\n/dev/nvme0n3",
+			mapping:          "nvme0n4",
+			want:             false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DiskMatches(tc.physicalDataPath, tc.mapping)
+			if got != tc.want {
+				t.Errorf("DiskMatches(%q, %q) = %v, want %v", tc.physicalDataPath, tc.mapping, got, tc.want)
+			}
+		})
+	}
+}

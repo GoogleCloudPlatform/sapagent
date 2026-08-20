@@ -183,7 +183,7 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 
 // CreateSG creates a snapshot group.
 func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) error {
-	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/global/snapshotGroups", project)
 
 	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
@@ -236,7 +236,7 @@ func (s *SGService) CreateSG(ctx context.Context, project string, data []byte) e
 
 // BulkInsertFromSG creates disks from a snapshot group.
 func (s *SGService) BulkInsertFromSG(ctx context.Context, project, zone string, data []byte) (*compute.Operation, error) {
-	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks/bulkInsert", project, zone)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/disks/bulkInsert", project, zone)
 
 	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)
 	bo := backoff.WithContext(backoff.WithMaxRetries(constantBackoff, s.maxRetries), ctx)
@@ -289,7 +289,7 @@ func (s *SGService) BulkInsertFromSG(ctx context.Context, project, zone string, 
 
 // GetSG gets a snapshot group.
 func (s *SGService) GetSG(ctx context.Context, project string, sgName string) (*SGItem, error) {
-	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/global/snapshotGroups/%s", project, sgName)
 
 	var bodyBytes []byte
 	var err error
@@ -311,7 +311,7 @@ func (s *SGService) GetSG(ctx context.Context, project string, sgName string) (*
 // ListSGs lists snapshot groups.
 func (s *SGService) ListSGs(ctx context.Context, project string) ([]SGItem, error) {
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups", project)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/global/snapshotGroups", project)
 	}
 
 	var sgs []SGItem
@@ -434,8 +434,8 @@ func (s *SGService) WaitForSGCreationWithRetry(ctx context.Context, project, sgN
 
 // ListSnapshotsFromSG lists snapshots for a given snapshot group.
 func (s *SGService) ListSnapshotsFromSG(ctx context.Context, project, sgName string) ([]SnapshotItem, error) {
-	filterValue := fmt.Sprintf(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s"`, project, sgName)
-	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshots?filter=%s", project, url.QueryEscape(filterValue))
+	filterValue := fmt.Sprintf(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/%s/global/snapshotGroups/%s"`, project, sgName)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/global/snapshots?filter=%s", project, url.QueryEscape(filterValue))
 
 	var snaps []SnapshotItem
 	var nextPageToken string
@@ -472,8 +472,8 @@ func (s *SGService) ListSnapshotsFromSG(ctx context.Context, project, sgName str
 
 // ListDisksFromSnapshot lists disks restored from a given standard snapshot.
 func (s *SGService) ListDisksFromSnapshot(ctx context.Context, project, zone, snapshotName string) ([]DiskItem, error) {
-	filterValue := fmt.Sprintf(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/%s/global/snapshots/%s"`, project, snapshotName)
-	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/zones/%s/disks?filter=%s", project, zone, url.QueryEscape(filterValue))
+	filterValue := fmt.Sprintf(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/%s/global/snapshots/%s"`, project, snapshotName)
+	s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/zones/%s/disks?filter=%s", project, zone, url.QueryEscape(filterValue))
 
 	var disks []DiskItem
 	var nextPageToken string
@@ -542,7 +542,7 @@ func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error 
 		return err
 	}
 	if s.baseURL == "" {
-		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", project, sgName)
+		s.baseURL = fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s/global/snapshotGroups/%s", project, sgName)
 	}
 
 	constantBackoff := backoff.NewConstantBackOff(s.retryInterval)

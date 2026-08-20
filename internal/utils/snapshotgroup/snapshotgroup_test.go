@@ -226,7 +226,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
 			},
 			expectedOperation: &compute.Operation{
 				Name:   "operation-123",
@@ -238,7 +238,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -247,7 +247,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to bulk insert"}]}}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to bulk insert"}]}}`}}},
 			},
 			expectedError: true,
 		},
@@ -256,7 +256,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
 			},
 			expectedError: true,
 		},
@@ -265,7 +265,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}}`}}},
 			},
 			expectedError: true,
 		},
@@ -274,7 +274,7 @@ func TestBulkInsertFromSG(t *testing.T) {
 			project: "test-project",
 			zone:    "test-zone",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `invalid_json`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks/bulkInsert": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -324,7 +324,7 @@ func TestWaitForSGUploadCompletion(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
 			},
 		},
 		{
@@ -332,7 +332,7 @@ func TestWaitForSGUploadCompletion(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
 			},
 			expectedError: true,
 		},
@@ -341,7 +341,7 @@ func TestWaitForSGUploadCompletion(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -387,7 +387,7 @@ func TestGetSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg"}`}}},
 			},
 			expectedSGItem: &SGItem{
 				Name: "test-sg",
@@ -398,7 +398,7 @@ func TestGetSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -407,7 +407,7 @@ func TestGetSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `invalid_json`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -455,7 +455,7 @@ func TestListSGs(t *testing.T) {
 			name:    "success",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"items":[{"name":"test-sg1"},{"name":"test-sg2"}]}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"items":[{"name":"test-sg1"},{"name":"test-sg2"}]}`}}},
 			},
 			expectedSGItems: []SGItem{
 				{Name: "test-sg1"},
@@ -467,8 +467,8 @@ func TestListSGs(t *testing.T) {
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups":                           {{statusCode: 200, body: `{"items":[{"name":"test-sg1"}], "nextPageToken":"next-page-token"}`}},
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {{statusCode: 200, body: `{"items":[{"name":"test-sg2"}]}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups":                           {{statusCode: 200, body: `{"items":[{"name":"test-sg1"}], "nextPageToken":"next-page-token"}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups?pageToken=next-page-token": {{statusCode: 200, body: `{"items":[{"name":"test-sg2"}]}`}},
 				},
 			},
 			expectedSGItems: []SGItem{
@@ -480,7 +480,7 @@ func TestListSGs(t *testing.T) {
 			name:    "http_error",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -488,7 +488,7 @@ func TestListSGs(t *testing.T) {
 			name:    "unmarshal_error",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `invalid_json`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -536,19 +536,19 @@ func TestCreateSG(t *testing.T) {
 			name:    "success",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "status": "DONE"}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "status": "DONE"}`}}},
 			},
 			expectedError:   false,
-			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+			expectedBaseURL: "https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups",
 		},
 		{
 			name:    "error_http",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError:   true,
-			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+			expectedBaseURL: "https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups",
 		},
 		{
 			name:    "error_unmarshal_operation",
@@ -557,25 +557,25 @@ func TestCreateSG(t *testing.T) {
 				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError:   true,
-			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+			expectedBaseURL: "https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups",
 		},
 		{
 			name:    "error_operation_error",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to create"}]}}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed to create"}]}}`}}},
 			},
 			expectedError:   true,
-			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+			expectedBaseURL: "https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups",
 		},
 		{
 			name:    "error_operation_error_http_code",
 			project: "test-project",
 			httpResponses: map[string]map[string][]httpResponse{
-				"POST": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
+				"POST": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": []}, "httpErrorStatusCode": 400, "httpErrorMessage": "bad request"}`}}},
 			},
 			expectedError:   true,
-			expectedBaseURL: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups",
+			expectedBaseURL: "https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups",
 		},
 	}
 
@@ -617,7 +617,7 @@ func TestListSnapshotsFromSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"},{"name":"test-snapshot2"}]}`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"},{"name":"test-snapshot2"}]}`}}},
 			},
 			expectedSnapshotItems: []SnapshotItem{
 				{Name: "test-snapshot1"},
@@ -630,8 +630,8 @@ func TestListSnapshotsFromSG(t *testing.T) {
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"}], "nextPageToken":"next-page-token"}`}},
-					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s&pageToken=next-page-token", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot2"}]}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"}], "nextPageToken":"next-page-token"}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshots?filter=%s&pageToken=next-page-token", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `{"items":[{"name":"test-snapshot2"}]}`}},
 				},
 			},
 			expectedSnapshotItems: []SnapshotItem{
@@ -644,7 +644,7 @@ func TestListSnapshotsFromSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -653,7 +653,7 @@ func TestListSnapshotsFromSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `invalid_json`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshots?filter=%s", url.QueryEscape(`snapshotGroupName="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg"`)): {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -705,7 +705,7 @@ func TestListDisksFromSnapshot(t *testing.T) {
 			zone:         "test-zone",
 			snapshotName: "test-snapshot",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk1"},{"name":"test-disk2"}]}`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk1"},{"name":"test-disk2"}]}`}}},
 			},
 			expectedDiskItems: []DiskItem{
 				{Name: "test-disk1"},
@@ -719,8 +719,8 @@ func TestListDisksFromSnapshot(t *testing.T) {
 			snapshotName: "test-snapshot",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-disk1"}], "nextPageToken":"next-page-token"}`}},
-					fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s&pageToken=next-page-token", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk2"}]}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot"`)):                           {{statusCode: 200, body: `{"items":[{"name":"test-disk1"}], "nextPageToken":"next-page-token"}`}},
+					fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks?filter=%s&pageToken=next-page-token", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `{"items":[{"name":"test-disk2"}]}`}},
 				},
 			},
 			expectedDiskItems: []DiskItem{
@@ -734,7 +734,7 @@ func TestListDisksFromSnapshot(t *testing.T) {
 			zone:         "test-zone",
 			snapshotName: "test-snapshot",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -744,7 +744,7 @@ func TestListDisksFromSnapshot(t *testing.T) {
 			zone:         "test-zone",
 			snapshotName: "test-snapshot",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/alpha/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/alpha/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `invalid_json`}}},
+				"GET": {fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/disks?filter=%s", url.QueryEscape(`sourceSnapshot="https://www.googleapis.com/compute/v1/projects/test-project/global/snapshots/test-snapshot"`)): {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
@@ -793,7 +793,7 @@ func TestWaitForSGCreation(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
 			},
 			expectedError: false,
 		},
@@ -802,7 +802,7 @@ func TestWaitForSGCreation(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`}}},
 			},
 			expectedError: true,
 		},
@@ -811,7 +811,7 @@ func TestWaitForSGCreation(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -847,7 +847,7 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {
 					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
 					{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`},
 				}},
@@ -858,7 +858,7 @@ func TestWaitForSGCreationWithRetry(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {
 					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
 					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
 					{statusCode: 200, body: `{"name":"test-sg", "status":"CREATING"}`},
@@ -897,41 +897,41 @@ func TestSgExists(t *testing.T) {
 	}{
 		{
 			name:   "Success",
-			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"DONE"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"DONE"}`}}},
 			},
 			expectedError: false,
 		},
 		{
 			name:   "InProgress",
-			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "status":"RUNNING"}`}}},
 			},
 			expectedError: true,
 		},
 		{
 			name:   "GetResponseError",
-			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
 		{
 			name:   "UnmarshalError",
-			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `invalid_json`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `invalid_json`}}},
 			},
 			expectedError: true,
 		},
 		{
 			name:   "OperationError",
-			opLink: "https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed"}]}}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "error": {"errors": [{"message": "failed"}]}}`}}},
 			},
 			expectedError: true,
 		},
@@ -967,10 +967,10 @@ func TestDeleteSG(t *testing.T) {
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"DONE"}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"DONE"}`}},
 				},
-				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/op-123"}`}}},
 			},
 		},
 		{
@@ -978,7 +978,7 @@ func TestDeleteSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"UPLOADING"}`}}},
 			},
 			expectedError: true,
 		},
@@ -987,8 +987,8 @@ func TestDeleteSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET":    {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
-				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
+				"GET":    {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 500, body: `{"error":{"code":500,"message":"server error"}}`}}},
 			},
 			expectedError: true,
 		},
@@ -997,8 +997,8 @@ func TestDeleteSG(t *testing.T) {
 			project: "test-project",
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
-				"GET":    {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
-				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "error": {"errors": [{"message": "failed"}]}}`}}},
+				"GET":    {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "error": {"errors": [{"message": "failed"}]}}`}}},
 			},
 			expectedError: true,
 		},
@@ -1008,10 +1008,10 @@ func TestDeleteSG(t *testing.T) {
 			sgName:  "test-sg",
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET": {
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
-					"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING"}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}},
+					"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/op-123":      {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING"}`}},
 				},
-				"DELETE": {"https://compute.googleapis.com/compute/alpha/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/alpha/projects/test-project/global/operations/op-123"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "status":"RUNNING", "selfLink":"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/op-123"}`}}},
 			},
 			expectedError: true,
 		},

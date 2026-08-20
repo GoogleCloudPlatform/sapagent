@@ -706,7 +706,7 @@ func (s *Snapshot) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties)
 
 	log.CtxLogger(ctx).Debugw("Reading disk mapping", "ip", s.instanceProperties)
 	for _, d := range s.instanceProperties.GetDisks() {
-		if strings.Contains(s.physicalDataPath, d.GetMapping()) {
+		if hanabackup.DiskMatches(s.physicalDataPath, d.GetMapping()) {
 			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", s.physicalDataPath, "diskName", d.GetDiskName())
 			s.Disk = d.GetDiskName()
 			s.DiskZone = cp.GetZone()

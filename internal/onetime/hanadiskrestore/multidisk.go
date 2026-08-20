@@ -78,7 +78,7 @@ func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context, exec commandl
 
 func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
 	// Create mew disks using bulk insert api from snapshot group
-	sourceSnapshotGroupURI := fmt.Sprintf("https://www.googleapis.com/compute/alpha/projects/%s/global/snapshotGroups/%s", r.Project, r.GroupSnapshot)
+	sourceSnapshotGroupURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/snapshotGroups/%s", r.Project, r.GroupSnapshot)
 	parts := strings.Split(r.NewDiskType, "/")
 	diskTypeName := parts[len(parts)-1]
 	diskTypeURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, diskTypeName)

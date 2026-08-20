@@ -1229,7 +1229,7 @@ func (r *Restorer) readDiskMapping(ctx context.Context, cp *ipb.CloudProperties,
 
 	log.CtxLogger(ctx).Debugw("Reading disk mapping", "ip", instanceProperties)
 	for _, d := range instanceProperties.GetDisks() {
-		if d.GetMapping() != "" && strings.Contains(r.physicalDataPath, d.GetMapping()) {
+		if hanabackup.DiskMatches(r.physicalDataPath, d.GetMapping()) {
 			log.CtxLogger(ctx).Debugw("Found disk mapping", "physicalPath", fmt.Sprintf("/dev/%s", d.GetMapping()), "diskName", d.GetDiskName())
 			if r.isGroupSnapshot {
 				r.disks = append(r.disks, &multiDisks{

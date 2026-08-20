@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -253,6 +254,20 @@ func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec command
 	log.CtxLogger(ctx).Debugw("ReadDataDirMountPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	return strings.TrimSpace(result.StdOut), nil
+}
+
+// DiskMatches checks if a given disk device mapping matches any physical volume in physicalDataPath.
+func DiskMatches(physicalDataPath, mapping string) bool {
+	cleanMapping := strings.TrimSpace(filepath.Base(mapping))
+	if cleanMapping == "" || cleanMapping == "." || cleanMapping == "/" {
+		return false
+	}
+	for _, devName := range strings.Fields(physicalDataPath) {
+		if filepath.Base(strings.TrimSpace(devName)) == cleanMapping {
+			return true
+		}
+	}
+	return false
 }
 
 // RescanVolumeGroups rescans all volume groups and mounts them.
