@@ -44,9 +44,12 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/sapdiscovery"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/iam"
@@ -98,6 +101,8 @@ var (
 )
 
 type (
+	appsDiscoveryFunc func(ctx context.Context, sapSystemInterface system.SapSystemDiscoveryInterface) *sapb.SAPInstances
+
 	// IAMService is an interface for the IAM service.
 	IAMService interface {
 		CheckIAMPermissionsOnBucket(ctx context.Context, bucketName string, permissions []string) ([]string, error)
@@ -142,6 +147,7 @@ type Status struct {
 	fetchParameter    func(ctx context.Context, client *parametermanager.Client, projectID, location, parameterName, parameterVersion string) (*parametermanager.Resource, error)
 	httpGet           httpGetter
 	createDBHandle    databaseconnector.DBHandleFunc
+	appsDiscovery     appsDiscoveryFunc
 	stat              statFunc
 	readDir           readDirFunc
 }
@@ -213,6 +219,7 @@ func (s *Status) Init(ctx context.Context) error {
 	s.fetchParameter = parametermanager.FetchParameter
 	s.httpGet = http.Get
 	s.createDBHandle = databaseconnector.CreateDBHandle
+	s.appsDiscovery = sapdiscovery.SAPApplications
 	if s.Feature == "" {
 		s.Feature = allFeatures
 	}
@@ -621,6 +628,10 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 			},
 		}
 		if _, err := s.createDBHandle(ctx, dbp); err != nil {
+			if isLocalHost(i.GetHost(), s.CloudProps.GetInstanceName()) && s.isSecondaryHANA(ctx, i.GetSid()) {
+				log.CtxLogger(ctx).Infow("HANA instance is secondary and in passive mode; connection failure is expected", "name", i.GetName(), "host", i.GetHost(), "error", err.Error())
+				continue
+			}
 			log.CtxLogger(ctx).Errorw("Error connecting to database", "name", i.GetName(), "error", err.Error())
 			failedInstances = append(failedInstances, i.GetName())
 			continue
@@ -634,6 +645,29 @@ func (s *Status) hanaMonitoringMetricsStatus(ctx context.Context, config *cpb.Co
 	}
 	status.FullyFunctional = spb.State_SUCCESS_STATE
 	return status
+}
+
+func isLocalHost(host, instanceName string) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "local" || (instanceName != "" && (h == strings.ToLower(instanceName) || strings.HasPrefix(h, strings.ToLower(instanceName)+".")))
+}
+
+func (s *Status) isSecondaryHANA(ctx context.Context, sid string) bool {
+	if s.appsDiscovery == nil {
+		return false
+	}
+	sapApps := s.appsDiscovery(ctx, nil)
+	if sapApps == nil {
+		return false
+	}
+	for _, app := range sapApps.GetInstances() {
+		if app.GetType() == sapb.InstanceType_HANA && (sid == "" || strings.EqualFold(app.GetSapsid(), sid)) {
+			if app.GetSite() == sapb.InstanceSite_HANA_SECONDARY {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Status) systemDiscoveryStatus(ctx context.Context, config *cpb.Configuration) *spb.ServiceStatus {

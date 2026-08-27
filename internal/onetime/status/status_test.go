@@ -43,6 +43,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/databaseconnector"
 	"github.com/GoogleCloudPlatform/sapagent/internal/iam"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/fake"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/iam"
@@ -55,6 +56,7 @@ import (
 	wpb "google.golang.org/protobuf/types/known/wrapperspb"
 	cpb "github.com/GoogleCloudPlatform/sapagent/protos/configuration"
 	iipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	sapb "github.com/GoogleCloudPlatform/sapagent/protos/sapapp"
 	spb "github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos/status"
 )
 
@@ -69,6 +71,28 @@ var (
 	equateSpaces = cmp.Transformer("EquateSpaces", func(s string) string {
 		return strings.ReplaceAll(s, "\u00a0", " ")
 	})
+	fakeSecondaryDiscovery = func(ctx context.Context, s system.SapSystemDiscoveryInterface) *sapb.SAPInstances {
+		return &sapb.SAPInstances{
+			Instances: []*sapb.SAPInstance{
+				{
+					Type:   sapb.InstanceType_HANA,
+					Sapsid: "HDB",
+					Site:   sapb.InstanceSite_HANA_SECONDARY,
+				},
+			},
+		}
+	}
+	fakePrimaryDiscovery = func(ctx context.Context, s system.SapSystemDiscoveryInterface) *sapb.SAPInstances {
+		return &sapb.SAPInstances{
+			Instances: []*sapb.SAPInstance{
+				{
+					Type:   sapb.InstanceType_HANA,
+					Sapsid: "HDB",
+					Site:   sapb.InstanceSite_HANA_PRIMARY,
+				},
+			},
+		}
+	}
 )
 
 type mockArtifactRegistryClient struct {
@@ -1444,6 +1468,179 @@ func TestHanaMonitoringMetricsStatus(t *testing.T) {
 					},
 				},
 				ErrorMessage: "Secret Manager permissions not granted for some instances",
+			},
+		},
+		{
+			name: "HanaMonitoringSecondaryPassiveLocal_Pass",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "localhost",
+								Port: "1234",
+								Sid:  "HDB",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorFailure,
+				appsDiscovery:  fakeSecondaryDiscovery,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_SUCCESS_STATE,
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+			},
+		},
+		{
+			name: "HanaMonitoringSecondaryPassiveRemote_Fail",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "remote-vip",
+								Port: "1234",
+								Sid:  "HDB",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorFailure,
+				appsDiscovery:  fakeSecondaryDiscovery,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to connect to HANA instances: instance1",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
+			},
+		},
+		{
+			name: "HanaMonitoringPrimaryFailure_Fail",
+			s: Status{
+				iamService: &iam.IAM{},
+				permissionsStatus: func(ctx context.Context, iamService permissions.IAMService, serviceName string, r *permissions.ResourceDetails) (map[string]bool, error) {
+					return map[string]bool{
+						"monitoring.timeSeries.create": true,
+					}, nil
+				},
+				config: &cpb.Configuration{
+					HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+						Enabled:               true,
+						ConnectionTimeout:     &dpb.Duration{Seconds: 120},
+						ExecutionThreads:      10,
+						MaxConnectRetries:     wpb.Int32(1),
+						QueryTimeoutSec:       300,
+						SampleIntervalSec:     300,
+						SendQueryResponseTime: false,
+						HanaInstances: []*cpb.HANAInstance{
+							{
+								Name: "instance1",
+								User: "user1",
+								Host: "localhost",
+								Port: "1234",
+								Sid:  "HDB",
+							},
+						},
+					},
+				},
+				gceService: &fake.TestGCE{
+					GetSecretResp: []string{"password1"},
+					GetSecretErr:  []error{nil},
+				},
+				createDBHandle: dbConnectorFailure,
+				appsDiscovery:  fakePrimaryDiscovery,
+			},
+			want: &spb.ServiceStatus{
+				Name:            "HANA Monitoring Metrics",
+				State:           spb.State_SUCCESS_STATE,
+				FullyFunctional: spb.State_FAILURE_STATE,
+				ErrorMessage:    "Failed to connect to HANA instances: instance1",
+				ConfigValues: []*spb.ConfigValue{
+					{Name: "connection_timeout", Value: "120", IsDefault: true},
+					{Name: "enabled", Value: "true", IsDefault: false},
+					{Name: "execution_threads", Value: "10", IsDefault: true},
+					{Name: "max_connect_retries", Value: "1", IsDefault: true},
+					{Name: "query_timeout_sec", Value: "300", IsDefault: true},
+					{Name: "sample_interval_sec", Value: "300", IsDefault: true},
+					{Name: "send_query_response_time", Value: "false", IsDefault: true},
+				},
+				IamPermissions: []*spb.IAMPermission{
+					{
+						Name:    "monitoring.timeSeries.create",
+						Granted: spb.State_SUCCESS_STATE,
+					},
+				},
 			},
 		},
 	}
@@ -2919,6 +3116,120 @@ func TestParameterManagerStatus(t *testing.T) {
 			got := tc.s.parameterManagerStatus(t.Context(), tc.config)
 			if diff := cmp.Diff(tc.want, got, protocmp.Transform(), equateSpaces); diff != "" {
 				t.Errorf("parameterManagerStatus() returned unexpected diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestIsLocalHost(t *testing.T) {
+	tests := []struct {
+		name         string
+		host         string
+		instanceName string
+		want         bool
+	}{
+		{
+			name: "Localhost",
+			host: "localhost",
+			want: true,
+		},
+		{
+			name: "IPv4Loopback",
+			host: "127.0.0.1",
+			want: true,
+		},
+		{
+			name: "IPv6Loopback",
+			host: "::1",
+			want: true,
+		},
+		{
+			name: "Local",
+			host: "local",
+			want: true,
+		},
+		{
+			name:         "InstanceNameMatch",
+			host:         "sap-whpdb01",
+			instanceName: "sap-whpdb01",
+			want:         true,
+		},
+		{
+			name:         "InstanceNameFQDN",
+			host:         "sap-whpdb01.c.project.internal",
+			instanceName: "sap-whpdb01",
+			want:         true,
+		},
+		{
+			name:         "RemoteHost",
+			host:         "sap-whpdb00",
+			instanceName: "sap-whpdb01",
+			want:         false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isLocalHost(tc.host, tc.instanceName)
+			if got != tc.want {
+				t.Errorf("isLocalHost(%q, %q) = %v, want %v", tc.host, tc.instanceName, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsSecondaryHANA(t *testing.T) {
+	tests := []struct {
+		name string
+		s    Status
+		sid  string
+		want bool
+	}{
+		{
+			name: "NilAppsDiscovery",
+			s:    Status{},
+			sid:  "HDB",
+			want: false,
+		},
+		{
+			name: "SecondaryHANA",
+			s: Status{
+				appsDiscovery: fakeSecondaryDiscovery,
+			},
+			sid:  "HDB",
+			want: true,
+		},
+		{
+			name: "SecondaryHANA_EmptySID",
+			s: Status{
+				appsDiscovery: fakeSecondaryDiscovery,
+			},
+			sid:  "",
+			want: true,
+		},
+		{
+			name: "PrimaryHANA",
+			s: Status{
+				appsDiscovery: fakePrimaryDiscovery,
+			},
+			sid:  "HDB",
+			want: false,
+		},
+		{
+			name: "NonMatchingSID",
+			s: Status{
+				appsDiscovery: fakeSecondaryDiscovery,
+			},
+			sid:  "OTHER",
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.s.isSecondaryHANA(context.Background(), tc.sid)
+			if got != tc.want {
+				t.Errorf("isSecondaryHANA() = %v, want %v", got, tc.want)
 			}
 		})
 	}

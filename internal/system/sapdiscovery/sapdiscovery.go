@@ -238,12 +238,14 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 		return 0, 0, nil, nil
 	}
 	site := match[1]
-	systems := sapSystemInterface.GetSAPSystems()
 	var sys *spb.SapDiscovery
-	for _, s := range systems {
-		if s.GetDatabaseLayer().GetSid() == sid {
-			sys = s
-			break
+	if sapSystemInterface != nil {
+		systems := sapSystemInterface.GetSAPSystems()
+		for _, s := range systems {
+			if s.GetDatabaseLayer().GetSid() == sid {
+				sys = s
+				break
+			}
 		}
 	}
 
@@ -268,14 +270,15 @@ func readReplicationConfig(ctx context.Context, user, sid, instID string, exec c
 	log.CtxLogger(ctx).Debugw("Separating sites into tiers")
 	lines := strings.Split(result.StdOut, "\n")
 	inSiteMappings := false
-	siteStack := []*sapb.HANAReplicaSite{}
+	var siteStack []*sapb.HANAReplicaSite
 	currentDepth := -1
 	var primarySite *sapb.HANAReplicaSite
 	for _, line := range lines {
 		if strings.Contains(line, "Site Mappings") {
 			inSiteMappings = true
 			continue
-		} else if !inSiteMappings {
+		}
+		if !inSiteMappings {
 			continue
 		}
 
