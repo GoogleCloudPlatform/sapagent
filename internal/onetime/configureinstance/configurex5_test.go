@@ -19,10 +19,12 @@ package configureinstance
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 )
 
@@ -893,4 +895,52 @@ func TestGrubBootLoaderX5(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDescribeX5(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("SLES_CSV", func(t *testing.T) {
+		c := ConfigureInstance{
+			Format: "csv",
+			ReadFile: func(path string) ([]byte, error) {
+				if path == "/etc/os-release" {
+					return []byte(`NAME="SLES"`), nil
+				}
+				return []byte("DefaultTimeoutStartSec=300s\n"), nil
+			},
+			ExecuteFunc: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "active"}
+			},
+		}
+		status, got := c.describeX5(ctx)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("describeX5(SLES_CSV) status = %v, want ExitSuccess", status)
+		}
+		if !strings.Contains(got, "Series,Category") || !strings.Contains(got, "SaptuneProfile") {
+			t.Errorf("describeX5(SLES_CSV) output missing expected headers/categories, got: %q", got)
+		}
+	})
+
+	t.Run("RHEL_JSON", func(t *testing.T) {
+		c := ConfigureInstance{
+			Format: "json",
+			ReadFile: func(path string) ([]byte, error) {
+				if path == "/etc/os-release" {
+					return []byte(`NAME="Red Hat Enterprise Linux"`), nil
+				}
+				return []byte("DefaultTimeoutStartSec=300s\n"), nil
+			},
+			ExecuteFunc: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "active"}
+			},
+		}
+		status, got := c.describeX5(ctx)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("describeX5(RHEL_JSON) status = %v, want ExitSuccess", status)
+		}
+		if !strings.Contains(got, `"series": "X5"`) || !strings.Contains(got, `"TunedProfile"`) {
+			t.Errorf("describeX5(RHEL_JSON) output missing expected json fields, got: %q", got)
+		}
+	})
 }

@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
@@ -45,6 +46,8 @@ var (
 	// TODO: Verify if any specific X5 core arguments need to be appended or removed from CMDLINE.
 	grubLinuxDefaultX5 = `GRUB_CMDLINE_LINUX_DEFAULT="tsc=nowatchdog add_efi_memmap udev.children-max=512 nmi_watchdog=0 watchdog_thresh=60 workqueue.watchdog_thresh=120 mce=2 console=ttyS0,115200 earlyprintk=ttyS0,115200 uv_nmi.action=kdump bau=0 pci=nobar transparent_hugepage=never numa_balancing=disable clocksource=tsc"`
 )
+
+/* LINT.IfChange(x5_apply) */
 
 // configureX5 checks and applies OS settings on X5 systems.
 // Returns true if a reboot is required.
@@ -393,3 +396,167 @@ func (c *ConfigureInstance) tunedReapplyX5(ctx context.Context, tunedReapply boo
 	}
 	return nil
 }
+
+/* LINT.ThenChange(:x5_describe) */
+
+/* LINT.IfChange(x5_describe) */
+// describeX5 collects and outputs configuration rules for X5 machines.
+func (c *ConfigureInstance) describeX5(ctx context.Context) (subcommands.ExitStatus, string) {
+	var rules []ConfigRule
+
+	// Systemd rules
+	for _, line := range systemConfX5 {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		exp := strings.TrimSpace(parts[1])
+		curr := c.readCurrentLineValue("/etc/systemd/system.conf", key)
+		rules = append(rules, ConfigRule{
+			Category:       "Systemd",
+			TargetFile:     "/etc/systemd/system.conf",
+			ParameterKey:   key,
+			ExpectedValue:  exp,
+			CurrentValue:   curr,
+			RebootRequired: true,
+		})
+	}
+	currUserTasks := c.readCurrentLineValue("/etc/systemd/logind.conf", "UserTasksMax")
+	rules = append(rules, ConfigRule{
+		Category:       "Systemd",
+		TargetFile:     "/etc/systemd/logind.conf",
+		ParameterKey:   "UserTasksMax",
+		ExpectedValue:  "",
+		CurrentValue:   currUserTasks,
+		RebootRequired: true,
+	})
+
+	// Modprobe rules
+	for _, line := range strings.Split(string(modprobeConfX5), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		curr := c.readCurrentLineValue("/etc/modprobe.d/google-x5.conf", line)
+		rules = append(rules, ConfigRule{
+			Category:       "Modprobe",
+			TargetFile:     "/etc/modprobe.d/google-x5.conf",
+			ParameterKey:   line,
+			ExpectedValue:  line,
+			CurrentValue:   curr,
+			RebootRequired: true,
+		})
+	}
+
+	// Grub rules
+	currGrub := c.readCurrentLineValue("/etc/default/grub", "GRUB_CMDLINE_LINUX_DEFAULT")
+	rules = append(rules, ConfigRule{
+		Category:       "Grub",
+		TargetFile:     "/etc/default/grub",
+		ParameterKey:   "GRUB_CMDLINE_LINUX_DEFAULT",
+		ExpectedValue:  grubLinuxDefaultX5,
+		CurrentValue:   currGrub,
+		RebootRequired: true,
+	})
+
+	// Sysctl rules from embedded google-x5.conf
+	for _, line := range strings.Split(string(googleX5Conf), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			curr := c.readCurrentLineValue("/etc/sysctl.d/google-x5.conf", key)
+			rules = append(rules, ConfigRule{
+				Category:       "Sysctl",
+				TargetFile:     "/etc/sysctl.d/google-x5.conf",
+				ParameterKey:   key,
+				ExpectedValue:  val,
+				CurrentValue:   curr,
+				RebootRequired: false,
+			})
+		}
+	}
+
+	// Services & OS-specific rules (SLES / RHEL)
+	osRelease := c.readCurrentFileContent("/etc/os-release")
+	if strings.Contains(osRelease, "SLES") {
+		sapconfStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState sapconf", Timeout: c.TimeoutSec})
+		sapconfVal := strings.TrimSpace(sapconfStatus.StdOut)
+		if sapconfVal == "" {
+			sapconfVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "sapconf",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "inactive",
+			CurrentValue:   sapconfVal,
+			RebootRequired: false,
+		})
+
+		saptuneStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState saptune", Timeout: c.TimeoutSec})
+		saptuneVal := strings.TrimSpace(saptuneStatus.StdOut)
+		if saptuneVal == "" {
+			saptuneVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "saptune",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "active",
+			CurrentValue:   saptuneVal,
+			RebootRequired: false,
+		})
+
+		saptuneProf := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "saptune", ArgsToSplit: "status", Timeout: c.TimeoutSec})
+		profVal := strings.TrimSpace(saptuneProf.StdOut)
+		if profVal == "" {
+			profVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "SaptuneProfile",
+			TargetFile:     "saptune",
+			ParameterKey:   "EnabledSolution",
+			ExpectedValue:  "HANA (or NETWEAVER+HANA / S4HANA)",
+			CurrentValue:   profVal,
+			RebootRequired: false,
+		})
+	} else if strings.Contains(osRelease, "Red Hat Enterprise Linux") {
+		tunedStatus := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "systemctl", ArgsToSplit: "show -p ActiveState tuned", Timeout: c.TimeoutSec})
+		tunedVal := strings.TrimSpace(tunedStatus.StdOut)
+		if tunedVal == "" {
+			tunedVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "Service",
+			TargetFile:     "tuned",
+			ParameterKey:   "ActiveState",
+			ExpectedValue:  "active",
+			CurrentValue:   tunedVal,
+			RebootRequired: false,
+		})
+
+		tunedProf := c.ExecuteFunc(ctx, commandlineexecutor.Params{Executable: "tuned-adm", ArgsToSplit: "active", Timeout: c.TimeoutSec})
+		profVal := strings.TrimSpace(tunedProf.StdOut)
+		if profVal == "" {
+			profVal = "NOT_SET"
+		}
+		rules = append(rules, ConfigRule{
+			Category:       "TunedProfile",
+			TargetFile:     "tuned-adm",
+			ParameterKey:   "ActiveProfile",
+			ExpectedValue:  "google-x5",
+			CurrentValue:   profVal,
+			RebootRequired: false,
+		})
+	}
+
+	return c.formatDescribeOutput("X5", rules)
+}
+
+/* LINT.ThenChange(:x5_apply) */
