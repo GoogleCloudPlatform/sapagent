@@ -1004,6 +1004,9 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 			r.NewDiskType = d.Type
 			log.CtxLogger(ctx).Infow("New disk type will be same as the data-disk-name", "diskType", r.NewDiskType)
 		} else {
+			if len(r.disks) == 0 {
+				return fmt.Errorf("no disks found to determine target disk type")
+			}
 			disk, err := r.gceService.GetDisk(r.Project, r.DataDiskZone, r.disks[0].disk.GetDiskName())
 			if err != nil {
 				return fmt.Errorf("failed to read data disk type: %v", err)

@@ -272,7 +272,6 @@ func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec command
 		return err
 	}
 
-	var newDisks []multiDisks
 	var numOfDisksRestored int
 	var restoredDiskPV string
 
@@ -294,7 +293,7 @@ func (r *Restorer) groupRestoreWithISGWorkflow(ctx context.Context, exec command
 				return err
 			}
 			dev, _, _ := r.gceService.DiskAttachedToInstance(r.Project, r.DataDiskZone, cp.GetInstanceName(), newDiskName)
-			newDisks = append(newDisks, multiDisks{
+			r.newAttachedDisks = append(r.newAttachedDisks, multiDisks{
 				disk: &ipb.Disk{
 					DiskName:   newDiskName,
 					DeviceName: dev,

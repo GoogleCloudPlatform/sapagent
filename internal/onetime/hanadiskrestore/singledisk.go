@@ -53,6 +53,9 @@ func (r *Restorer) diskRestore(ctx context.Context, exec commandlineexecutor.Exe
 			if attachErr := r.gceService.AttachDisk(ctx, r.DataDiskName, cp.GetInstanceName(), r.Project, r.DataDiskZone); attachErr != nil {
 				log.CtxLogger(ctx).Errorw("failed to reattach old disk", "err", attachErr)
 			}
+			if err := hanabackup.RescanVolumeGroups(ctx, exec); err != nil {
+				log.CtxLogger(ctx).Errorw("failed to rescan volume groups", "err", err)
+			}
 			return err
 		}
 	}
