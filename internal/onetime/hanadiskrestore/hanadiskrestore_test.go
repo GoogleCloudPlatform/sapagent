@@ -1063,6 +1063,63 @@ func TestCheckPreConditions(t *testing.T) {
 			wantErr: cmpopts.AnyError,
 		},
 		{
+			name: "DataPhysicalPathEmptyErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "", nil
+			},
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "sdb", nil
+			},
+			exec:    successExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "LogPhysicalPathEmptyErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "sda", nil
+			},
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "", nil
+			},
+			exec:    successExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DataAndLogMultiDiskPartialOverlapErr",
+			cp:   defaultCloudProperties,
+			r:    &Restorer{},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "sda\nsdb\nsdc", nil
+			},
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "sde\nsdf\nsdb", nil
+			},
+			exec:    successExec,
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "DataAndLogSubstringDifferentDisks",
+			cp:   defaultCloudProperties,
+			r: &Restorer{
+				gceService: &fake.TestGCE{
+					GetInstanceResp: defaultGetInstanceResp,
+					GetInstanceErr:  []error{cmpopts.AnyError},
+				},
+			},
+			checkDataDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "a", "b", "/dev/nvme0n10", nil
+			},
+			checkLogDir: func(context.Context, string, commandlineexecutor.Execute) (string, string, string, error) {
+				return "b", "a", "/dev/nvme0n1", nil
+			},
+			exec:    successExec,
+			wantErr: cmpopts.AnyError, // Passes data/log check and reaches ReadDiskMappingErr (GetInstanceErr)
+		},
+		{
 			name: "ReadDiskMappingErr",
 			cp:   defaultCloudProperties,
 			r: &Restorer{

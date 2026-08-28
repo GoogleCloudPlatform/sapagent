@@ -164,6 +164,9 @@ func (r *Reader) ReadDiskMapping(ctx context.Context, config *configpb.Configura
 		}
 
 		mapping, err := r.dm.ForDeviceName(ctx, disk.DeviceName)
+		if err != nil && disk.DeviceName != diskName {
+			mapping, err = r.dm.ForDeviceName(ctx, diskName)
+		}
 		if err != nil {
 			log.CtxLogger(ctx).Warnw("No mapping for instance disk", "disk", disk, "error", err)
 			mapping = "unknown"

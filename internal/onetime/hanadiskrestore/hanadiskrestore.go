@@ -938,8 +938,15 @@ func (r *Restorer) checkPreConditions(ctx context.Context, cp *ipb.CloudProperti
 		r.logicalDataPath, "Data physical volume", r.physicalDataPath, "Log directory", r.baseLogPath,
 		"Log file system", r.logicalLogPath, "Log physical volume", r.physicalLogPath)
 
-	if strings.Contains(r.physicalDataPath, r.physicalLogPath) {
-		return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
+	if r.physicalDataPath == "" || r.physicalLogPath == "" {
+		return fmt.Errorf("unable to determine physical path for HANA data (%q) or HANA log (%q)", r.physicalDataPath, r.physicalLogPath)
+	}
+	for _, dataPhys := range strings.Fields(r.physicalDataPath) {
+		for _, logPhys := range strings.Fields(r.physicalLogPath) {
+			if dataPhys == logPhys {
+				return fmt.Errorf("unsupported: HANA data and HANA log are on the same physical disk - %s", r.physicalDataPath)
+			}
+		}
 	}
 
 	if r.DataDiskName == "" || r.DataDiskZone == "" || r.isGroupSnapshot {

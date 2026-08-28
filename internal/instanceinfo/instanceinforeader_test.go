@@ -40,6 +40,17 @@ func (f *fakeDiskMapper) ForDeviceName(ctx context.Context, deviceName string) (
 	return f.out, f.err
 }
 
+type mapDiskMapper struct {
+	mapping map[string]string
+}
+
+func (m *mapDiskMapper) ForDeviceName(ctx context.Context, deviceName string) (string, error) {
+	if val, ok := m.mapping[deviceName]; ok {
+		return val, nil
+	}
+	return "", errors.New("no mapping for device")
+}
+
 var (
 	defaultConfig = &configpb.Configuration{
 		BareMetal: false,
@@ -154,7 +165,7 @@ func TestRead(t *testing.T) {
 	tests := []struct {
 		name       string
 		config     *configpb.Configuration
-		dm         *fakeDiskMapper
+		dm         DiskMapper
 		gceService *fake.TestGCE
 		mapper     NetworkInterfaceAddressMapper
 		want       *instancepb.InstanceProperties
@@ -255,6 +266,58 @@ func TestRead(t *testing.T) {
 						Network:   "test-network",
 						NetworkIp: defaultNetworkIP,
 						Mapping:   "lo",
+					},
+				},
+			},
+		},
+		{
+			name:   "customDeviceNameFallback",
+			config: defaultConfig,
+			dm: &mapDiskMapper{
+				mapping: map[string]string{
+					"real-disk-name": "sdb",
+				},
+			},
+			gceService: &fake.TestGCE{
+				GetInstanceResp: []*compute.Instance{
+					{
+						Disks: []*compute.AttachedDisk{
+							{
+								DeviceName: "custom-device-name",
+								Source:     "projects/test-project/zones/test-zone/disks/real-disk-name",
+								Type:       "PERSISTENT",
+							},
+						},
+						MachineType:       "test-machine-type",
+						CpuPlatform:       "test-cpu-platform",
+						CreationTimestamp: "test-creation-timestamp",
+					},
+				},
+				GetInstanceErr: []error{nil},
+				ListDisksResp: []*compute.DiskList{
+					{
+						Items: []*compute.Disk{
+							{
+								Name: "real-disk-name",
+								Type: "/some/path/pd-balanced",
+							},
+						},
+					},
+				},
+				ListDisksErr: []error{nil},
+			},
+			mapper: defaultMapperFunc,
+			want: &instancepb.InstanceProperties{
+				MachineType:       "test-machine-type",
+				CpuPlatform:       "test-cpu-platform",
+				CreationTimestamp: "test-creation-timestamp",
+				Disks: []*instancepb.Disk{
+					&instancepb.Disk{
+						Type:       "PERSISTENT",
+						DeviceType: "pd-balanced",
+						DeviceName: "custom-device-name",
+						DiskName:   "real-disk-name",
+						Mapping:    "sdb",
 					},
 				},
 			},
