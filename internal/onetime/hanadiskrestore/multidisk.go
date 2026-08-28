@@ -404,8 +404,10 @@ func cgPath(policies []string) string {
 	// Example policy: https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg
 	for _, policyLink := range policies {
 		parts := strings.Split(policyLink, "/")
-		if len(parts) >= 10 && parts[9] == "resourcePolicies" {
-			return parts[10]
+		for i, p := range parts {
+			if p == "resourcePolicies" && i+1 < len(parts) {
+				return parts[i+1]
+			}
 		}
 	}
 	return ""

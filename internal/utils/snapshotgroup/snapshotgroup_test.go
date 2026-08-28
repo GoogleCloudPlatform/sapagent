@@ -185,6 +185,42 @@ func TestGetResponse(t *testing.T) {
 			url:           "https://test.com/op_with_error",
 			expectedError: true,
 		},
+		{
+			name: "op_with_http_error",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://test.com/op_http_err": {{statusCode: 200, body: `{"name":"operation-123", "error": {}, "httpErrorStatusCode": 500, "httpErrorMessage": "Internal Error"}`}}},
+			},
+			method:        "POST",
+			url:           "https://test.com/op_http_err",
+			expectedError: true,
+		},
+		{
+			name: "op_with_generic_error",
+			httpResponses: map[string]map[string][]httpResponse{
+				"POST": {"https://test.com/op_generic_err": {{statusCode: 200, body: `{"name":"operation-123", "error": {}}`}}},
+			},
+			method:        "POST",
+			url:           "https://test.com/op_generic_err",
+			expectedError: true,
+		},
+		{
+			name: "googleapi_error_empty_message",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/googleapi_empty": {{statusCode: 404, body: `{"error": {"code": 404, "message": ""}}`}}},
+			},
+			method:        "GET",
+			url:           "https://test.com/googleapi_empty",
+			expectedError: true,
+		},
+		{
+			name: "non_googleapi_error",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://test.com/non_googleapi_err": {{statusCode: 500, body: `{"error": "custom error string"}`}}},
+			},
+			method:        "GET",
+			url:           "https://test.com/non_googleapi_err",
+			expectedError: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -935,6 +971,14 @@ func TestSgExists(t *testing.T) {
 			},
 			expectedError: true,
 		},
+		{
+			name:   "OperationErrorEmptyErrors",
+			opLink: "https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/operations/operation-123": {{statusCode: 200, body: `{"name":"operation-123", "error": {}}`}}},
+			},
+			expectedError: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -999,6 +1043,16 @@ func TestDeleteSG(t *testing.T) {
 			httpResponses: map[string]map[string][]httpResponse{
 				"GET":    {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
 				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "error": {"errors": [{"message": "failed"}]}}`}}},
+			},
+			expectedError: true,
+		},
+		{
+			name:    "DeleteReturnsOpErrorEmptyErrors",
+			project: "test-project",
+			sgName:  "test-sg",
+			httpResponses: map[string]map[string][]httpResponse{
+				"GET":    {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"test-sg", "status":"READY"}`}}},
+				"DELETE": {"https://compute.googleapis.com/compute/v1/projects/test-project/global/snapshotGroups/test-sg": {{statusCode: 200, body: `{"name":"op-123", "error": {}}`}}},
 			},
 			expectedError: true,
 		},

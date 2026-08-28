@@ -152,20 +152,29 @@ func (s *ISGService) GetResponse(ctx context.Context, method string, baseURL str
 		return nil, fmt.Errorf("failed to get response, err: %w", err)
 	}
 
+	op := &compute.Operation{}
+	if err := json.Unmarshal(bodyBytes, op); err == nil && op.Error != nil {
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return nil, fmt.Errorf("compute operation error: %s", op.Error.Errors[0].Message)
+		}
+		if op.HttpErrorStatusCode > 0 {
+			return nil, fmt.Errorf("compute operation error with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+		}
+		return nil, fmt.Errorf("compute operation error: %v", op.Error)
+	}
+
 	var genericResponse map[string]any
 	if err = json.Unmarshal(bodyBytes, &genericResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
 	if genericResponse["error"] != nil {
 		var googleapiErr errorResponse
-		if err = json.Unmarshal([]byte(bodyBytes), &googleapiErr); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal googleapi error, err: %w", err)
+		if err = json.Unmarshal(bodyBytes, &googleapiErr); err != nil || googleapiErr.Err.Message == "" {
+			return nil, fmt.Errorf("error from server: %v", genericResponse["error"])
 		}
 
 		log.CtxLogger(ctx).Errorw("getresponse error", "error", googleapiErr)
-		if googleapiErr.Err.Code != http.StatusOK {
-			return nil, fmt.Errorf("%s", googleapiErr.Err.Message)
-		}
+		return nil, fmt.Errorf("%s", googleapiErr.Err.Message)
 	}
 	return bodyBytes, nil
 }
@@ -303,7 +312,10 @@ func (s *ISGService) isgExists(ctx context.Context, project, zone, opName string
 	}
 	if op.Error != nil {
 		log.CtxLogger(ctx).Errorw("isgExists Error", "op", op)
-		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		}
+		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %v", op.Error)
 	}
 
 	log.CtxLogger(ctx).Debugw("Operation", "status", op.Status, "op", op)
@@ -407,7 +419,10 @@ func (s *ISGService) DeleteISG(ctx context.Context, project, zone, isgName strin
 
 	if op.Error != nil {
 		log.CtxLogger(ctx).Errorw("DeleteISG Error", "op.Error", op.Error)
-		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return fmt.Errorf("failed to delete Instant Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		}
+		return fmt.Errorf("failed to delete Instant Snapshot Group, err: %v", op.Error)
 	}
 
 	bo.Reset()

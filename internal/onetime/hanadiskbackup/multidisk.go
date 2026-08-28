@@ -415,8 +415,10 @@ func cgPath(policies []string) string {
 	// Example policy: https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my-cg
 	for _, policyLink := range policies {
 		parts := strings.Split(policyLink, "/")
-		if len(parts) >= 10 && parts[9] == "resourcePolicies" {
-			return parts[10]
+		for i, p := range parts {
+			if p == "resourcePolicies" && i+1 < len(parts) {
+				return parts[i+1]
+			}
 		}
 	}
 	return ""
@@ -439,13 +441,17 @@ func (s *Snapshot) createGroupBackupLabels(disk, instanceName string) (map[strin
 	region := strings.Join(parts[:len(parts)-1], "-")
 
 	labels["goog-sapagent-version"] = strings.ReplaceAll(configuration.AgentVersion, ".", "_")
-	labels["goog-sapagent-isg"] = s.GroupSnapshotName
-	labels["goog-sapagent-cgpath"] = region + "-" + s.cgName
+	labels["goog-sapagent-isg"] = truncate(s.GroupSnapshotName, 63)
+	cgPath := region + "-" + s.cgName
+	if len(cgPath) > 63 {
+		cgPath = truncate(s.cgName, 63)
+	}
+	labels["goog-sapagent-cgpath"] = cgPath
 	if disk != "" {
-		labels["goog-sapagent-disk-name"] = disk
+		labels["goog-sapagent-disk-name"] = truncate(disk, 63)
 	}
 	if instanceName != "" {
-		labels["goog-sapagent-instance-name"] = instanceName
+		labels["goog-sapagent-instance-name"] = truncate(instanceName, 63)
 	}
 	labels["goog-sapagent-timestamp"] = strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	labels["goog-sapagent-sha224"] = generateSHA(labels)
@@ -471,4 +477,11 @@ func generateSHA(labels map[string]string) string {
 
 	hash := sha256.Sum224([]byte(orderedString))
 	return hex.EncodeToString(hash[:])
+}
+
+func truncate(s string, max int) string {
+	if len(s) > max {
+		return s[:max]
+	}
+	return s
 }

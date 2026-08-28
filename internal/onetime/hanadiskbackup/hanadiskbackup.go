@@ -641,6 +641,11 @@ func (s *Snapshot) validateScaleupDisks(ctx context.Context, cp *ipb.CloudProper
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 				return errMessage, subcommands.ExitFailure
 			}
+			if len(s.disks) == 0 || s.Disk == "" {
+				errMessage := "ERROR: No disks found mapping to /hana/data/"
+				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, fmt.Errorf("no mapping found for /hana/data/"))
+				return errMessage, subcommands.ExitFailure
+			}
 		}
 
 		if len(s.disks) > 1 {

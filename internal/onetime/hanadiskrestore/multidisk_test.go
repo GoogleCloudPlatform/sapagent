@@ -644,13 +644,18 @@ func TestCGPath(t *testing.T) {
 			want:     "my-cg",
 		},
 		{
-			name:     "Failure1",
-			policies: []string{"https://www.googleapis.com/compute/test-zone/resourcePolicies/my-cg"},
+			name:     "RelativePath",
+			policies: []string{"projects/test-project/regions/test-zone/resourcePolicies/my-cg"},
+			want:     "my-cg",
+		},
+		{
+			name:     "NoResourcePolicies",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/otherPolicies/my-cg"},
 			want:     "",
 		},
 		{
-			name:     "Failure2",
-			policies: []string{"https://www.googleapis.com/invalid/text/compute/v1/projects/test-project/regions/test-zone/resourcePolicies/my"},
+			name:     "PolicyEndsAtResourcePolicies",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/test-project/regions/test-zone/resourcePolicies"},
 			want:     "",
 		},
 	}

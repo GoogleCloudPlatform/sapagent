@@ -86,6 +86,15 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 		case "/test/error1":
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, `{"error":{"code":404,"message":"Resource not found","errors":[{"reason":"notFound","message":"The requested resource was not found"}]}}`)
+		case "/test/error_generic":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error":"internal backend failure"}`)
+		case "/test/op_error":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error":{"errors":[{"message":"Quota exceeded"}]}}`)
+		case "/test/op_http_error":
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{"error":{"errors":[]},"httpErrorStatusCode":403,"httpErrorMessage":"Forbidden"}`)
 		case "/test/illegal_bytes":
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, []byte{0xFE, 0x0F})
@@ -176,6 +185,66 @@ func TestGetResponseWithURLVariations(t *testing.T) {
 			},
 			method:  "GET",
 			baseURL: ts.URL + "/test/error1",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "NonGoogleAPIError",
+			s: &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+				maxRetries: 3,
+			},
+			method:  "GET",
+			baseURL: ts.URL + "/test/error_generic",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "OperationError",
+			s: &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+				maxRetries: 3,
+			},
+			method:  "GET",
+			baseURL: ts.URL + "/test/op_error",
+			wantErr: cmpopts.AnyError,
+		},
+		{
+			name: "OperationHTTPError",
+			s: &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+				maxRetries: 3,
+			},
+			method:  "GET",
+			baseURL: ts.URL + "/test/op_http_error",
 			wantErr: cmpopts.AnyError,
 		},
 		{

@@ -162,7 +162,13 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 
 	op := &compute.Operation{}
 	if err := json.Unmarshal(bodyBytes, op); err == nil && op.Error != nil {
-		return nil, fmt.Errorf("Failed to unmarshal compute.Operation: %w", err)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return nil, fmt.Errorf("compute operation error: %s", op.Error.Errors[0].Message)
+		}
+		if op.HttpErrorStatusCode > 0 {
+			return nil, fmt.Errorf("compute operation error with status code: %d and message: %s", op.HttpErrorStatusCode, op.HttpErrorMessage)
+		}
+		return nil, fmt.Errorf("compute operation error: %v", op.Error)
 	}
 
 	var genericResponse map[string]any
@@ -171,7 +177,7 @@ func (s *SGService) GetResponse(ctx context.Context, method string, baseURL stri
 	}
 	if genericResponse["error"] != nil {
 		var googleapiErr errorResponse
-		if err = json.Unmarshal(bodyBytes, &googleapiErr); err != nil {
+		if err = json.Unmarshal(bodyBytes, &googleapiErr); err != nil || googleapiErr.Err.Message == "" {
 			return nil, fmt.Errorf("error from server: %v", genericResponse["error"])
 		}
 
@@ -523,8 +529,11 @@ func (s *SGService) sgExists(ctx context.Context, opLink string) error {
 		return fmt.Errorf("failed to unmarshal response body, err: %w", err)
 	}
 	if op.Error != nil {
-		log.CtxLogger(ctx).Errorw("isgExists Error", "op", op)
-		return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		log.CtxLogger(ctx).Errorw("sgExists Error", "op", op)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		}
+		return fmt.Errorf("failed to delete Snapshot Group, err: %v", op.Error)
 	}
 
 	log.CtxLogger(ctx).Debugw("Operation", "status", op.Status, "op", op)
@@ -580,7 +589,10 @@ func (s *SGService) DeleteSG(ctx context.Context, project, sgName string) error 
 
 	if op.Error != nil {
 		log.CtxLogger(ctx).Errorw("DeleteSG Error", "op.Error", op.Error)
-		return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		if len(op.Error.Errors) > 0 && op.Error.Errors[0].Message != "" {
+			return fmt.Errorf("failed to delete Snapshot Group, err: %s", op.Error.Errors[0].Message)
+		}
+		return fmt.Errorf("failed to delete Snapshot Group, err: %v", op.Error)
 	}
 
 	bo.Reset()

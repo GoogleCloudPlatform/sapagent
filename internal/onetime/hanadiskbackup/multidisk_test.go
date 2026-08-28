@@ -1273,13 +1273,18 @@ func TestCGPath(t *testing.T) {
 			want:     "my-cg",
 		},
 		{
-			name:     "Failure1",
-			policies: []string{"https://www.googleapis.com/compute/my-region/resourcePolicies/my-cg"},
+			name:     "RelativePath",
+			policies: []string{"projects/my-project/regions/my-region/resourcePolicies/my-cg"},
+			want:     "my-cg",
+		},
+		{
+			name:     "NoResourcePolicies",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/otherPolicies/my-cg"},
 			want:     "",
 		},
 		{
-			name:     "Failure2",
-			policies: []string{"https://www.googleapis.com/invalid/text/compute/v1/projects/my-project/regions/my-region/resourcePolicies/my"},
+			name:     "PolicyEndsAtResourcePolicies",
+			policies: []string{"https://www.googleapis.com/compute/v1/projects/my-project/regions/my-region/resourcePolicies"},
 			want:     "",
 		},
 	}
@@ -1339,6 +1344,42 @@ func TestCreateGroupBackupLabels(t *testing.T) {
 				"goog-sapagent-cgpath":        "my-region-my-cg",
 				"goog-sapagent-disk-name":     "my-disk",
 				"goog-sapagent-instance-name": "my-instance",
+			},
+		},
+		{
+			name: "GroupSnapshotLongLabelsAndCGPath",
+			s: &Snapshot{
+				GroupSnapshotName: strings.Repeat("a", 70),
+				groupSnapshot:     true,
+				DiskZone:          "us-central1-a",
+				cgName:            strings.Repeat("b", 60),
+				Disk:              strings.Repeat("c", 70),
+			},
+			instanceName: strings.Repeat("d", 70),
+			wantLabels: map[string]string{
+				"goog-sapagent-isg":           strings.Repeat("a", 63),
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        strings.Repeat("b", 60),
+				"goog-sapagent-disk-name":     strings.Repeat("c", 63),
+				"goog-sapagent-instance-name": strings.Repeat("d", 63),
+			},
+		},
+		{
+			name: "GroupSnapshotCGNameLongerThan63",
+			s: &Snapshot{
+				GroupSnapshotName: "test-isg",
+				groupSnapshot:     true,
+				DiskZone:          "us-central1-a",
+				cgName:            strings.Repeat("b", 70),
+				Disk:              "disk-1",
+			},
+			instanceName: "instance-1",
+			wantLabels: map[string]string{
+				"goog-sapagent-isg":           "test-isg",
+				"goog-sapagent-version":       strings.ReplaceAll(configuration.AgentVersion, ".", "_"),
+				"goog-sapagent-cgpath":        strings.Repeat("b", 63),
+				"goog-sapagent-disk-name":     "disk-1",
+				"goog-sapagent-instance-name": "instance-1",
 			},
 		},
 	}
@@ -1616,6 +1657,49 @@ func TestCreateSnapshotName(t *testing.T) {
 			got := tc.s.createSnapshotName(tc.instantSnapshotName, tc.timestamp)
 			if got != tc.want {
 				t.Errorf("CreateSnapshotName(%q) = %q, want: %q", tc.instantSnapshotName, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		max  int
+		want string
+	}{
+		{
+			name: "ShorterThanMax",
+			s:    "abc",
+			max:  5,
+			want: "abc",
+		},
+		{
+			name: "EqualToMax",
+			s:    "abcde",
+			max:  5,
+			want: "abcde",
+		},
+		{
+			name: "LongerThanMax",
+			s:    "abcdefg",
+			max:  5,
+			want: "abcde",
+		},
+		{
+			name: "EmptyString",
+			s:    "",
+			max:  5,
+			want: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncate(tc.s, tc.max)
+			if got != tc.want {
+				t.Errorf("truncate(%q, %d) = %q, want: %q", tc.s, tc.max, got, tc.want)
 			}
 		})
 	}
