@@ -21,6 +21,7 @@ package configureinstance
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,10 +73,28 @@ type diff struct {
 	Want      string `json:"want"`
 }
 
+// ConfigRule describes a single configuration parameter, expected/current value, and reboot requirement.
+type ConfigRule struct {
+	Category       string `json:"category"`
+	TargetFile     string `json:"target_file"`
+	ParameterKey   string `json:"parameter_key"`
+	ExpectedValue  string `json:"expected_value"`
+	CurrentValue   string `json:"current_value"`
+	RebootRequired bool   `json:"reboot_required"`
+}
+
+// DescribeOutput represents the JSON output format for configureinstance -describe.
+type DescribeOutput struct {
+	Series string       `json:"series"`
+	Rules  []ConfigRule `json:"rules"`
+}
+
 // ConfigureInstance has args for configureinstance subcommands.
 type ConfigureInstance struct {
 	Apply          bool   `json:"apply,string"`
 	Check          bool   `json:"check,string"`
+	Describe       bool   `json:"describe,string"`
+	Format         string `json:"format"`
 	MachineType    string `json:"overrideType"`
 	HyperThreading string `json:"hyperThreading"`
 	PrintDiff      bool   `json:"printDiff,string"`
@@ -107,8 +126,10 @@ func (*ConfigureInstance) Usage() string {
   Subcommands:
     -check	Check settings and print errors, but do not apply any changes
     -apply	Make changes as necessary to the settings
+    -describe	Print all configuration parameters, target files, expected values, and reboot requirements
 
   Args (optional):
+    [-format="csv"]		Format for describe output: csv or json
     [-overrideType="type"]	Override the machine type (by default this is retrieved from metadata)
     [-hyperThreading="on"]	Sets hyper threading settings for X4 machines
                               	Possible values: ["on", "off"]
@@ -124,6 +145,8 @@ func (*ConfigureInstance) Usage() string {
 func (c *ConfigureInstance) SetFlags(fs *flag.FlagSet) {
 	fs.BoolVar(&c.Check, "check", false, "Check settings and print errors, but do not apply any changes")
 	fs.BoolVar(&c.Apply, "apply", false, "Apply changes as necessary to the settings")
+	fs.BoolVar(&c.Describe, "describe", false, "Print all configuration parameters, target files, expected values, and reboot requirements")
+	fs.StringVar(&c.Format, "format", "csv", "Format for describe output: csv or json")
 	fs.BoolVar(&c.PrintDiff, "printDiff", false, "Prints all configuration diffs and log messages to stdout as JSON")
 	fs.StringVar(&c.MachineType, "overrideType", "", "Bypass the metadata machine type lookup")
 	fs.StringVar(&c.HyperThreading, "hyperThreading", "on", "Sets hyper threading settings for X4 machines")
@@ -179,7 +202,8 @@ func (c *ConfigureInstance) Execute(ctx context.Context, f *flag.FlagSet, args .
 
 /* LINT.IfChange(supported_machine_types) */
 
-// IsSupportedMachineType checks if the configureinstance subcommand provides support for the machine type.
+// IsSupportedMachineType checks if the configureinstance subcommand provides support
+// for the machine type (used by check, apply, and describe subcommands).
 func (c *ConfigureInstance) IsSupportedMachineType() bool {
 	return strings.HasPrefix(c.MachineType, "x4") || strings.HasPrefix(c.MachineType, "x5")
 }
@@ -193,11 +217,22 @@ func (c *ConfigureInstance) IsSupportedMachineType() bool {
 //   - string: A message providing additional details about the exit status.
 func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (subcommands.ExitStatus, string) {
 	c.oteLogger = onetime.CreateOTELogger(opts.DaemonMode)
-	if !c.Check && !c.Apply {
-		return subcommands.ExitUsageError, "ConfigureInstance Usage Error: -check or -apply must be specified"
+	c.setDefaults()
+	modeCount := 0
+	if c.Check {
+		modeCount++
 	}
-	if c.Check && c.Apply {
-		return subcommands.ExitUsageError, "ConfigureInstance Usage Error: only one of -check or -apply must be specified"
+	if c.Apply {
+		modeCount++
+	}
+	if c.Describe {
+		modeCount++
+	}
+	if modeCount != 1 {
+		return subcommands.ExitUsageError, "ConfigureInstance Usage Error: exactly one of -check, -apply, or -describe must be specified"
+	}
+	if c.Describe && !slices.Contains([]string{"csv", "json"}, strings.ToLower(c.Format)) {
+		return subcommands.ExitUsageError, `ConfigureInstance Usage Error: -format must be one of ["csv", "json"]`
 	}
 	if !slices.Contains([]string{hyperThreadingDefault, hyperThreadingOn, hyperThreadingOff}, c.HyperThreading) {
 		return subcommands.ExitUsageError, `ConfigureInstance Usage Error: hyperThreading must be one of ["on", "off"]`
@@ -205,12 +240,14 @@ func (c *ConfigureInstance) Run(ctx context.Context, opts *onetime.RunOptions) (
 	if c.MachineType == "" {
 		c.MachineType = opts.CloudProperties.MachineType
 	}
-	c.setDefaults()
 	return c.configureInstanceHandler(ctx)
 }
 
 // setDefaults sets default values. These will not be set by the flag defaults if coming from guestactions.
 func (c *ConfigureInstance) setDefaults() {
+	if c.Format == "" {
+		c.Format = "csv"
+	}
 	if c.HyperThreading == "" {
 		c.HyperThreading = hyperThreadingOn
 	}
@@ -222,6 +259,15 @@ func (c *ConfigureInstance) setDefaults() {
 // configureInstanceHandler checks and applies OS settings
 // depending on the machine type.
 func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subcommands.ExitStatus, string) {
+	if c.oteLogger == nil {
+		c.oteLogger = onetime.CreateOTELogger(false)
+	}
+	if c.ExecuteFunc == nil {
+		c.ExecuteFunc = commandlineexecutor.ExecuteCommand
+	}
+	if c.ReadFile == nil {
+		c.ReadFile = os.ReadFile
+	}
 	c.LogToBoth(ctx, fmt.Sprintf("ConfigureInstance starting: %s", strings.Join(os.Args, " ")))
 	c.oteLogger.LogUsageAction(usagemetrics.ConfigureInstanceStarted)
 	rebootRequired := false
@@ -231,10 +277,16 @@ func (c *ConfigureInstance) configureInstanceHandler(ctx context.Context) (subco
 	/* LINT.IfChange(configure_handler_machine_types) */
 	switch {
 	case strings.HasPrefix(c.MachineType, "x4"):
+		if c.Describe {
+			return c.describeX4(ctx)
+		}
 		if rebootRequired, err = c.configureX4(ctx); err != nil {
 			return subcommands.ExitFailure, err.Error()
 		}
 	case strings.HasPrefix(c.MachineType, "x5"):
+		if c.Describe {
+			return c.describeX5(ctx)
+		}
 		if rebootRequired, err = c.configureX5(ctx); err != nil {
 			return subcommands.ExitFailure, err.Error()
 		}
@@ -498,4 +550,123 @@ func regenerateLine(ctx context.Context, got, want string) (bool, string) {
 		updated = true
 	}
 	return updated, got
+}
+
+var (
+	saptuneSolutionRegex = regexp.MustCompile(`(?i)enabled Solution:[ \t]*([^\r\n]+)`)
+	saptuneNotesRegex    = regexp.MustCompile(`(?i)additional enabled Notes:[ \t]*([^\r\n]+)`)
+)
+
+func parseSaptuneSolution(stdout string) string {
+	if match := saptuneSolutionRegex.FindStringSubmatch(stdout); len(match) > 1 {
+		val := strings.TrimSpace(match[1])
+		val = strings.TrimSpace(strings.Split(val, "(")[0])
+		if val != "" && !strings.EqualFold(val, "NONE") {
+			return val
+		}
+	}
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed != "" && !strings.Contains(trimmed, "\n") {
+		trimmed = strings.TrimSpace(strings.Split(trimmed, "(")[0])
+		if trimmed != "" && !strings.EqualFold(trimmed, "NONE") {
+			return trimmed
+		}
+	}
+	return "NOT_SET"
+}
+
+func parseSaptuneNotes(stdout string) string {
+	if match := saptuneNotesRegex.FindStringSubmatch(stdout); len(match) > 1 {
+		val := strings.TrimSpace(match[1])
+		val = strings.TrimSpace(strings.Split(val, "(")[0])
+		if val != "" && !strings.EqualFold(val, "NONE") {
+			return val
+		}
+	}
+	return "NOT_SET"
+}
+
+func containsWord(s, word string) bool {
+	for _, w := range strings.Fields(s) {
+		if w == word {
+			return true
+		}
+	}
+	return false
+}
+
+// formatDescribeOutput formats the collected configuration rules as CSV or JSON.
+func (c *ConfigureInstance) formatDescribeOutput(series string, rules []ConfigRule) (subcommands.ExitStatus, string) {
+	if strings.ToLower(c.Format) == "json" {
+		out := DescribeOutput{
+			Series: series,
+			Rules:  rules,
+		}
+		b, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			return subcommands.ExitFailure, fmt.Sprintf("failed to marshal json: %v", err)
+		}
+		return subcommands.ExitSuccess, string(b)
+	}
+
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	w.Write([]string{"Series", "Category", "TargetFile", "ParameterKey", "ExpectedValue", "CurrentValue", "RebootRequired"})
+	for _, r := range rules {
+		rebootStr := "NO"
+		if r.RebootRequired {
+			rebootStr = "YES"
+		}
+		w.Write([]string{series, r.Category, r.TargetFile, r.ParameterKey, r.ExpectedValue, r.CurrentValue, rebootStr})
+	}
+	w.Flush()
+	return subcommands.ExitSuccess, buf.String()
+}
+
+// readCurrentLineValue finds the current line value for a given key in a file.
+func (c *ConfigureInstance) readCurrentLineValue(filePath, key string) string {
+	if c.ReadFile == nil {
+		c.ReadFile = os.ReadFile
+	}
+	data, err := c.ReadFile(filePath)
+	if err != nil {
+		return "NOT_SET"
+	}
+	hasComment := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			uncommented := strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
+			if strings.Contains(uncommented, key) {
+				hasComment = true
+			}
+			continue
+		}
+		if strings.Contains(trimmed, key) {
+			parts := strings.SplitN(trimmed, "=", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+			return trimmed
+		}
+	}
+	if hasComment {
+		return "<COMMENTED_OUT>"
+	}
+	return "NOT_SET"
+}
+
+// readCurrentFileContent reads the entire content of a file or returns NOT_SET.
+func (c *ConfigureInstance) readCurrentFileContent(filePath string) string {
+	if c.ReadFile == nil {
+		c.ReadFile = os.ReadFile
+	}
+	data, err := c.ReadFile(filePath)
+	if err != nil {
+		return "NOT_SET"
+	}
+	return strings.TrimSpace(string(data))
 }

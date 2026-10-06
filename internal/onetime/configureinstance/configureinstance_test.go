@@ -165,6 +165,89 @@ func TestExecuteConfigureInstance(t *testing.T) {
 			},
 		},
 		{
+			name: "DescribeAndCheckSupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Check:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeAndApplySupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Apply:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeCheckAndApplySupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Check:    true,
+				Apply:    true,
+				Describe: true,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "InvalidFormatSupplied",
+			want: subcommands.ExitUsageError,
+			c: ConfigureInstance{
+				Describe: true,
+				Format:   "invalid",
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeSuccessCSV",
+			want: subcommands.ExitSuccess,
+			c: ConfigureInstance{
+				Describe:       true,
+				Format:         "csv",
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
+			name: "DescribeSuccessJSON",
+			want: subcommands.ExitSuccess,
+			c: ConfigureInstance{
+				Describe:       true,
+				Format:         "json",
+				MachineType:    "x4-megamem-1920",
+				HyperThreading: hyperThreadingOn,
+			},
+			args: []any{
+				"test",
+				log.Parameters{},
+				&ipb.CloudProperties{},
+			},
+		},
+		{
 			name: "InvalidHyperThreading",
 			want: subcommands.ExitUsageError,
 			c: ConfigureInstance{
@@ -856,6 +939,7 @@ func TestSetDefaults(t *testing.T) {
 			name: "EmptyStruct",
 			c:    ConfigureInstance{},
 			want: ConfigureInstance{
+				Format:         "csv",
 				HyperThreading: hyperThreadingOn,
 				TimeoutSec:     300,
 			},
@@ -867,6 +951,7 @@ func TestSetDefaults(t *testing.T) {
 				TimeoutSec:     0,
 			},
 			want: ConfigureInstance{
+				Format:         "csv",
 				HyperThreading: hyperThreadingOn,
 				TimeoutSec:     300,
 			},
@@ -874,10 +959,12 @@ func TestSetDefaults(t *testing.T) {
 		{
 			name: "AlreadySet",
 			c: ConfigureInstance{
+				Format:         "json",
 				HyperThreading: "already_set",
 				TimeoutSec:     123,
 			},
 			want: ConfigureInstance{
+				Format:         "json",
 				HyperThreading: "already_set",
 				TimeoutSec:     123,
 			},
@@ -928,5 +1015,347 @@ func TestIsSupportedMachineType(t *testing.T) {
 				t.Errorf("IsSupportedMachineType() on machine type %q = %v, want: %v", tc.machineType, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSetFlagsDescribe(t *testing.T) {
+	c := &ConfigureInstance{}
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	c.SetFlags(fs)
+
+	if err := fs.Parse([]string{"-describe", "-format=json"}); err != nil {
+		t.Fatalf("fs.Parse() failed: %v", err)
+	}
+	if !c.Describe {
+		t.Errorf("c.Describe = false, want true")
+	}
+	if c.Format != "json" {
+		t.Errorf("c.Format = %q, want 'json'", c.Format)
+	}
+}
+
+func TestReadCurrentLineValue(t *testing.T) {
+	c := ConfigureInstance{
+		ReadFile: func(path string) ([]byte, error) {
+			if path == "error.conf" {
+				return nil, cmpopts.AnyError
+			}
+			return []byte("#DefaultTimeoutStartSec=90s\nDefaultTimeoutStartSec=300s\n#UserTasksMax=10\nbarekey_line\n"), nil
+		},
+	}
+
+	if got := c.readCurrentLineValue("error.conf", "DefaultTimeoutStartSec"); got != "NOT_SET" {
+		t.Errorf("readCurrentLineValue(error.conf) = %q, want 'NOT_SET'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "DefaultTimeoutStartSec"); got != "300s" {
+		t.Errorf("readCurrentLineValue(test.conf) = %q, want '300s'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "UserTasksMax"); got != "<COMMENTED_OUT>" {
+		t.Errorf("readCurrentLineValue(test.conf commented) = %q, want '<COMMENTED_OUT>'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "barekey"); got != "barekey_line" {
+		t.Errorf("readCurrentLineValue(test.conf barekey) = %q, want 'barekey_line'", got)
+	}
+	if got := c.readCurrentLineValue("test.conf", "MissingKey"); got != "NOT_SET" {
+		t.Errorf("readCurrentLineValue(test.conf missing) = %q, want 'NOT_SET'", got)
+	}
+}
+
+func TestFormatDescribeOutput(t *testing.T) {
+	rules := []ConfigRule{
+		{
+			Category:       "Systemd",
+			TargetFile:     "/etc/systemd/system.conf",
+			ParameterKey:   "DefaultTimeoutStartSec",
+			ExpectedValue:  "300s",
+			CurrentValue:   "300s",
+			RebootRequired: true,
+		},
+		{
+			Category:       "Sysctl",
+			TargetFile:     "google-x4.conf",
+			ParameterKey:   "net.core.rmem_max",
+			ExpectedValue:  "83886080",
+			CurrentValue:   "NOT_SET",
+			RebootRequired: false,
+		},
+	}
+
+	t.Run("CSVFormat", func(t *testing.T) {
+		c := ConfigureInstance{Format: "csv"}
+		status, got := c.formatDescribeOutput("X4", rules)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("formatDescribeOutput(csv) status = %v, want ExitSuccess", status)
+		}
+		wantHeader := "Series,Category,TargetFile,ParameterKey,ExpectedValue,CurrentValue,RebootRequired\n"
+		wantRow1 := "X4,Systemd,/etc/systemd/system.conf,DefaultTimeoutStartSec,300s,300s,YES\n"
+		wantRow2 := "X4,Sysctl,google-x4.conf,net.core.rmem_max,83886080,NOT_SET,NO\n"
+		if !strings.Contains(got, wantHeader) || !strings.Contains(got, wantRow1) || !strings.Contains(got, wantRow2) {
+			t.Errorf("formatDescribeOutput(csv) = %q, want rows to contain header and rows", got)
+		}
+	})
+
+	t.Run("CSVFormatQuotesCommas", func(t *testing.T) {
+		c := ConfigureInstance{Format: "csv"}
+		commaRules := []ConfigRule{
+			{
+				Category:       "Grub",
+				TargetFile:     "/etc/default/grub",
+				ParameterKey:   "GRUB_CMDLINE_LINUX_DEFAULT",
+				ExpectedValue:  `"console=ttyS0,115200 earlyprintk=ttyS0,115200"`,
+				CurrentValue:   `"console=ttyS0,115200 earlyprintk=ttyS0,115200"`,
+				RebootRequired: true,
+			},
+		}
+		status, got := c.formatDescribeOutput("X4", commaRules)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("formatDescribeOutput(csv) status = %v, want ExitSuccess", status)
+		}
+		// Expect proper CSV quoting for fields containing commas
+		if !strings.Contains(got, `"""console=ttyS0,115200 earlyprintk=ttyS0,115200"""`) {
+			t.Errorf("formatDescribeOutput(csv) = %q, want properly quoted CSV fields", got)
+		}
+	})
+
+	t.Run("JSONFormat", func(t *testing.T) {
+		c := ConfigureInstance{Format: "json"}
+		status, got := c.formatDescribeOutput("X4", rules)
+		if status != subcommands.ExitSuccess {
+			t.Errorf("formatDescribeOutput(json) status = %v, want ExitSuccess", status)
+		}
+		if !strings.Contains(got, `"series": "X4"`) || !strings.Contains(got, `"DefaultTimeoutStartSec"`) {
+			t.Errorf("formatDescribeOutput(json) = %q, want JSON to contain series and rule key", got)
+		}
+	})
+}
+
+func TestReadCurrentFileContent(t *testing.T) {
+	c := ConfigureInstance{
+		ReadFile: func(path string) ([]byte, error) {
+			if path == "error.conf" {
+				return nil, cmpopts.AnyError
+			}
+			return []byte("blacklist idxd\nblacklist hpilo\n"), nil
+		},
+	}
+
+	if got := c.readCurrentFileContent("error.conf"); got != "NOT_SET" {
+		t.Errorf("readCurrentFileContent(error.conf) = %q, want 'NOT_SET'", got)
+	}
+	if got := c.readCurrentFileContent("test.conf"); got != "blacklist idxd\nblacklist hpilo" {
+		t.Errorf("readCurrentFileContent(test.conf) = %q, want file content", got)
+	}
+}
+
+func TestParseSaptuneSolution(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "MultiLineSaptuneStatus",
+			raw:  "PACKAGE VERSION: 3.1.2\nDAEMON: active\nSERVICES: ...\nenabled Solution:       HANA\nNOTES: ...",
+			want: "HANA",
+		},
+		{
+			name: "CaseInsensitiveSolution",
+			raw:  "services: ok\nENABLED SOLUTION:   NETWEAVER+HANA\n",
+			want: "NETWEAVER+HANA",
+		},
+		{
+			name: "SingleLineFallback",
+			raw:  "HANA",
+			want: "HANA",
+		},
+		{
+			name: "EmptyOutput",
+			raw:  "",
+			want: "NOT_SET",
+		},
+		{
+			name: "MultiLineBlankEnabledSolution",
+			raw:  "PACKAGE VERSION: 3.1.2\nDAEMON: active\nSERVICES: ...\nenabled Solution:\napplied Solution:       HANA\nNOTES: ...",
+			want: "NOT_SET",
+		},
+		{
+			name: "MultiLineSolutionWithNotes",
+			raw:  "PACKAGE VERSION: 3.1.2\nDAEMON: active\nSERVICES: ...\nenabled Solution:       HANA (941735, 1771258, 1868829)\nNOTES: ...",
+			want: "HANA",
+		},
+		{
+			name: "SingleLineWithNotes",
+			raw:  "HANA (941735, 1771258)",
+			want: "HANA",
+		},
+		{
+			name: "MultiLineNoSolution",
+			raw:  "PACKAGE VERSION: 3.1.2\nDAEMON: active\nSERVICES: ...\n",
+			want: "NOT_SET",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseSaptuneSolution(tc.raw); got != tc.want {
+				t.Errorf("parseSaptuneSolution(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseSaptuneNotes(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "StandardNote",
+			raw:  "additional enabled Notes: google-x4",
+			want: "google-x4",
+		},
+		{
+			name: "NoteWithParenthesizedIDs",
+			raw:  "additional enabled Notes:       google-x4 (941735, 1771258)",
+			want: "google-x4",
+		},
+		{
+			name: "NoteX5",
+			raw:  "additional enabled Notes: google-x5",
+			want: "google-x5",
+		},
+		{
+			name: "NoneNotes",
+			raw:  "additional enabled Notes: NONE",
+			want: "NOT_SET",
+		},
+		{
+			name: "EmptyNotesLine",
+			raw:  "additional enabled Notes:",
+			want: "NOT_SET",
+		},
+		{
+			name: "EmptyOutput",
+			raw:  "",
+			want: "NOT_SET",
+		},
+		{
+			name: "MultiLineStatusWithNote",
+			raw:  "PACKAGE VERSION: 3.1.2\nDAEMON: active\nenabled Solution: HANA\nadditional enabled Notes:       google-x4 (941735)\n",
+			want: "google-x4",
+		},
+		{
+			name: "ECSMultipleNotes",
+			raw:  "additional enabled Notes: ecs_extra_defrag_thp google-x4",
+			want: "ecs_extra_defrag_thp google-x4",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseSaptuneNotes(tc.raw); got != tc.want {
+				t.Errorf("parseSaptuneNotes(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestContainsWord(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		word string
+		want bool
+	}{
+		{
+			name: "SingleWordMatch",
+			s:    "google-x4",
+			word: "google-x4",
+			want: true,
+		},
+		{
+			name: "MultipleWordsMatch",
+			s:    "ecs_extra_defrag_thp google-x4",
+			word: "google-x4",
+			want: true,
+		},
+		{
+			name: "SubstringNotMatch",
+			s:    "not_google-x4_either",
+			word: "google-x4",
+			want: false,
+		},
+		{
+			name: "MissingWord",
+			s:    "ecs_extra_defrag_thp",
+			word: "google-x4",
+			want: false,
+		},
+		{
+			name: "EmptyString",
+			s:    "",
+			word: "google-x4",
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := containsWord(tc.s, tc.word); got != tc.want {
+				t.Errorf("containsWord(%q, %q) = %v, want %v", tc.s, tc.word, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDescribeHandlerX4andX5(t *testing.T) {
+	ctx := context.Background()
+	c4 := ConfigureInstance{
+		Describe:    true,
+		Format:      "csv",
+		MachineType: "x4-megamem-1920",
+	}
+	status4, got4 := c4.configureInstanceHandler(ctx)
+	if status4 != subcommands.ExitSuccess || !strings.Contains(got4, "Series,Category") {
+		t.Errorf("configureInstanceHandler(x4) = status:%v, msg:%q, want ExitSuccess and CSV header", status4, got4)
+	}
+	if strings.Contains(got4, "REFERENCES") || strings.Contains(got4, "DESCRIPTION") {
+		t.Errorf("configureInstanceHandler(x4) output should not contain metadata headers, got: %q", got4)
+	}
+
+	c5 := ConfigureInstance{
+		Describe:    true,
+		Format:      "json",
+		MachineType: "x5-megamem-96",
+	}
+	status5, got5 := c5.configureInstanceHandler(ctx)
+	if status5 != subcommands.ExitSuccess || !strings.Contains(got5, `"series": "X5"`) {
+		t.Errorf("configureInstanceHandler(x5) = status:%v, msg:%q, want ExitSuccess and JSON series X5", status5, got5)
+	}
+	if strings.Contains(got5, "REFERENCES") || strings.Contains(got5, "DESCRIPTION") {
+		t.Errorf("configureInstanceHandler(x5) output should not contain metadata headers, got: %q", got5)
+	}
+}
+
+func TestRunSetDefaultsApplied(t *testing.T) {
+	c := ConfigureInstance{
+		Describe:    true,
+		MachineType: "x4-megamem-1920",
+		// HyperThreading and TimeoutSec left empty so setDefaults MUST run
+	}
+	opts := &onetime.RunOptions{
+		CloudProperties: &ipb.CloudProperties{
+			MachineType: "x4-megamem-1920",
+		},
+	}
+	status, _ := c.Run(context.Background(), opts)
+	if status != subcommands.ExitSuccess {
+		t.Fatalf("Run() status = %v, want ExitSuccess", status)
+	}
+	if c.HyperThreading != hyperThreadingOn {
+		t.Errorf("c.HyperThreading = %q, want %q", c.HyperThreading, hyperThreadingOn)
+	}
+	if c.TimeoutSec != 300 {
+		t.Errorf("c.TimeoutSec = %d, want 300", c.TimeoutSec)
 	}
 }
