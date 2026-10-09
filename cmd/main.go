@@ -151,6 +151,9 @@ func main() {
 			MachineType:      cp.MachineType,
 			Scopes:           cp.Scopes,
 		}
+		// Resolve the universe domain (e.g. for Trusted Partner Cloud) before any Google Cloud
+		// clients are created so that API endpoints are constructed for the correct universe.
+		metadataserver.ConfigureUniverseDomain()
 	}
 	client, err := log.CreateClientWithUserAgent(ctx, cloudProps.GetProjectId(), configuration.UserAgent())
 	if err != nil {

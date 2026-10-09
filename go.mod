@@ -17,7 +17,7 @@ require (
   cloud.google.com/go/storage v1.62.2
   // Get the version by running:
   // go list -m -json github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos@main
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20260623133240-f1305de549a8
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedprotos v0.0.0-20261008202822-b84755ea39b5
   github.com/Masterminds/semver/v3 v3.5.0
   github.com/SAP/go-hdb v1.16.11
   github.com/cenkalti/backoff/v4 v4.3.0
@@ -46,7 +46,7 @@ require (
 require (
   cloud.google.com/go/kms v1.31.0
   cloud.google.com/go/pubsub v1.50.2
-  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20260623133240-f1305de549a8
+  github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries v0.0.0-20261008202822-b84755ea39b5
   go.uber.org/multierr v1.11.0
 )
 
