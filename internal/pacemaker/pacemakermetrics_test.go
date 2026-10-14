@@ -19,6 +19,7 @@ package pacemaker
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1679,7 +1680,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 						}
 					}
 					if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
-						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"` {
+						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}` {
 						return commandlineexecutor.Result{
 							StdOut: jsonHealthyResponse,
 							StdErr: "",
@@ -3488,5 +3489,27 @@ func TestSetHealthCheckInternalLoadBalancerMetrics(t *testing.T) {
 				t.Errorf("setHealthCheckInternalLoadBalancerMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestSetPacemakerAPIAccessRequestBodyIsValidJSON(t *testing.T) {
+	var gotBodies []string
+	exec := func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		for i, arg := range params.Args {
+			if arg == "-d" && i+1 < len(params.Args) {
+				gotBodies = append(gotBodies, params.Args[i+1])
+			}
+		}
+		return commandlineexecutor.Result{StdOut: jsonHealthyResponse}
+	}
+
+	got := map[string]string{}
+	setPacemakerAPIAccess(context.Background(), got, "test-project", "token", exec)
+
+	if len(gotBodies) != 1 {
+		t.Fatalf("setPacemakerAPIAccess() sent %d request bodies, want 1", len(gotBodies))
+	}
+	if !json.Valid([]byte(gotBodies[0])) {
+		t.Errorf("setPacemakerAPIAccess() sent invalid JSON request body: %s", gotBodies[0])
 	}
 }

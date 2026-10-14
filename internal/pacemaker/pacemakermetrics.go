@@ -370,7 +370,7 @@ func setPacemakerAPIAccess(ctx context.Context, labels map[string]string, projec
 		"Content-Type: application/json",
 		"-d",
 		fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, projectID)+
-			`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}"`)
+			`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}`)
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not obtain fence agent logging API Access", log.Error(err))
 	}
