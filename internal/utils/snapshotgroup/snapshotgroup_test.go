@@ -1088,3 +1088,69 @@ func TestDeleteSG(t *testing.T) {
 		})
 	}
 }
+
+func TestSGServiceUniverseDomain(t *testing.T) {
+	t.Setenv("GOOGLE_CLOUD_UNIVERSE_DOMAIN", "apis-berlin-build0.goog")
+	const (
+		computeV1      = "https://compute.apis-berlin-build0.goog/compute/v1"
+		resourcePrefix = "https://compute.apis-berlin-build0.goog/compute/v1/"
+	)
+	ctx := context.Background()
+
+	t.Run("CreateSG", func(t *testing.T) {
+		wantURL := computeV1 + "/projects/test-project/global/snapshotGroups"
+		sgService := &SGService{}
+		sgService.NewService()
+		sgService.maxRetries = 1
+		sgService.retryInterval = time.Millisecond
+		sgService.rest.HTTPClient = &mockHTTPClient{responses: map[string]map[string][]httpResponse{
+			"POST": {wantURL: {{statusCode: 200, body: `{"name":"operation-123", "status": "DONE"}`}}},
+		}}
+		sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+
+		if err := sgService.CreateSG(ctx, "test-project", []byte(`{"name": "test-sg"}`)); err != nil {
+			t.Errorf("CreateSG() returned unexpected error: %v", err)
+		}
+		if sgService.baseURL != wantURL {
+			t.Errorf("CreateSG() baseURL = %s, want %s", sgService.baseURL, wantURL)
+		}
+	})
+
+	t.Run("ListSnapshotsFromSG", func(t *testing.T) {
+		filter := url.QueryEscape(`snapshotGroupName="` + resourcePrefix + `projects/test-project/global/snapshotGroups/test-sg"`)
+		sgService := &SGService{}
+		sgService.NewService()
+		sgService.rest.HTTPClient = &mockHTTPClient{responses: map[string]map[string][]httpResponse{
+			"GET": {computeV1 + "/projects/test-project/global/snapshots?filter=" + filter: {{statusCode: 200, body: `{"items":[{"name":"test-snapshot1"}]}`}}},
+		}}
+		sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+
+		got, err := sgService.ListSnapshotsFromSG(ctx, "test-project", "test-sg")
+		if err != nil {
+			t.Fatalf("ListSnapshotsFromSG() returned unexpected error: %v", err)
+		}
+		want := []SnapshotItem{{Name: "test-snapshot1"}}
+		if diff := cmp.Diff(want, got, cmpopts.IgnoreUnexported(SnapshotItem{})); diff != "" {
+			t.Errorf("ListSnapshotsFromSG() returned diff (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("ListDisksFromSnapshot", func(t *testing.T) {
+		filter := url.QueryEscape(`sourceSnapshot="` + resourcePrefix + `projects/test-project/global/snapshots/test-snapshot"`)
+		sgService := &SGService{}
+		sgService.NewService()
+		sgService.rest.HTTPClient = &mockHTTPClient{responses: map[string]map[string][]httpResponse{
+			"GET": {computeV1 + "/projects/test-project/zones/test-zone/disks?filter=" + filter: {{statusCode: 200, body: `{"items":[{"name":"test-disk1"}]}`}}},
+		}}
+		sgService.rest.TokenGetter = defaultTokenGetterMock(nil)
+
+		got, err := sgService.ListDisksFromSnapshot(ctx, "test-project", "test-zone", "test-snapshot")
+		if err != nil {
+			t.Fatalf("ListDisksFromSnapshot() returned unexpected error: %v", err)
+		}
+		want := []DiskItem{{Name: "test-disk1"}}
+		if diff := cmp.Diff(want, got, cmpopts.IgnoreUnexported(DiskItem{})); diff != "" {
+			t.Errorf("ListDisksFromSnapshot() returned diff (-want +got):\n%s", diff)
+		}
+	})
+}

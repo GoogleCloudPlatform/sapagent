@@ -35,6 +35,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/instantsnapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -183,7 +184,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 
 	if s.DiskKeyFile != "" {
 		s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
-		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+		srcDiskURI := fmt.Sprintf("%sprojects/%s/zones/%s/disks/%s", metadataserver.ComputeResourcePrefix(), s.Project, s.DiskZone, s.Disk)
 		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
 			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)
@@ -206,7 +207,7 @@ func (s *Snapshot) createInstantSnapshotGroup(ctx context.Context) error {
 	if err := s.isgService.CreateISG(ctx, s.Project, s.DiskZone, data); err != nil {
 		return err
 	}
-	baseURL := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/instantSnapshotGroups/%s", s.Project, s.DiskZone, s.GroupSnapshotName)
+	baseURL := fmt.Sprintf("%sprojects/%s/zones/%s/instantSnapshotGroups/%s", metadataserver.ComputeResourcePrefix(), s.Project, s.DiskZone, s.GroupSnapshotName)
 	if err := s.isgService.WaitForISGUploadCompletionWithRetry(ctx, baseURL); err != nil {
 		return err
 	}
@@ -281,7 +282,7 @@ func (s *Snapshot) createGroupBackup(ctx context.Context, instantSnapshot instan
 	// snapshot encryption key are the same.
 	if s.DiskKeyFile != "" {
 		s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
-		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+		srcDiskURI := fmt.Sprintf("%sprojects/%s/zones/%s/disks/%s", metadataserver.ComputeResourcePrefix(), s.Project, s.DiskZone, s.Disk)
 		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
 			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)

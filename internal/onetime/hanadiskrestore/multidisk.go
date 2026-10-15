@@ -29,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/snapshotgroup"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
@@ -78,10 +79,10 @@ func (r *Restorer) groupRestoreWithSGWorkflow(ctx context.Context, exec commandl
 
 func (r *Restorer) bulkInsertDisksFromSG(ctx context.Context) error {
 	// Create mew disks using bulk insert api from snapshot group
-	sourceSnapshotGroupURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/global/snapshotGroups/%s", r.Project, r.GroupSnapshot)
+	sourceSnapshotGroupURI := fmt.Sprintf("%sprojects/%s/global/snapshotGroups/%s", metadataserver.ComputeResourcePrefix(), r.Project, r.GroupSnapshot)
 	parts := strings.Split(r.NewDiskType, "/")
 	diskTypeName := parts[len(parts)-1]
-	diskTypeURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/diskTypes/%s", r.Project, r.DataDiskZone, diskTypeName)
+	diskTypeURI := fmt.Sprintf("%sprojects/%s/zones/%s/diskTypes/%s", metadataserver.ComputeResourcePrefix(), r.Project, r.DataDiskZone, diskTypeName)
 	requestBody := map[string]any{
 		"snapshotGroupParameters": map[string]string{
 			"sourceSnapshotGroup": sourceSnapshotGroupURI,

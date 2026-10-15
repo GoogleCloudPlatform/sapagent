@@ -18,6 +18,7 @@ package hanabackup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -1378,6 +1379,84 @@ func TestDiskMatches(t *testing.T) {
 			got := DiskMatches(tc.physicalDataPath, tc.mapping)
 			if got != tc.want {
 				t.Errorf("DiskMatches(%q, %q) = %v, want %v", tc.physicalDataPath, tc.mapping, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReadKeyUniverseURIs(t *testing.T) {
+	const (
+		gduURI      = "https://www.googleapis.com/compute/v1/projects/myproject/zones/u-germany-northeast1-a/disks/example-disk"
+		tpcURI      = "https://compute.apis-berlin-build0.goog/compute/v1/projects/myproject/zones/u-germany-northeast1-a/disks/example-disk"
+		relativeURI = "projects/myproject/zones/u-germany-northeast1-a/disks/example-disk"
+	)
+	keyFile := func(entries ...Key) configuration.ReadConfigFile {
+		return func(string) ([]byte, error) { return json.Marshal(entries) }
+	}
+	tests := []struct {
+		name       string
+		diskURI    string
+		fakeReader configuration.ReadConfigFile
+		wantKey    string
+		wantErr    error
+	}{
+		{
+			name:       "TPCDiskURIMatchesGDUKeyFileEntry",
+			diskURI:    tpcURI,
+			fakeReader: keyFile(Key{URI: gduURI, Key: "gdu-key"}),
+			wantKey:    "gdu-key",
+		},
+		{
+			name:       "GDUDiskURIMatchesTPCKeyFileEntry",
+			diskURI:    gduURI,
+			fakeReader: keyFile(Key{URI: tpcURI, Key: "tpc-key"}),
+			wantKey:    "tpc-key",
+		},
+		{
+			name:       "TPCDiskURIMatchesRelativeKeyFileEntry",
+			diskURI:    tpcURI,
+			fakeReader: keyFile(Key{URI: relativeURI, Key: "relative-key"}),
+			wantKey:    "relative-key",
+		},
+		{
+			name:       "ExactMatchPreferred",
+			diskURI:    tpcURI,
+			fakeReader: keyFile(Key{URI: gduURI, Key: "gdu-key"}, Key{URI: tpcURI, Key: "tpc-key"}),
+			wantKey:    "tpc-key",
+		},
+		{
+			name:       "DifferentResourceDoesNotMatch",
+			diskURI:    tpcURI,
+			fakeReader: keyFile(Key{URI: "https://www.googleapis.com/compute/v1/projects/myproject/zones/u-germany-northeast1-a/disks/other-disk", Key: "other-key"}),
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name:       "TPCDiskURIMatchesBetaKeyFileEntry",
+			diskURI:    tpcURI,
+			fakeReader: keyFile(Key{URI: "https://www.googleapis.com/compute/beta/projects/myproject/zones/u-germany-northeast1-a/disks/example-disk", Key: "beta-key"}),
+			wantKey:    "beta-key",
+		},
+		{
+			name:       "EmptyDiskURIDoesNotMatchPrefixOnlyEntry",
+			diskURI:    "",
+			fakeReader: keyFile(Key{URI: "https://www.googleapis.com/compute/v1/", Key: "prefix-only-key"}),
+			wantErr:    cmpopts.AnyError,
+		},
+		{
+			name:       "MalformedDiskURIDoesNotMatchMalformedEntry",
+			diskURI:    "https://compute.apis-berlin-build0.goog/compute/v1/",
+			fakeReader: keyFile(Key{URI: "https://www.googleapis.com/compute/v1/", Key: "prefix-only-key"}),
+			wantErr:    cmpopts.AnyError,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ReadKey("", test.diskURI, test.fakeReader)
+			if !cmp.Equal(err, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("ReadKey(%q) error = %v, want %v", test.diskURI, err, test.wantErr)
+			}
+			if got != test.wantKey {
+				t.Errorf("ReadKey(%q) = %q, want %q", test.diskURI, got, test.wantKey)
 			}
 		})
 	}

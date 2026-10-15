@@ -409,6 +409,12 @@ type Key struct {
 }
 
 // ReadKey reads the encryption key from the key file.
+//
+// Entries are matched by resource URI. An exact match takes precedence; otherwise entries are
+// matched on the resource path (e.g. "projects/p/zones/z/disks/d"), so that key files work
+// regardless of the URL prefix used, which differs between universes (e.g.
+// "https://www.googleapis.com/compute/v1/" in the Google Default Universe and
+// "https://compute.<universe-domain>/compute/v1/" in Trusted Partner Cloud universes).
 func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, error) {
 	var keys []Key
 	fileContent, err := read(file)
@@ -425,7 +431,26 @@ func ReadKey(file, diskURI string, read configuration.ReadConfigFile) (string, e
 			return k.Key, nil
 		}
 	}
+	if wantPath := computeResourcePath(diskURI); wantPath != "" {
+		for _, k := range keys {
+			if computeResourcePath(k.URI) == wantPath {
+				return k.Key, nil
+			}
+		}
+	}
 	return "", fmt.Errorf("no matching key found for disk URI %q in key file %q", diskURI, file)
+}
+
+// computeResourcePath returns the relative resource path of a Compute Engine resource URI by
+// removing any scheme, host, and API version prefix, e.g.
+// "https://www.googleapis.com/compute/v1/projects/p/zones/z/disks/d" -> "projects/p/zones/z/disks/d".
+// It is agnostic to the API version (e.g. "/compute/v1/" or "/compute/beta/"). It returns an empty
+// string if the URI does not contain a "projects/" segment.
+func computeResourcePath(uri string) string {
+	if i := strings.Index(uri, "projects/"); i >= 0 {
+		return uri[i:]
+	}
+	return ""
 }
 
 // CheckTopology checks if topology of the system this instance belongs to is scaleout or not.

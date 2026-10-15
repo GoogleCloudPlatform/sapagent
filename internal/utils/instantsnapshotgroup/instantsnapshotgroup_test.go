@@ -19,8 +19,10 @@ package instantsnapshotgroup
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -1214,6 +1216,61 @@ func TestWaitForISGUploadCompletionWithRetryErrors(t *testing.T) {
 			gotErr := tc.s.WaitForISGUploadCompletionWithRetry(ctx, tc.baseURL)
 			if diff := cmp.Diff(tc.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("WaitForISGUploadCompletionWithRetry(%v) returned diff (-want +got):\n%s", tc.baseURL, diff)
+			}
+		})
+	}
+}
+
+// urlCaptureClient records request URLs and responds with a fixed successful body.
+type urlCaptureClient struct {
+	urls []string
+	body string
+}
+
+func (c *urlCaptureClient) Do(req *http.Request) (*http.Response, error) {
+	c.urls = append(c.urls, req.URL.String())
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(c.body)),
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestListInstantSnapshotGroupsUniverseDomain(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     string
+		wantURL string
+	}{
+		{
+			name:    "defaultUniverse",
+			env:     "",
+			wantURL: "https://compute.googleapis.com/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups",
+		},
+		{
+			name:    "tpcUniverse",
+			env:     "apis-berlin-build0.goog",
+			wantURL: "https://compute.apis-berlin-build0.goog/compute/v1/projects/test-project/zones/test-zone/instantSnapshotGroups",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GOOGLE_CLOUD_UNIVERSE_DOMAIN", tc.env)
+			client := &urlCaptureClient{body: `{"items": []}`}
+			s := &ISGService{
+				rest: &rest.Rest{
+					HTTPClient: client,
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{token: &oauth2.Token{AccessToken: "access-token"}}, nil
+					},
+				},
+			}
+
+			if _, err := s.ListInstantSnapshotGroups(context.Background(), "test-project", "test-zone"); err != nil {
+				t.Fatalf("ListInstantSnapshotGroups() returned unexpected error: %v", err)
+			}
+			if len(client.urls) == 0 || client.urls[0] != tc.wantURL {
+				t.Errorf("ListInstantSnapshotGroups() requested URLs %v, want first URL %q", client.urls, tc.wantURL)
 			}
 		})
 	}

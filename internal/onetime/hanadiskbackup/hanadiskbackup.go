@@ -48,6 +48,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 
@@ -909,7 +910,7 @@ func (s *Snapshot) createBackup(ctx context.Context, snapshot *compute.Snapshot,
 	// snapshot encryption key are the same.
 	if s.DiskKeyFile != "" {
 		s.oteLogger.LogUsageAction(usagemetrics.EncryptedDiskSnapshot)
-		srcDiskURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/disks/%s", s.Project, s.DiskZone, s.Disk)
+		srcDiskURI := fmt.Sprintf("%sprojects/%s/zones/%s/disks/%s", metadataserver.ComputeResourcePrefix(), s.Project, s.DiskZone, s.Disk)
 		srcDiskKey, err := hanabackup.ReadKey(s.DiskKeyFile, srcDiskURI, os.ReadFile)
 		if err != nil {
 			s.oteLogger.LogUsageError(usagemetrics.EncryptedDiskSnapshotFailure)

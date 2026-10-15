@@ -46,6 +46,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/timeseries"
 
@@ -800,7 +801,7 @@ func (r *Restorer) restoreFromSnapshot(ctx context.Context, exec commandlineexec
 		// Only supported for single disk restore.
 		// It will fail for multi disk restore in validateParameters if used with multi disk restore.
 		r.oteLogger.LogUsageAction(usagemetrics.EncryptedSnapshotRestore)
-		snapShotURI := fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/zones/%s/snapshots/%s", r.Project, r.DataDiskZone, sourceSnapshot)
+		snapShotURI := fmt.Sprintf("%sprojects/%s/zones/%s/snapshots/%s", metadataserver.ComputeResourcePrefix(), r.Project, r.DataDiskZone, sourceSnapshot)
 		key, err := hanabackup.ReadKey(r.CSEKKeyFile, snapShotURI, os.ReadFile)
 		if err != nil {
 			r.oteLogger.LogUsageError(usagemetrics.EncryptedSnapshotRestoreFailure)
