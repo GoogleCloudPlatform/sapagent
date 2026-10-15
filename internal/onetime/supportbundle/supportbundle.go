@@ -48,6 +48,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/utils/zipper"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/rest"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/storage"
@@ -252,9 +253,13 @@ const (
 	sapDiscoveryFile      = `sapdiscovery.json`
 	workloadMetricPrefix  = "workload.googleapis.com"
 	computeMetricPrefix   = "compute.googleapis.com"
-	cloudLoggingURL       = "https://logging.googleapis.com/v2/entries:list"
 	recentLogsCount       = 3
 )
+
+// cloudLoggingURL returns the Cloud Logging entries:list endpoint for the current universe.
+func cloudLoggingURL() string {
+	return metadataserver.ServiceEndpoint("logging") + "/v2/entries:list"
+}
 
 var (
 	computeMetricsList = []string{
@@ -497,7 +502,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Collecting Support Bundle Report for Agent for SAP...")
 	if !s.AgentLogsOnly && (s.Hostname == "" || s.Sid == "" || len(s.instanceNumsAfterSplit) == 0) {
-		if err := s.processDiscoveryData(ctx, cloudLoggingURL, destFilesPath, cp, fs); err != nil {
+		if err := s.processDiscoveryData(ctx, cloudLoggingURL(), destFilesPath, cp, fs); err != nil {
 			s.oteLogger.LogErrorToFileAndConsole(ctx, "Failed to process discovery data", err)
 			return fmt.Sprintf("Failed to process discovery data: %v", err), subcommands.ExitFailure
 		}
@@ -576,7 +581,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 
 	if !s.AgentLogsOnly {
-		if err := s.collectSapDiscovery(ctx, cloudLoggingURL, destFilesPath, cp, fs); err != nil {
+		if err := s.collectSapDiscovery(ctx, cloudLoggingURL(), destFilesPath, cp, fs); err != nil {
 			errMessage := "Error while collecting GCP Agent for SAP's Discovery data"
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
@@ -593,7 +598,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		if errMsgs := s.collectMetrics(ctx, computeMetricsList, destFilesPath, "compute_metrics", cp, fs, exec); len(errMsgs) > 0 {
 			failureMsgs = append(failureMsgs, errMsgs...)
 		}
-		if err := s.collectSapEvents(ctx, cloudLoggingURL, destFilesPath, cp, fs, exec); err != nil {
+		if err := s.collectSapEvents(ctx, cloudLoggingURL(), destFilesPath, cp, fs, exec); err != nil {
 			failureMsgs = append(failureMsgs, fmt.Sprintf("Error while collecting SAP events: %s", err.Error()))
 		}
 	}

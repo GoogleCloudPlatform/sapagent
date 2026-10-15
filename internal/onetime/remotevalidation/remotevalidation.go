@@ -140,7 +140,7 @@ func (r *RemoteValidation) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	}
 	instanceInfoReader := instanceinfo.New(&instanceinfo.PhysicalPathReader{OS: runtime.GOOS}, gceService)
 
-	wlmService, err := wlm.NewWLMClient(ctx, "https://workloadmanager-datawarehouse.googleapis.com/")
+	wlmService, err := wlm.NewWLMClient(ctx, configuration.DefaultDataWarehouseEndpoint())
 	if err != nil {
 		log.Print(fmt.Sprintf("Failed to create WLM service: %v", err))
 		usagemetrics.Error(usagemetrics.RemoteValidationOTEFailure)

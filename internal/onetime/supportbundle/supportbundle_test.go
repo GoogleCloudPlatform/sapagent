@@ -3887,3 +3887,30 @@ func TestNewMetricClient(t *testing.T) {
 		})
 	}
 }
+
+func TestCloudLoggingURL(t *testing.T) {
+	tests := []struct {
+		name           string
+		universeDomain string
+		want           string
+	}{
+		{
+			name:           "DefaultUniverse",
+			universeDomain: "",
+			want:           "https://logging.googleapis.com/v2/entries:list",
+		},
+		{
+			name:           "TPCUniverse",
+			universeDomain: "apis-berlin-build0.goog",
+			want:           "https://logging.apis-berlin-build0.goog/v2/entries:list",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GOOGLE_CLOUD_UNIVERSE_DOMAIN", tc.universeDomain)
+			if got := cloudLoggingURL(); got != tc.want {
+				t.Errorf("cloudLoggingURL() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

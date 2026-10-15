@@ -32,6 +32,7 @@ import (
 	"golang.org/x/oauth2"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/configurablemetrics"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/osinfo"
 
@@ -355,7 +356,7 @@ func setPacemakerAPIAccess(ctx context.Context, labels map[string]string, projec
 	fenceAgentComputeAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s ", bearerToken),
-		fmt.Sprintf("https://compute.googleapis.com/compute/v1/projects/%s?fields=id", projectID))
+		fmt.Sprintf("%s/compute/v1/projects/%s?fields=id", metadataserver.ServiceEndpoint("compute"), projectID))
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not obtain fence agent compute API Access", log.Error(err))
 	}
@@ -363,7 +364,7 @@ func setPacemakerAPIAccess(ctx context.Context, labels map[string]string, projec
 	fenceAgentLoggingAPIAccess, err := checkAPIAccess(ctx, exec,
 		"-H",
 		fmt.Sprintf("Authorization: Bearer %s", bearerToken),
-		"https://logging.googleapis.com/v2/entries:write",
+		metadataserver.ServiceEndpoint("logging")+"/v2/entries:write",
 		"-X",
 		"POST",
 		"-H",

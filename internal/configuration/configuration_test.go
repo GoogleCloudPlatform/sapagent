@@ -1669,3 +1669,33 @@ func TestEnsureConfigExists(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultDataWarehouseEndpoint(t *testing.T) {
+	tests := []struct {
+		name           string
+		universeDomain string
+		want           string
+	}{
+		{
+			name:           "DefaultUniverse",
+			universeDomain: "",
+			want:           "https://workloadmanager-datawarehouse.googleapis.com/",
+		},
+		{
+			name:           "TPCUniverse",
+			universeDomain: "apis-berlin-build0.goog",
+			want:           "https://workloadmanager-datawarehouse.apis-berlin-build0.goog/",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GOOGLE_CLOUD_UNIVERSE_DOMAIN", tc.universeDomain)
+			if got := DefaultDataWarehouseEndpoint(); got != tc.want {
+				t.Errorf("DefaultDataWarehouseEndpoint() = %q, want %q", got, tc.want)
+			}
+			if got := applyDefaultCollectionConfiguration(&cpb.CollectionConfiguration{}).GetDataWarehouseEndpoint(); got != tc.want {
+				t.Errorf("applyDefaultCollectionConfiguration().GetDataWarehouseEndpoint() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

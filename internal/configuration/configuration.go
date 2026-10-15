@@ -34,6 +34,7 @@ import (
 
 	"go.uber.org/zap/zapcore"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/gce/metadataserver"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/parametermanager"
 
@@ -250,6 +251,13 @@ func ApplyDefaults(configFromFile *cpb.Configuration, cloudProps *iipb.CloudProp
 	return config
 }
 
+// DefaultDataWarehouseEndpoint returns the Workload Manager Data Warehouse API endpoint for the
+// current universe, e.g. "https://workloadmanager-datawarehouse.googleapis.com/" in the Google
+// Default Universe.
+func DefaultDataWarehouseEndpoint() string {
+	return metadataserver.ServiceEndpoint("workloadmanager-datawarehouse") + "/"
+}
+
 func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfiguration) *cpb.CollectionConfiguration {
 	cc := configFromFile
 	if cc == nil {
@@ -285,7 +293,7 @@ func applyDefaultCollectionConfiguration(configFromFile *cpb.CollectionConfigura
 		cc.MissedHeartbeatThreshold = 10
 	}
 	if cc.GetDataWarehouseEndpoint() == "" {
-		cc.DataWarehouseEndpoint = "https://workloadmanager-datawarehouse.googleapis.com/"
+		cc.DataWarehouseEndpoint = DefaultDataWarehouseEndpoint()
 	}
 	if cc.GetWorkloadValidationCollectionDefinition() == nil {
 		cc.WorkloadValidationCollectionDefinition = &cpb.WorkloadValidationCollectionDefinition{

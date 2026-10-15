@@ -3513,3 +3513,34 @@ func TestSetPacemakerAPIAccessRequestBodyIsValidJSON(t *testing.T) {
 		t.Errorf("setPacemakerAPIAccess() sent invalid JSON request body: %s", gotBodies[0])
 	}
 }
+
+func TestSetPacemakerAPIAccessUniverseDomain(t *testing.T) {
+	t.Setenv("GOOGLE_CLOUD_UNIVERSE_DOMAIN", "apis-berlin-build0.goog")
+	var gotURLs []string
+	exec := func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		for _, arg := range params.Args {
+			if strings.HasPrefix(arg, "https://") {
+				gotURLs = append(gotURLs, arg)
+			}
+		}
+		return commandlineexecutor.Result{StdOut: jsonHealthyResponse}
+	}
+
+	got := map[string]string{}
+	setPacemakerAPIAccess(context.Background(), got, "test-project", "token", exec)
+
+	wantURLs := []string{
+		"https://compute.apis-berlin-build0.goog/compute/v1/projects/test-project?fields=id",
+		"https://logging.apis-berlin-build0.goog/v2/entries:write",
+	}
+	if diff := cmp.Diff(wantURLs, gotURLs); diff != "" {
+		t.Errorf("setPacemakerAPIAccess() requested unexpected URLs diff (-want +got):\n%s", diff)
+	}
+	wantLabels := map[string]string{
+		"fence_agent_compute_api_access": "true",
+		"fence_agent_logging_api_access": "true",
+	}
+	if diff := cmp.Diff(wantLabels, got); diff != "" {
+		t.Errorf("setPacemakerAPIAccess() returned unexpected metric labels diff (-want +got):\n%s", diff)
+	}
+}
