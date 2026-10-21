@@ -86,12 +86,15 @@ func ExtractFromURI(uri, field string) string {
 	return ""
 }
 
-func regionFromZone(zone string) string {
+// RegionFromZone returns the region of a zone by removing the zone suffix, e.g.
+// "us-central1-a" -> "us-central1" and "u-germany-northeast1-a" -> "u-germany-northeast1".
+// Returns an empty string if the zone does not contain a region and a suffix.
+func RegionFromZone(zone string) string {
 	parts := strings.Split(zone, "-")
-	if len(parts) == 3 {
-		return parts[0] + "-" + parts[1]
+	if len(parts) < 3 {
+		return ""
 	}
-	return ""
+	return strings.Join(parts[:len(parts)-1], "-")
 }
 
 func getResourceKind(uri string) string {
@@ -159,7 +162,7 @@ func (d *CloudDiscovery) DiscoverComputeResources(ctx context.Context, parentRes
 	var discoverQueue []toDiscover
 	var region string
 	if cp.GetZone() != "" {
-		region = regionFromZone(cp.GetZone())
+		region = RegionFromZone(cp.GetZone())
 	}
 	for _, h := range hostList {
 		discoverQueue = append(discoverQueue, toDiscover{
@@ -390,7 +393,7 @@ func (d *CloudDiscovery) discoverInstance(ctx context.Context, instanceURI strin
 	log.CtxLogger(ctx).Debugw("discoverInstance", "instanceURI", instanceURI)
 	project := ExtractFromURI(instanceURI, projectsURIPart)
 	zone := ExtractFromURI(instanceURI, zonesURIPart)
-	region := regionFromZone(zone)
+	region := RegionFromZone(zone)
 	instanceName := ExtractFromURI(instanceURI, instancesURIPart)
 	ci, err := d.GceService.GetInstance(project, zone, instanceName)
 	if err != nil {
@@ -522,7 +525,7 @@ func (d *CloudDiscovery) discoverInstanceGroup(ctx context.Context, groupURI str
 		return nil, nil, err
 	}
 
-	region := regionFromZone(zone)
+	region := RegionFromZone(zone)
 	toAdd := []toDiscover{}
 	for _, inst := range instances {
 		toAdd = append(toAdd, toDiscover{

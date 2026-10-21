@@ -677,9 +677,7 @@ func (d *Discovery) discoverReplicationSite(ctx context.Context, site *sappb.HAN
 			r.InstanceProperties.InstanceRole |= spb.SapDiscovery_Resource_InstanceProperties_INSTANCE_ROLE_DATABASE
 			if r.GetInstanceProperties().GetVirtualHostname() == site.Name {
 				instanceZone := clouddiscovery.ExtractFromURI(r.GetResourceUri(), "zones")
-				regionParts := strings.Split(instanceZone, "-")
-				instanceRegion := strings.Join([]string{regionParts[0], regionParts[1]}, "-")
-				repComp.Region = instanceRegion
+				repComp.Region = clouddiscovery.RegionFromZone(instanceZone)
 			}
 		}
 	}

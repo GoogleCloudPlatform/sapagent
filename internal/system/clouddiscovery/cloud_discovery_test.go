@@ -2072,3 +2072,23 @@ func TestDiscoverBackendService(t *testing.T) {
 		})
 	}
 }
+
+func TestRegionFromZone(t *testing.T) {
+	tests := []struct {
+		name string
+		zone string
+		want string
+	}{
+		{name: "DefaultUniverseZone", zone: "us-central1-a", want: "us-central1"},
+		{name: "TPCZone", zone: "u-germany-northeast1-a", want: "u-germany-northeast1"},
+		{name: "Region", zone: "us-central1", want: ""},
+		{name: "Empty", zone: "", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RegionFromZone(tc.zone); got != tc.want {
+				t.Errorf("RegionFromZone(%q) = %q, want %q", tc.zone, got, tc.want)
+			}
+		})
+	}
+}

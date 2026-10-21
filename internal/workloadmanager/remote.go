@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"github.com/gammazero/workerpool"
+	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
@@ -132,7 +133,7 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 			remoteCp := &ipb.CloudProperties{
 				ProjectId:    inst.GetProjectId(),
 				InstanceId:   inst.GetInstanceId(),
-				Region:       regionFromZone(inst.GetZone()),
+				Region:       clouddiscovery.RegionFromZone(inst.GetZone()),
 				Zone:         inst.GetZone(),
 				InstanceName: inst.GetInstanceName(),
 			}
@@ -149,14 +150,6 @@ func collectAndSendRemoteMetrics(ctx context.Context, params Parameters) int {
 	}
 	wp.StopWait()
 	return metricsSent
-}
-
-func regionFromZone(zone string) string {
-	regionParts := strings.Split(zone, "-")
-	if len(regionParts) < 2 {
-		return ""
-	}
-	return strings.Join(regionParts[:2], "-")
 }
 
 // createWorkloadValidationFile stores a workload validation definition in a
