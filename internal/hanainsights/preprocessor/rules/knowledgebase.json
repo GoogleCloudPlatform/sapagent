@@ -22,7 +22,7 @@
     },
     {
       "name": "q_system_usage",
-      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_information' AND KEY = 'usage'",
+      "sql": "SELECT VALUE as value from M_INIFILE_CONTENTS  WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_information' AND KEY = 'usage' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["value"]
     }
   ]

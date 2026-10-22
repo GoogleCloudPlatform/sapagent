@@ -7,7 +7,7 @@
   "queries": [
     {
       "name": "q_listeninterface",
-      "sql": "SELECT VALUE as value FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication_communication' AND KEY = 'listeninterface'",
+      "sql": "SELECT VALUE as value FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication_communication' AND KEY = 'listeninterface' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["value"]
     },
     {

@@ -19,6 +19,8 @@ package preprocessor
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -625,5 +627,49 @@ func TestValidateRecommendations(t *testing.T) {
 				t.Errorf("validateRecommendations(%v, %v, %v)=%v want: %v", tc.recomms, tc.queryNametoCols, tc.globalKB, got, tc.want)
 			}
 		})
+	}
+}
+
+// scalarRefs returns the query names referenced as scalar values (query:column) in the trigger tree.
+func scalarRefs(n *rpb.EvalNode, refs map[string]bool) {
+	if n == nil {
+		return
+	}
+	for _, operand := range []string{n.GetLhs(), n.GetRhs()} {
+		if m := KnowledgeBasePattern.FindStringSubmatch(operand); m != nil {
+			refs[m[1]] = true
+		}
+	}
+	for _, c := range n.GetChildEvals() {
+		scalarRefs(c, refs)
+	}
+}
+
+// TestInifileScalarQueriesReturnSingleRow verifies that M_INIFILE_CONTENTS queries consumed as
+// scalars return at most one row. M_INIFILE_CONTENTS returns one row per configuration layer
+// (DEFAULT, SYSTEM, DATABASE, HOST), so such queries must select a single layer, e.g. using
+// ORDER BY ... LIMIT 1. Otherwise the rule engine fails to resolve the scalar value.
+func TestInifileScalarQueriesReturnSingleRow(t *testing.T) {
+	rules, err := ReadRules(RuleFilenames)
+	if err != nil {
+		t.Fatalf("ReadRules(RuleFilenames) failed: %v", err)
+	}
+	refs := make(map[string]bool)
+	for _, rule := range rules {
+		for _, r := range rule.GetRecommendations() {
+			scalarRefs(r.GetTrigger(), refs)
+		}
+	}
+	countQuery := regexp.MustCompile(`(?i)^\s*SELECT\s+COUNT\s*\(`)
+	for _, rule := range rules {
+		for _, q := range rule.GetQueries() {
+			sql := strings.ToUpper(q.GetSql())
+			if !refs[q.GetName()] || !strings.Contains(sql, "M_INIFILE_CONTENTS") || countQuery.MatchString(sql) {
+				continue
+			}
+			if !strings.HasSuffix(strings.TrimSpace(sql), "LIMIT 1") {
+				t.Errorf("Rule %q query %q reads M_INIFILE_CONTENTS as a scalar but can return multiple rows: %q", rule.GetId(), q.GetName(), q.GetSql())
+			}
+		}
 	}
 }

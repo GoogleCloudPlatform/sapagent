@@ -8,7 +8,7 @@
   "queries": [
     {
       "name": "q_numa_aware_check",
-      "sql": "SELECT DISTINCT VALUE AS VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='load_table_numa_aware'",
+      "sql": "SELECT VALUE AS VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='load_table_numa_aware' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     }
   ],
