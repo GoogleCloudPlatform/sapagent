@@ -296,6 +296,39 @@ func TestReadRow(t *testing.T) {
 			wantErr: []error{nil, nil},
 		},
 		{
+			// hdbsql encloses string-typed columns in quotes even when their
+			// content is numeric (e.g. M_INIFILE_CONTENTS.VALUE or LPAD output).
+			name: "ValidResultQuotedPrimitives",
+			sqlResult: []string{
+				`"1048576","test1","0.28","TRUE","2000-01-23"`,
+				`"  2","test2","   1.50","false",3`,
+			},
+			wantDest: [][]any{
+				[]any{int64(1048576), "test1", float64(0.28), true, "2000-01-23"},
+				[]any{int64(2), "test2", float64(1.5), false, "3"},
+			},
+			wantErr: []error{nil, nil},
+		},
+		{
+			// Stripping quotes and whitespace from a primitive column must not make
+			// invalid content parse successfully. Each row has exactly one invalid
+			// quoted primitive; all other columns are valid.
+			name: "InvalidResultQuotedPrimitives",
+			sqlResult: []string{
+				`"abc","test1",1.1,TRUE,"2000-01-23"`, // Column 1 is expected to be int64; "abc" is non-numeric.
+				`"","test2",1.2,TRUE,"2000-02-23"`,    // Column 1 is expected to be int64; an empty string is an error, not NULL (0).
+				`"   ","test3",1.3,TRUE,"2000-03-23"`, // Column 1 is expected to be int64; whitespace-only is an error, not NULL (0).
+				`"1 0","test4",1.4,TRUE,"2000-04-23"`, // Column 1 is expected to be int64; inner space is not trimmed.
+				`5,"test5","1.2.3",TRUE,"2000-05-23"`, // Column 3 is expected to be float64; "1.2.3" is malformed.
+				`6,"test6",1.6,"maybe","2000-06-23"`,  // Column 4 is expected to be bool; "maybe" is non-boolean.
+			},
+			wantDest: [][]any{nil, nil, nil, nil, nil, nil},
+			wantErr: []error{
+				cmpopts.AnyError, cmpopts.AnyError, cmpopts.AnyError,
+				cmpopts.AnyError, cmpopts.AnyError, cmpopts.AnyError,
+			},
+		},
+		{
 			name: "InvalidResultIncorrectColumnCount",
 			sqlResult: []string{
 				`1,"test1","2000-01-23"`,

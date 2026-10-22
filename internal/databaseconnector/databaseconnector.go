@@ -323,7 +323,7 @@ func parseIntoValues(resultRow string, dest ...any) error {
 				*d = 0
 				continue
 			}
-			val, err := strconv.ParseInt(match[0], 10, 64)
+			val, err := strconv.ParseInt(primitiveValue(match[0]), 10, 64)
 			if err != nil {
 				return fmt.Errorf("failed to parse %s as int64: %v", match[0], err)
 			}
@@ -333,7 +333,7 @@ func parseIntoValues(resultRow string, dest ...any) error {
 				*d = 0.0
 				continue
 			}
-			val, err := strconv.ParseFloat(match[0], 64)
+			val, err := strconv.ParseFloat(primitiveValue(match[0]), 64)
 			if err != nil {
 				return fmt.Errorf("failed to parse %s as float64: %v", match[0], err)
 			}
@@ -343,7 +343,7 @@ func parseIntoValues(resultRow string, dest ...any) error {
 				*d = false
 				continue
 			}
-			val, err := strconv.ParseBool(match[0])
+			val, err := strconv.ParseBool(primitiveValue(match[0]))
 			if err != nil {
 				return fmt.Errorf("failed to parse %s as bool: %v", match[0], err)
 			}
@@ -362,6 +362,13 @@ func parseIntoValues(resultRow string, dest ...any) error {
 		}
 	}
 	return nil
+}
+
+// primitiveValue strips enclosing double quotes and surrounding whitespace from
+// a token before it is parsed as a number or bool. hdbsql quotes string-typed
+// columns even when their content is numeric (e.g. "1048576").
+func primitiveValue(token string) string {
+	return strings.TrimSpace(strings.Trim(token, `"`))
 }
 
 // IsAuthError returns true if the error is related to authentication, and false otherwise.
