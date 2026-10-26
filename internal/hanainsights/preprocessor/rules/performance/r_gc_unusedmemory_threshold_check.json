@@ -14,12 +14,12 @@
     },
     {
       "name": "q_mem_threshold_rel",
-      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_rel' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_rel' AND VALUE > '0' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     },
     {
       "name": "q_mem_threshold_abs",
-      "sql": "SELECT count(*) as VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_abs' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0'",
+      "sql": "SELECT count(*) as VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION= 'memorymanager' AND KEY = 'gc_unused_memory_threshold_abs' AND VALUE > '0'",
       "columns": ["VALUE"]
     }
   ],

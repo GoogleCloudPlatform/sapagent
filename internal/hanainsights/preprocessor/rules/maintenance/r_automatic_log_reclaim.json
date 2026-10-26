@@ -8,7 +8,7 @@
   "queries": [
     {
       "name": "q_automatic_log_reclaim",
-      "sql": "SELECT VALUE from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' and section= 'persistence' and key = 'log_disk_usage_reclaim_threshold' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '-1' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "sql": "SELECT VALUE from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' and section= 'persistence' and key = 'log_disk_usage_reclaim_threshold' AND VALUE > '-1' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     }
   ],

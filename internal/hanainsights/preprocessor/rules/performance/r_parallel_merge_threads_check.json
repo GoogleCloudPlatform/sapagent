@@ -10,7 +10,7 @@
   [
     {
       "name": "q_threads_check",
-      "sql": "SELECT VALUE  FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='parallel_merge_threads' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "sql": "SELECT VALUE  FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND KEY='parallel_merge_threads' AND VALUE > '0' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     },
     {

@@ -828,7 +828,7 @@
     },
     {
         "name": "logshipping_max_retention_size_queries",
-        "sql": "select VALUE, FILE_NAME from M_INIFILE_CONTENTS where layer_name in ('DATABASE','DEFAULT') and key = 'logshipping_max_retention_size' and file_name in ('global.ini', 'indexserver.ini') order by file_name desc limit 1",
+        "sql": "select VALUE, FILE_NAME from M_INIFILE_CONTENTS where key = 'logshipping_max_retention_size' and file_name in ('global.ini', 'indexserver.ini') order by file_name desc, case layer_name when 'HOST' then 1 when 'DATABASE' then 2 when 'SYSTEM' then 3 when 'DEFAULT' then 4 else 5 end limit 1",
         "columns": [
             {
                 "name": "VALUE",

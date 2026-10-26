@@ -645,11 +645,15 @@ func scalarRefs(n *rpb.EvalNode, refs map[string]bool) {
 	}
 }
 
-// TestInifileScalarQueriesReturnSingleRow verifies that M_INIFILE_CONTENTS queries consumed as
-// scalars return at most one row. M_INIFILE_CONTENTS returns one row per configuration layer
-// (DEFAULT, SYSTEM, DATABASE, HOST), so such queries must select a single layer, e.g. using
-// ORDER BY ... LIMIT 1. Otherwise the rule engine fails to resolve the scalar value.
-func TestInifileScalarQueriesReturnSingleRow(t *testing.T) {
+// TestInifileQueriesUseEffectiveLayer verifies that M_INIFILE_CONTENTS queries evaluate the
+// effective parameter value. M_INIFILE_CONTENTS returns one row per configuration layer (DEFAULT,
+// SYSTEM, DATABASE, HOST), so:
+//   - No query may filter on LAYER_NAME, which would ignore values set at the excluded layers.
+//   - Queries consumed as scalars must select the highest-precedence layer with
+//     layerPrecedenceSuffix. Otherwise they return multiple rows and the rule engine fails to
+//     resolve the scalar value.
+func TestInifileQueriesUseEffectiveLayer(t *testing.T) {
+	const layerPrecedenceSuffix = "ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1"
 	rules, err := ReadRules(RuleFilenames)
 	if err != nil {
 		t.Fatalf("ReadRules(RuleFilenames) failed: %v", err)
@@ -661,14 +665,18 @@ func TestInifileScalarQueriesReturnSingleRow(t *testing.T) {
 		}
 	}
 	countQuery := regexp.MustCompile(`(?i)^\s*SELECT\s+COUNT\s*\(`)
+	layerFilter := regexp.MustCompile(`(?i)\bLAYER_NAME\s*(=|IN\b)`)
 	for _, rule := range rules {
 		for _, q := range rule.GetQueries() {
-			sql := strings.ToUpper(q.GetSql())
-			if !refs[q.GetName()] || !strings.Contains(sql, "M_INIFILE_CONTENTS") || countQuery.MatchString(sql) {
+			sql := q.GetSql()
+			if !strings.Contains(strings.ToUpper(sql), "M_INIFILE_CONTENTS") {
 				continue
 			}
-			if !strings.HasSuffix(strings.TrimSpace(sql), "LIMIT 1") {
-				t.Errorf("Rule %q query %q reads M_INIFILE_CONTENTS as a scalar but can return multiple rows: %q", rule.GetId(), q.GetName(), q.GetSql())
+			if layerFilter.MatchString(sql) {
+				t.Errorf("Rule %q query %q filters M_INIFILE_CONTENTS on LAYER_NAME, ignoring values set at other layers: %q", rule.GetId(), q.GetName(), sql)
+			}
+			if refs[q.GetName()] && !countQuery.MatchString(sql) && !strings.HasSuffix(strings.TrimSpace(sql), layerPrecedenceSuffix) {
+				t.Errorf("Rule %q query %q reads M_INIFILE_CONTENTS as a scalar but does not end with %q: %q", rule.GetId(), q.GetName(), layerPrecedenceSuffix, sql)
 			}
 		}
 	}

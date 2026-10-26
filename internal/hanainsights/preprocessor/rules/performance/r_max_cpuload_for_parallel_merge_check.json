@@ -15,7 +15,7 @@
     },
     {
       "name": "q_max_cpuload_check",
-      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND SECTION='mergedog' AND KEY='max_cpuload_for_parallel_merge' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "sql": "SELECT VALUE FROM M_INIFILE_CONTENTS WHERE FILE_NAME='indexserver.ini' AND SECTION='mergedog' AND KEY='max_cpuload_for_parallel_merge' AND VALUE > '0' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     },
     {

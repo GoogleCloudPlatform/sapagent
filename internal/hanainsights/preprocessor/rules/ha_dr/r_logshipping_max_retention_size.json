@@ -18,7 +18,7 @@
     },
     {
       "name": "q_logshipping_max_retention_size",
-      "sql": "select (VALUE * 1024) AS VALUE  from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication' AND KEY = 'logshipping_max_retention_size' AND (LAYER_NAME = 'DATABASE' OR LAYER_NAME = 'DEFAULT') AND VALUE > '0' ORDER BY LAYER_NAME ASC LIMIT 1",
+      "sql": "select (VALUE * 1024) AS VALUE  from M_INIFILE_CONTENTS WHERE FILE_NAME = 'global.ini' AND SECTION = 'system_replication' AND KEY = 'logshipping_max_retention_size' AND VALUE > '0' ORDER BY CASE LAYER_NAME WHEN 'HOST' THEN 1 WHEN 'DATABASE' THEN 2 WHEN 'SYSTEM' THEN 3 WHEN 'DEFAULT' THEN 4 ELSE 5 END LIMIT 1",
       "columns": ["VALUE"]
     },
     {
