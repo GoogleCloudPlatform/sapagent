@@ -20,8 +20,10 @@ package workloadmanager
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +36,7 @@ import (
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/cloudmonitoring"
 
 	"golang.org/x/exp/slices"
+	"google.golang.org/api/googleapi"
 	"github.com/GoogleCloudPlatform/sapagent/internal/configuration"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
@@ -89,6 +92,8 @@ var (
 	now               = currentTime
 	dailyUsageRoutine *recovery.RecoverableRoutine
 	collectRoutine    *recovery.RecoverableRoutine
+	// retryDelay is how long to wait before retrying a failed Data Warehouse send.
+	retryDelay = 5 * time.Second
 )
 
 const metricOverridePath = "/etc/google-cloud-sap-agent/wlmmetricoverride.yaml"
@@ -511,8 +516,24 @@ func sendMetricsToDataWarehouse(ctx context.Context, params sendMetricsParams) i
 	log.CtxLogger(ctx).Infow("Sending metrics to Data Warehouse...", "number", len(params.wm.Metrics))
 	// Send request to regional endpoint. Ex: "us-central1-a" -> "us-central1"
 	req := createWriteInsightRequest(params.wm, params.cp)
-	if err := params.wlmService.WriteInsight(params.cp.GetProjectId(), params.cp.GetRegion(), req); err != nil {
-		log.CtxLogger(ctx).Errorw("Failed to send metrics to Data Warehouse", "error", err)
+	err := params.wlmService.WriteInsight(params.cp.GetProjectId(), params.cp.GetRegion(), req)
+	if err != nil {
+		// Retry once, since transient failures (e.g. HTTP 503) usually clear quickly.
+		log.CtxLogger(ctx).Infow("Failed to send metrics to Data Warehouse, retrying", "retryDelay", retryDelay, "error", err)
+		select {
+		case <-ctx.Done():
+		case <-time.After(retryDelay):
+			err = params.wlmService.WriteInsight(params.cp.GetProjectId(), params.cp.GetRegion(), req)
+		}
+	}
+	if err != nil {
+		// 503s are transient and metrics are resent on the next collection, so log them as warnings.
+		var gErr *googleapi.Error
+		if errors.As(err, &gErr) && gErr.Code == http.StatusServiceUnavailable {
+			log.CtxLogger(ctx).Warnw("Failed to send metrics to Data Warehouse", "error", err)
+		} else {
+			log.CtxLogger(ctx).Errorw("Failed to send metrics to Data Warehouse", "error", err)
+		}
 		usagemetrics.Error(usagemetrics.WLMMetricCollectionFailure)
 		sentMetrics = 0
 	} else {

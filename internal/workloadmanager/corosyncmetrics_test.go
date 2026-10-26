@@ -45,6 +45,8 @@ import (
 
 func TestMain(t *testing.M) {
 	log.SetupLoggingForTest()
+	// Don't wait between Data Warehouse send retries in tests.
+	retryDelay = 0
 	os.Exit(t.Run())
 }
 

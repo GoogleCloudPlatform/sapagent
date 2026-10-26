@@ -459,7 +459,7 @@ func TestSendMetrics(t *testing.T) {
 						AgentVersion: configuration.AgentVersion,
 					},
 				}},
-				WriteInsightErrs: []error{cmpopts.AnyError},
+				WriteInsightErrs: []error{cmpopts.AnyError, cmpopts.AnyError},
 			},
 			params: sendMetricsParams{
 				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
@@ -472,6 +472,23 @@ func TestSendMetrics(t *testing.T) {
 				backOffIntervals:  defaultBackOffIntervals,
 			},
 			wantMetricCount: 0,
+		},
+		{
+			name: "succeedsSendToDataWarehouseOnRetry",
+			wlmInterface: &wlmfake.TestWLM{
+				WriteInsightErrs: []error{cmpopts.AnyError, nil},
+			},
+			params: sendMetricsParams{
+				wm: WorkloadMetrics{Metrics: []*mrpb.TimeSeries{{
+					Metric:   &metricpb.Metric{},
+					Resource: &monitoredresourcepb.MonitoredResource{},
+					Points:   []*mrpb.Point{},
+				}}},
+				cp:                defaultConfiguration.GetCloudProperties(),
+				timeSeriesCreator: &fake.TimeSeriesCreator{},
+				backOffIntervals:  defaultBackOffIntervals,
+			},
+			wantMetricCount: 1,
 		},
 	}
 

@@ -21,6 +21,7 @@ package status
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -3232,5 +3233,70 @@ func TestIsSecondaryHANA(t *testing.T) {
 				t.Errorf("isSecondaryHANA() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestMain(m *testing.M) {
+	// Don't wait between retries in tests.
+	retryDelay = 0
+	os.Exit(m.Run())
+}
+
+func TestRetryOnce(t *testing.T) {
+	errFail := errors.New("failure")
+	tests := []struct {
+		name string
+		// Results returned by successive calls to the operation.
+		results   []error
+		wantErr   error
+		wantCalls int
+	}{
+		{
+			name:      "SucceedsFirstAttempt",
+			results:   []error{nil},
+			wantErr:   nil,
+			wantCalls: 1,
+		},
+		{
+			name:      "SucceedsOnRetry",
+			results:   []error{errFail, nil},
+			wantErr:   nil,
+			wantCalls: 2,
+		},
+		{
+			name:      "FailsBothAttempts",
+			results:   []error{errFail, errFail},
+			wantErr:   errFail,
+			wantCalls: 2,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			gotErr := retryOnce(context.Background(), "test", func() error {
+				calls++
+				return tc.results[calls-1]
+			})
+			if !errors.Is(gotErr, tc.wantErr) || calls != tc.wantCalls {
+				t.Errorf("retryOnce() = %v with %d calls, want %v with %d calls", gotErr, calls, tc.wantErr, tc.wantCalls)
+			}
+		})
+	}
+}
+
+func TestRetryOnceStopsOnCanceledContext(t *testing.T) {
+	oldDelay := retryDelay
+	retryDelay = time.Hour
+	defer func() { retryDelay = oldDelay }()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	calls := 0
+	gotErr := retryOnce(ctx, "test", func() error {
+		calls++
+		return errors.New("failure")
+	})
+	if gotErr == nil || calls != 1 {
+		t.Errorf("retryOnce() with canceled context = %v with %d calls, want an error with 1 call", gotErr, calls)
 	}
 }

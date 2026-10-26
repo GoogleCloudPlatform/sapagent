@@ -98,6 +98,8 @@ var (
 	dailyUsageRoutine *recovery.RecoverableRoutine
 	collectRoutine    *recovery.RecoverableRoutine
 	allFeatures       = strings.Join([]string{hostMetrics, processMetrics, hanaMonitoring, sapDiscovery, backint, diskSnapshot, workloadManager, parameterManager}, ",")
+	// retryDelay is how long retryOnce waits before retrying a failed operation.
+	retryDelay = 5 * time.Second
 )
 
 type (
@@ -431,7 +433,10 @@ func (s *Status) agentStatus(ctx context.Context) (*spb.AgentStatus, *cpb.Config
 
 	var err error
 	repositoryLocation := getRepositoryLocation(s.CloudProps)
-	agentStatus.AvailableVersion, err = statushelper.LatestVersionArtifactRegistry(ctx, s.arClient, projectName, repositoryLocation, repositoryName, agentPackageName)
+	err = retryOnce(ctx, "fetch latest version", func() (fnErr error) {
+		agentStatus.AvailableVersion, fnErr = statushelper.LatestVersionArtifactRegistry(ctx, s.arClient, projectName, repositoryLocation, repositoryName, agentPackageName)
+		return fnErr
+	})
 	if err != nil {
 		log.CtxLogger(ctx).Errorw("Could not fetch latest version", "error", err)
 		agentStatus.AvailableVersion = fetchLatestVersionError
@@ -955,7 +960,11 @@ func configValue(name string, value any, defaultValue any) *spb.ConfigValue {
 }
 
 func (s *Status) fetchPermissionsStatus(ctx context.Context, functionalityName string, resourceProps *permissions.ResourceDetails) ([]*spb.IAMPermission, bool, error) {
-	permissions, err := s.permissionsStatus(ctx, s.iamService, functionalityName, resourceProps)
+	var permissions map[string]bool
+	err := retryOnce(ctx, "check IAM permissions", func() (fnErr error) {
+		permissions, fnErr = s.permissionsStatus(ctx, s.iamService, functionalityName, resourceProps)
+		return fnErr
+	})
 	if err != nil {
 		return nil, false, err
 	}
@@ -980,6 +989,23 @@ func (s *Status) fetchPermissionsStatus(ctx context.Context, functionalityName s
 		})
 	}
 	return permissionsStatus, allGranted, nil
+}
+
+// retryOnce calls fn and, if it fails, retries it once after retryDelay, since
+// transient failures (e.g. HTTP 503) usually clear quickly. It returns the
+// error from the last attempt.
+func retryOnce(ctx context.Context, operation string, fn func() error) error {
+	err := fn()
+	if err == nil {
+		return nil
+	}
+	log.CtxLogger(ctx).Infow("Operation failed, retrying", "operation", operation, "retryDelay", retryDelay, "error", err)
+	select {
+	case <-ctx.Done():
+		return err
+	case <-time.After(retryDelay):
+		return fn()
+	}
 }
 
 func logCheckFailureAndReturnStatus(ctx context.Context, status *spb.ServiceStatus, msg string, fullyFunctional spb.State) *spb.ServiceStatus {
