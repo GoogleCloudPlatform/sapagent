@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -45,6 +46,13 @@ var (
 	sapstartsrvRegex               = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
 	pacemakerClusterUnhealthyRegex = regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
 	ipAddressRegex                 = regexp.MustCompile(`\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)`)
+	// maintenanceModeRegex matches a maintenance-mode cluster property or maintenance meta attribute
+	// that is enabled, in either `crm configure show` (name=value) or `pcs property` (name: value)
+	// output. Other attributes on the same line, such as interleave=true, are not matched.
+	maintenanceModeRegex = regexp.MustCompile(`(?i)\bmaintenance(-mode)?\s*[=:]\s*"?(true|on|yes|y|1)\b`)
+	// sapInstanceNameRegex matches an SAP instance name or profile name of the form
+	// <SID>_<INSTANCE><NN>_<VIRTUAL_HOST>, for example NW1_ASCS00_vhascs or NW1_ERS10_vhers.
+	sapInstanceNameRegex = regexp.MustCompile(`^[A-Z][A-Z0-9]{2}_(ASCS|SCS|ERS)[0-9]{2}_(\S+)$`)
 )
 
 type (
@@ -285,12 +293,12 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
 
-	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
+	collectASCSInstance(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Exists, params.Execute)
 	collectEnqueueServer(ctx, labels, params.Execute)
 	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
 	collectASCSIP(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
-	collectASCSVirtualIP(ctx, labels, params.Execute)
+	collectASCSVirtualIP(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 
 	// sets the OP options from the pacemaker configuration.
 	setOPOptions(labels, pacemakerDocument.Configuration.OPDefaults)
@@ -423,17 +431,20 @@ func setPacemakerMaintenanceMode(ctx context.Context, labels map[string]string, 
 	if crmAvailable {
 		result = exec(ctx, commandlineexecutor.Params{
 			Executable:  "sh",
-			ArgsToSplit: "-c 'crm configure show | grep maintenance | grep true'",
+			ArgsToSplit: "-c 'crm configure show | grep maintenance'",
 		})
 	} else {
 		result = exec(ctx, commandlineexecutor.Params{
 			Executable:  "sh",
-			ArgsToSplit: "-c 'pcs property show | grep maintenance | grep true'",
+			ArgsToSplit: "-c 'pcs property show | grep maintenance'",
 		})
 	}
 	log.CtxLogger(ctx).Debugw("Pacemaker maintenance mode", "maintenanceMode", result.StdOut, "stderr", result.StdErr, "err", result.Error)
 	maintenanceModeLabel := "false"
-	if result.Error == nil && result.StdOut != "" {
+	// `crm configure show` prints all meta attributes of a resource on one line, so the value must be
+	// matched together with the attribute name. For example, a clone with
+	// "interleave=true promotable=true maintenance=false" is not in maintenance mode.
+	if result.Error == nil && maintenanceModeRegex.MatchString(result.StdOut) {
 		maintenanceModeLabel = "true"
 	}
 	labels["maintenance_mode_active"] = maintenanceModeLabel
@@ -647,8 +658,65 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 	return token, err
 }
 
+// centralServicesGroup identifies a Pacemaker resource group that runs an SAP central services
+// (ASCS/SCS) or enqueue replication (ERS) instance.
+type centralServicesGroup struct {
+	// id is the ID of the resource group.
+	id string
+	// virtualHost is the virtual host name from the SAP instance name or profile name, if known.
+	virtualHost string
+}
+
+// centralServicesGroups identifies the ASCS (or SCS) and ERS resource groups from the SAPInstance
+// primitive in each group. The InstanceName and START_PROFILE attributes have the form
+// <SID>_<INSTANCE><NN>_<VIRTUAL_HOST>, which identifies the instance type independently of the
+// resource group name.
+func centralServicesGroups(groups []Group) (ascs, ers centralServicesGroup) {
+	for _, group := range groups {
+		for _, primitive := range group.Primitives {
+			if primitive.ClassType != "SAPInstance" {
+				continue
+			}
+			for _, nvPair := range primitive.InstanceAttributes.NVPairs {
+				if nvPair.Name != "InstanceName" && nvPair.Name != "START_PROFILE" {
+					continue
+				}
+				match := sapInstanceNameRegex.FindStringSubmatch(path.Base(nvPair.Value))
+				if len(match) != 3 {
+					continue
+				}
+				csGroup := centralServicesGroup{id: group.ID, virtualHost: match[2]}
+				if match[1] == "ERS" {
+					ers = csGroup
+				} else {
+					ascs = csGroup
+				}
+			}
+		}
+	}
+	return ascs, ers
+}
+
+// resourceGroupName returns the resource group name from a "Resource Group: <name>" line of the
+// crm or pcs status output, or "" if the line does not start a resource group.
+func resourceGroupName(line string) string {
+	_, rest, found := strings.Cut(line, "Resource Group:")
+	if !found {
+		return ""
+	}
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.TrimSuffix(fields[0], ":")
+}
+
 // collectASCSInstance determines the VM instances serving as the ASCS/ERS resource group.
-func collectASCSInstance(ctx context.Context, labels map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
+//
+// The ASCS and ERS resource groups are identified from the cluster configuration, so any group
+// naming convention is supported (for example, grp_NW1_ASCS00 or nw1_ASCS00_group). If they cannot
+// be identified from the configuration, groups with names starting with "ascs" and "ers" are used.
+func collectASCSInstance(ctx context.Context, labels map[string]string, groups []Group, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
 	labels["ascs_instance"] = ""
 	labels["ers_instance"] = ""
 
@@ -671,27 +739,36 @@ func collectASCSInstance(ctx context.Context, labels map[string]string, exists c
 		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Failed to get %s status. Skipping ascs_instance metric collection.", command), "error", result.Error)
 	}
 
+	ascsGroup, ersGroup := centralServicesGroups(groups)
+	isGroup := func(name string, csGroup centralServicesGroup, defaultPrefix string) bool {
+		if csGroup.id != "" {
+			return name == csGroup.id
+		}
+		return strings.HasPrefix(name, defaultPrefix)
+	}
+
 	lines := strings.Split(result.StdOut, "\n")
 	inASCSResourceGroup, inERSResourceGroup := false, false
 	for _, line := range lines {
+		if name := resourceGroupName(line); name != "" {
+			inASCSResourceGroup = isGroup(name, ascsGroup, "ascs")
+			inERSResourceGroup = !inASCSResourceGroup && isGroup(name, ersGroup, "ers")
+			continue
+		}
+		// Pacemaker 2.1 and later print the resource agent as ocf:heartbeat:SAPInstance, while earlier
+		// versions print ocf::heartbeat:SAPInstance.
+		if !strings.Contains(line, "heartbeat:SAPInstance") {
+			continue
+		}
 		switch {
-		case strings.Contains(line, "Resource Group: ascs"):
-			inASCSResourceGroup = true
-			inERSResourceGroup = false
-		case strings.Contains(line, "Resource Group: ers"):
-			inERSResourceGroup = true
-			inASCSResourceGroup = false
-		case strings.Contains(line, "Resource Group:"):
-			inASCSResourceGroup = false
-			inERSResourceGroup = false
-		case inASCSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
+		case inASCSResourceGroup:
 			match := sapInstanceRegex.FindStringSubmatch(line)
 			if len(match) != 2 {
 				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
 				continue
 			}
 			labels["ascs_instance"] = match[1]
-		case inERSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
+		case inERSResourceGroup:
 			match := sapInstanceRegex.FindStringSubmatch(line)
 			if len(match) != 2 {
 				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ERS instance name.", command), "line", line)
@@ -792,7 +869,11 @@ func collectASCSIP(ctx context.Context, labels map[string]string, groups []Group
 }
 
 // collectASCSVirtualIP determines the virtual IP addresses of the ASCS and ERS instances in the Pacemaker cluster.
-func collectASCSVirtualIP(ctx context.Context, labels map[string]string, exec commandlineexecutor.Execute) {
+//
+// The virtual host names are read from DEFAULT.PFL. If a virtual host name is not found there (for
+// example, ENSA1 systems do not define the ERS virtual host in DEFAULT.PFL), the virtual host name
+// from the SAP instance name or profile name of the cluster resource is used.
+func collectASCSVirtualIP(ctx context.Context, labels map[string]string, groups []Group, exec commandlineexecutor.Execute) {
 	log.CtxLogger(ctx).Debug("Collecting ASCS and ERS virtual IPs")
 	labels["ascs_virtual_ip"] = ""
 	labels["ers_virtual_ip"] = ""
@@ -815,22 +896,31 @@ func collectASCSVirtualIP(ctx context.Context, labels map[string]string, exec co
 		return
 	}
 
-	// Get the ASCS virtual host name and IP address.
-	ascsVirtualName := virtualHostName(ctx, exec, sapsid, ascsVirtualNamePattern)
-	if ascsVirtualName != "" {
-		if ip, err := net.LookupIP(ascsVirtualName); err == nil {
-			labels["ascs_virtual_ip"] = ip[0].String()
+	ascsGroup, ersGroup := centralServicesGroups(groups)
+	labels["ascs_virtual_ip"] = virtualIP(ctx, exec, sapsid, ascsVirtualNamePattern, ascsGroup.virtualHost)
+	labels["ers_virtual_ip"] = virtualIP(ctx, exec, sapsid, ersVirtualNamePattern, ersGroup.virtualHost)
+}
+
+// virtualIP returns the IP address of the virtual host name found with pattern in DEFAULT.PFL. If
+// the pattern is empty or the IP address cannot be resolved, the IP address of fallbackHost is
+// returned. Returns "" if neither IP address can be resolved.
+func virtualIP(ctx context.Context, exec commandlineexecutor.Execute, sapsid, pattern, fallbackHost string) string {
+	var hosts []string
+	if pattern != "" {
+		if host := virtualHostName(ctx, exec, sapsid, pattern); host != "" {
+			hosts = append(hosts, host)
 		}
 	}
-	// Get the ERS virtual host name and IP address.
-	if ersVirtualNamePattern != "" {
-		ersVirtualName := virtualHostName(ctx, exec, sapsid, ersVirtualNamePattern)
-		if ersVirtualName != "" {
-			if ip, err := net.LookupIP(ersVirtualName); err == nil {
-				labels["ers_virtual_ip"] = ip[0].String()
-			}
-		}
+	if fallbackHost != "" {
+		hosts = append(hosts, fallbackHost)
 	}
+	for _, host := range hosts {
+		if ip, err := net.LookupIP(host); err == nil && len(ip) > 0 {
+			return ip[0].String()
+		}
+		log.CtxLogger(ctx).Debugw("Could not resolve virtual host name", "host", host)
+	}
+	return ""
 }
 
 // virtualHostName gets the virtual host name from the DEFAULT.PFL file.

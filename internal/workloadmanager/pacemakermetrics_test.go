@@ -110,7 +110,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 					"fence_agent_compute_api_access":     "false",
 					"fence_agent_logging_api_access":     "false",
 					"location_preference_set":            "false",
-					"maintenance_mode_active":            "true",
+					"maintenance_mode_active":            "false",
 					"migration_threshold":                "5000",
 					"pcmk_delay_max":                     "test-instance-name=30",
 					"pcmk_delay_base":                    "",

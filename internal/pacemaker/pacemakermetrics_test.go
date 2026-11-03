@@ -257,7 +257,7 @@ func wantDefaultPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists floa
 		"fence_agent_compute_api_access":    "false",
 		"fence_agent_logging_api_access":    "false",
 		"location_preference_set":           locationPref,
-		"maintenance_mode_active":           "true",
+		"maintenance_mode_active":           "false",
 		"stonith_enabled":                   "",
 		"stonith_timeout":                   "",
 		"ascs_instance":                     "",
@@ -325,7 +325,7 @@ func wantCLIPreferPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists fl
 		"fence_agent_compute_api_access":     "false",
 		"fence_agent_logging_api_access":     "false",
 		"location_preference_set":            locationPref,
-		"maintenance_mode_active":            "true",
+		"maintenance_mode_active":            "false",
 		"resource_stickiness":                "1000",
 		"saphana_demote_timeout":             "3600",
 		"saphana_promote_timeout":            "3600",
@@ -399,7 +399,7 @@ func wantClonePacemakerMetrics(ts *timestamppb.Timestamp, pacemakerExists float6
 		"fence_agent_compute_api_access":     "false",
 		"fence_agent_logging_api_access":     "false",
 		"location_preference_set":            locationPref,
-		"maintenance_mode_active":            "true",
+		"maintenance_mode_active":            "false",
 		"resource_stickiness":                "1000",
 		"saphana_demote_timeout":             "3600",
 		"saphana_promote_timeout":            "3600",
@@ -478,7 +478,7 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"fence_agent_compute_api_access":    "true",
 		"fence_agent_logging_api_access":    "true",
 		"location_preference_set":           locationPref,
-		"maintenance_mode_active":           "true",
+		"maintenance_mode_active":           "false",
 		"stonith_enabled":                   "",
 		"stonith_timeout":                   "",
 		"ascs_instance":                     "",
@@ -686,7 +686,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 			name: "TestMaintenanceModeCRMAvailable",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut: "Maintenance mode ready",
+					StdOut: "        maintenance-mode=true \\\n",
 					StdErr: "",
 				}
 			},
@@ -697,7 +697,7 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 			name: "TestMaintenanceModeNotCRMUnavailable",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut: "Maintenance mode ready",
+					StdOut: " maintenance-mode: true\n",
 					StdErr: "",
 				}
 			},
@@ -725,6 +725,37 @@ func TestSetPacemakerMaintenanceMode(t *testing.T) {
 				}
 			},
 			crmAvailable: true,
+			want:         map[string]string{"maintenance_mode_active": "false"},
+		},
+		{
+			name: "TestMaintenanceModeResourceMetaAttributeEnabled",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "        meta clone-node-max=1 interleave=true promotable=true maintenance=true\n",
+				}
+			},
+			crmAvailable: true,
+			want:         map[string]string{"maintenance_mode_active": "true"},
+		},
+		{
+			name: "TestMaintenanceModeDisabledOnLineWithOtherTrueAttributes",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: "        meta clone-max=2 clone-node-max=1 interleave=true promotable=true maintenance=false\n" +
+						"        maintenance-mode=false \\\n",
+				}
+			},
+			crmAvailable: true,
+			want:         map[string]string{"maintenance_mode_active": "false"},
+		},
+		{
+			name: "TestMaintenanceModeDisabledPCS",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: " maintenance-mode: false\n",
+				}
+			},
+			crmAvailable: false,
 			want:         map[string]string{"maintenance_mode_active": "false"},
 		},
 	}
@@ -2044,6 +2075,7 @@ func TestPacemakerHanaTopology(t *testing.T) {
 func TestCollectASCSInstance(t *testing.T) {
 	tests := []struct {
 		name             string
+		groups           []Group
 		exists           commandlineexecutor.Exists
 		exec             commandlineexecutor.Execute
 		wantASCSInstance string
@@ -2157,12 +2189,155 @@ Full List of Resources:
 			wantASCSInstance: "sap-posascs11",
 			wantERSInstance:  "sap-posers12",
 		},
+		{
+			name:   "SuccessGroupsIdentifiedFromClusterConfiguration",
+			exists: defaultExists,
+			groups: []Group{
+				{
+					ID: "grp_NW1_ASCS00",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ASCS00_vhascs"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS00_vhascs"},
+								},
+							},
+						},
+					},
+				},
+				{
+					ID: "grp_NW1_ERS10",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ERS10_vhers"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_vhers"},
+								},
+							},
+						},
+					},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * Resource Group: grp_NW1_ASCS00:
+    * rsc_ip_NW1_ASCS00 (ocf::heartbeat:IPaddr2):        Started sap-posascs11
+    * rsc_sap_NW1_ASCS00        (ocf::heartbeat:SAPInstance):    Started sap-posascs11
+  * Resource Group: grp_NW1_ERS10:
+    * rsc_ip_NW1_ERS10  (ocf::heartbeat:IPaddr2):        Started sap-posers12
+    * rsc_sap_NW1_ERS10 (ocf::heartbeat:SAPInstance):    Started sap-posers12
+`,
+				}
+			},
+			wantASCSInstance: "sap-posascs11",
+			wantERSInstance:  "sap-posers12",
+		},
+		{
+			name:   "SuccessPacemaker21ResourceAgentFormat",
+			exists: defaultExists,
+			groups: []Group{
+				{
+					ID: "grp_NW1_ASCS00",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ASCS00_vhascs"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS00_vhascs"},
+								},
+							},
+						},
+					},
+				},
+				{
+					ID: "grp_NW1_ERS10",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ERS10_vhers"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_vhers"},
+								},
+							},
+						},
+					},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * Resource Group: grp_NW1_ERS10:
+    * rsc_sap_NW1_ERS10 (ocf:heartbeat:SAPInstance):     Started sap-posers12
+  * Resource Group: grp_NW1_ASCS00:
+    * rsc_sap_NW1_ASCS00        (ocf:heartbeat:SAPInstance):     Started sap-posascs11
+`,
+				}
+			},
+			wantASCSInstance: "sap-posascs11",
+			wantERSInstance:  "sap-posers12",
+		},
+		{
+			name:   "ConfiguredGroupsTakePrecedenceOverGroupNamePrefix",
+			exists: defaultExists,
+			groups: []Group{
+				{
+					ID: "grp_NW1_ASCS00",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ASCS00_vhascs"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ASCS00_vhascs"},
+								},
+							},
+						},
+					},
+				},
+				{
+					ID: "grp_NW1_ERS10",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{
+									{Name: "InstanceName", Value: "NW1_ERS10_vhers"},
+									{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_vhers"},
+								},
+							},
+						},
+					},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `
+Full List of Resources:
+  * Resource Group: ascs_other_group:
+    * rsc_sap_other     (ocf:heartbeat:SAPInstance):     Started sap-other
+  * Resource Group: grp_NW1_ASCS00:
+    * rsc_sap_NW1_ASCS00        (ocf:heartbeat:SAPInstance):     Started sap-posascs11
+`,
+				}
+			},
+			wantASCSInstance: "sap-posascs11",
+			wantERSInstance:  "",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := map[string]string{}
-			collectASCSInstance(context.Background(), got, test.exists, test.exec)
+			collectASCSInstance(context.Background(), got, test.groups, test.exists, test.exec)
 			if got["ascs_instance"] != test.wantASCSInstance {
 				t.Errorf("collectASCSInstance() got %v, want %v", got["ascs_instance"], test.wantASCSInstance)
 			}
@@ -2775,6 +2950,7 @@ func TestCollectASCSVirtualIP(t *testing.T) {
 	tests := []struct {
 		name   string
 		exec   commandlineexecutor.Execute
+		groups []Group
 		labels map[string]string
 		want   map[string]string
 	}{
@@ -2980,6 +3156,59 @@ func TestCollectASCSVirtualIP(t *testing.T) {
 			},
 		},
 		{
+			name: "SuccessENSA1ERSVirtualHostFromClusterResource",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				switch {
+				case strings.Contains(params.ArgsToSplit, "/usr/sap/sapservices"):
+					return commandlineexecutor.Result{
+						StdOut:   "sapstartsrv pf=/usr/sap/NW1/SYS/profile/NW1_ASCS12_testascs12 -D -u nw1adm\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				case strings.Contains(params.ArgsToSplit, "^enque/serverhost"):
+					return commandlineexecutor.Result{
+						StdOut:   "enque/serverhost=12.123.123.12\n",
+						ExitCode: 0,
+						StdErr:   "",
+					}
+				}
+				return commandlineexecutor.Result{}
+			},
+			groups: []Group{
+				{
+					ID: "grp_NW1_ASCS12",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "InstanceName", Value: "NW1_ASCS12_12.123.123.99"}},
+							},
+						},
+					},
+				},
+				{
+					ID: "grp_NW1_ERS10",
+					Primitives: []PrimitiveClass{
+						{
+							ClassType: "SAPInstance",
+							InstanceAttributes: ClusterPropertySet{
+								NVPairs: []NVPair{{Name: "START_PROFILE", Value: "/sapmnt/NW1/profile/NW1_ERS10_12.123.123.23"}},
+							},
+						},
+					},
+				},
+			},
+			labels: map[string]string{
+				"enqueue_server": "ENSA1",
+			},
+			want: map[string]string{
+				// DEFAULT.PFL takes precedence over the cluster resource for the ASCS virtual host.
+				"ascs_virtual_ip": "12.123.123.12",
+				"ers_virtual_ip":  "12.123.123.23",
+				"enqueue_server":  "ENSA1",
+			},
+		},
+		{
 			name: "NoSapServices",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
@@ -3008,7 +3237,7 @@ func TestCollectASCSVirtualIP(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			collectASCSVirtualIP(context.Background(), test.labels, test.exec)
+			collectASCSVirtualIP(context.Background(), test.labels, test.groups, test.exec)
 			if diff := cmp.Diff(test.want, test.labels); diff != "" {
 				t.Errorf("collectASCSVirtualIP() returned unexpected diff (-want +got):\n%s", diff)
 			}
