@@ -19,6 +19,7 @@ package preprocessor
 import (
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -627,6 +628,26 @@ func TestValidateRecommendations(t *testing.T) {
 				t.Errorf("validateRecommendations(%v, %v, %v)=%v want: %v", tc.recomms, tc.queryNametoCols, tc.globalKB, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestReadRulesLoadsAllRules verifies that every rule file in RuleFilenames passes validation.
+// ReadRules skips invalid rules with only a log message, so an invalid rule would otherwise go
+// unnoticed and its recommendations would never be reported.
+func TestReadRulesLoadsAllRules(t *testing.T) {
+	rules, err := ReadRules(RuleFilenames)
+	if err != nil {
+		t.Fatalf("ReadRules(RuleFilenames) failed: %v", err)
+	}
+	loaded := make(map[string]bool)
+	for _, rule := range rules {
+		loaded[rule.GetId()] = true
+	}
+	for _, filename := range RuleFilenames {
+		id := strings.TrimSuffix(path.Base(filename), ".json")
+		if !loaded[id] {
+			t.Errorf("ReadRules(RuleFilenames) skipped rule %q from %q; check its log output for the validation error", id, filename)
+		}
 	}
 }
 
