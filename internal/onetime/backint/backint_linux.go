@@ -56,9 +56,11 @@ type Backint struct {
 	BackupID    string                        `json:"backupid"`
 	BackupLevel string                        `json:"level"`
 	Count       int64                         `json:"count,string"`
-	LogLevel    string                        `json:"loglevel"`
-	LogPath     string                        `json:"log-path"`
-	help        bool
+	LogLevel                      string                        `json:"loglevel"`
+	LogPath                       string                        `json:"log-path"`
+	CollectSupportBundleOnFailure bool                          `json:"collect-support-bundle-on-failure,string"`
+	SupportBundlePath             string                        `json:"support-bundle-path"`
+	help                          bool
 	oteLogger   *onetime.OTELogger
 	lp          log.Parameters
 }
@@ -74,7 +76,8 @@ func (*Backint) Usage() string {
 	return `Usage: backint -function=<backup|restore|inquire|delete|diagnose>
 	-paramfile=<path-to-file> [-v] [-h] -user=<DBNAME@SID> [-input=<path-to-file>]
 	[-output=<path-to-file>] [-backupid=<database-backup-id>] [-count=<number-of-objects>]
-	[-level=<backup-level>] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
+	[-level=<backup-level>] [-collect-support-bundle-on-failure=<true|false>] [-support-bundle-path=<support-bundle-path>]
+	[-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]` + "\n"
 }
 
 // SetFlags implements the subcommand interface for backint.
@@ -96,6 +99,8 @@ func (b *Backint) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&b.BackupLevel, "level", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.StringVar(&b.BackupLevel, "l", "", "The type of backup, only usable if the function (-f) is backup")
 	fs.StringVar(&b.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/backint.log")
+	fs.BoolVar(&b.CollectSupportBundleOnFailure, "collect-support-bundle-on-failure", true, "Collect support bundle if the command fails. (optional) Default: true")
+	fs.StringVar(&b.SupportBundlePath, "support-bundle-path", "", "The directory path where the support bundle will be created if collected on failure (optional), default value is /tmp/google-cloud-sap-agent/")
 	fs.BoolVar(&b.help, "h", false, "Display help")
 	fs.StringVar(&b.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 }
@@ -117,7 +122,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 
 	// If an error occurs during an operation, collect the support bundle.
 	defer func() {
-		if configuration.BackintFunction(b.Function) == bpb.Function_DIAGNOSE || b.OutFile == "/dev/stdout" || b.OutFile == "" {
+		if !b.CollectSupportBundleOnFailure || configuration.BackintFunction(b.Function) == bpb.Function_DIAGNOSE || b.OutFile == "/dev/stdout" || b.OutFile == "" {
 			return
 		}
 		outFileContents, err := os.ReadFile(b.OutFile)
@@ -129,7 +134,7 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		}
 		if strings.Contains(string(outFileContents), "#ERROR") {
 			log.CtxLogger(ctx).Info("Collecting agent support bundle due to Backint error.")
-			supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Function)
+			supportbundle.CollectAgentSupportWithPath(ctx, f, lp, cloudProps, b.Function, b.SupportBundlePath)
 		}
 	}()
 
@@ -139,7 +144,9 @@ func (b *Backint) Execute(ctx context.Context, f *flag.FlagSet, args ...any) sub
 		// Never change these keys since it would have downstream effects.
 		log.CtxLogger(ctx).Errorw("SAP_BACKINT_FILE_TRANSFER", "operation", strings.ToLower(b.Function), "fileName", "Backint failed to start", "fileSize", 0, "fileType", "data", "success", false, "transferTime", "0", "avgTransferSpeedMBps", "0", "userID", b.User, "instanceName", cloudProps.GetInstanceName())
 		fmt.Println("Backint failed to start: ", msg)
-		supportbundle.CollectAgentSupport(ctx, f, lp, cloudProps, b.Name())
+		if b.CollectSupportBundleOnFailure {
+			supportbundle.CollectAgentSupportWithPath(ctx, f, lp, cloudProps, b.Name(), b.SupportBundlePath)
+		}
 	}
 	return exitStatus
 }

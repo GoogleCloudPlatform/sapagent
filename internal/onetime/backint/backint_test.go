@@ -217,7 +217,7 @@ func TestSetFlags(t *testing.T) {
 	fs := flag.NewFlagSet("flags", flag.ExitOnError)
 	b.SetFlags(fs)
 
-	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "h", "loglevel", "log-path", "l"}
+	flags := []string{"user", "u", "function", "f", "input", "i", "output", "o", "paramfile", "p", "backupid", "s", "count", "c", "level", "l", "h", "loglevel", "log-path", "collect-support-bundle-on-failure", "support-bundle-path"}
 	for _, flag := range flags {
 		got := fs.Lookup(flag)
 		if got == nil {

@@ -238,6 +238,8 @@ type Snapshot struct {
 	ForceStopHANA                          bool   `json:"-"`
 	LogLevel                               string `json:"loglevel"`
 	LogPath                                string `json:"log-path"`
+	CollectSupportBundleOnFailure          bool   `json:"collect-support-bundle-on-failure,string"`
+	SupportBundlePath                      string `json:"support-bundle-path"`
 	hanaDataPath                           string
 	logicalDataPath, physicalDataPath      string
 	Labels                                 string                        `json:"labels"`
@@ -269,6 +271,7 @@ func (*Snapshot) Usage() string {
 	[-snapshot-prefix=<snapshot-prefix>] [-freeze-file-system=<true|false>] [-labels="label1=value1,label2=value2"]
 	[-confirm-data-snapshot-after-create=<true|false>]
 	[-instance-id=<instance-id>]
+	[-collect-support-bundle-on-failure=<true|false>] [-support-bundle-path=<support-bundle-path>]
 	[-h] [-loglevel=<debug|info|warn|error>] [-log-path=<log-path>]
 
 	Authentication Flag Combinations:
@@ -314,6 +317,8 @@ func (s *Snapshot) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.GroupSnapshotName, "group-snapshot-name", "", "Group Snapshot name override.(optional - defaults to 'group-snapshot-timestampinutc-consistencygroupname'.)")
 	fs.StringVar(&s.SnapshotPrefix, "snapshot-prefix", "", "Prefix for the snapshot name. Eg: if snapshot-prefix is 'myprefix', the snapshot name will be 'myprefix-timestampinutc-diskname'. Snapshot names have a 63 character limit, and if the generated name exceeds this limit, it will be truncated.")
 	fs.IntVar(&s.HANAQueryTimeout, "hana-query-timeout", 600, "Timeout for HANA database queries in seconds. (optional) Default: 600")
+	fs.BoolVar(&s.CollectSupportBundleOnFailure, "collect-support-bundle-on-failure", true, "Collect support bundle if the command fails. (optional) Default: true")
+	fs.StringVar(&s.SupportBundlePath, "support-bundle-path", "", "The directory path where the support bundle will be created if collected on failure (optional), default value is /tmp/google-cloud-sap-agent/")
 }
 
 // Execute executes the subcommand interface for hanadiskbackup.
@@ -340,8 +345,8 @@ func (s *Snapshot) Execute(ctx context.Context, f *flag.FlagSet, args ...any) su
 	}
 
 	_, status := s.Run(ctx, onetime.CreateRunOptions(cp, false))
-	if status == subcommands.ExitFailure {
-		supportbundle.CollectAgentSupport(ctx, f, lp, cp, s.Name())
+	if status == subcommands.ExitFailure && s.CollectSupportBundleOnFailure {
+		supportbundle.CollectAgentSupportWithPath(ctx, f, lp, cp, s.Name(), s.SupportBundlePath)
 	}
 	return status
 }

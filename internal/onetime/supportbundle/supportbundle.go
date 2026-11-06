@@ -31,6 +31,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -92,6 +93,7 @@ type SupportBundle struct {
 	IIOTEParams            *onetime.InternallyInvokedOTE `json:"-"`
 	LogPath                string                        `json:"log-path"`
 	BundleName             string                        `json:"bundle-name"`
+	SupportBundlePath      string                        `json:"support-bundle-path"`
 	RecentOnly             bool                          `json:"recent-only"`
 	bundleUploaded         bool
 	endingTimestamp        string
@@ -414,7 +416,7 @@ func (*SupportBundle) Usage() string {
 	[-hostname=<Hostname>] [-agent-logs-only=true|false] [-pacemaker-diagnosis=true|false] [-metrics=true|false] [-mask-ips=true|false]
 	[-timestamp=<YYYY-MM-DD HH:MM:SS>] [-before-duration=<duration in seconds>] [-after-duration=<duration in seconds>]
 	[-h] [-loglevel=<info|warn|error>]
-	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-log-path=<log-path>]
+	[-result-bucket=<name of the result bucket where bundle zip is uploaded>] [-support-bundle-path=<support-bundle-path>] [-log-path=<log-path>]
 	Example: supportbundle -sid="DEH" -instance-numbers="00 01 11" -hostname="sample_host"` + "\n"
 }
 
@@ -435,6 +437,7 @@ func (s *SupportBundle) SetFlags(fs *flag.FlagSet) {
 	fs.StringVar(&s.LogLevel, "loglevel", "info", "Sets the logging level for a log file")
 	fs.StringVar(&s.ResultBucket, "result-bucket", "", "Name of the result bucket where bundle zip is uploaded")
 	fs.StringVar(&s.BundleName, "bundle-name", "", "Name of the support bundle file to be created (optional)")
+	fs.StringVar(&s.SupportBundlePath, "support-bundle-path", "", "The directory path where the support bundle will be created (optional), default value is /tmp/google-cloud-sap-agent/")
 	fs.StringVar(&s.LogPath, "log-path", "", "The log path to write the log file (optional), default value is /var/log/google-cloud-sap-agent/supportbundle.log")
 	fs.BoolVar(&s.RecentOnly, "recent-only", false, "Indicate if only recent log files are to be collected - collects the most recent 3 log files by default")
 }
@@ -471,18 +474,29 @@ func (s *SupportBundle) Run(ctx context.Context, opts *onetime.RunOptions, exec 
 
 // CollectAgentSupport collects the agent support bundle on the local machine.
 func CollectAgentSupport(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties, ote string) subcommands.ExitStatus {
+	return CollectAgentSupportWithPath(ctx, f, lp, cp, ote, "")
+}
+
+// CollectAgentSupportWithPath collects the agent support bundle on the local machine at the specified path.
+func CollectAgentSupportWithPath(ctx context.Context, f *flag.FlagSet, lp log.Parameters, cp *ipb.CloudProperties, ote, supportBundlePath string) subcommands.ExitStatus {
 	s := &SupportBundle{
 		IIOTEParams: &onetime.InternallyInvokedOTE{
 			InvokedBy: ote,
 			Lp:        lp,
 			Cp:        cp,
 		},
-		AgentLogsOnly: true,
+		AgentLogsOnly:     true,
+		SupportBundlePath: supportBundlePath,
 	}
 	return s.Execute(ctx, f, lp, cp)
 }
 
 func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPrefix string, exec commandlineexecutor.Execute, fs filesystem.FileSystem, z zipper.Zipper, cp *ipb.CloudProperties) (string, subcommands.ExitStatus) {
+	// Override the default destination directory (/tmp/google-cloud-sap-agent/) when a custom
+	// -support-bundle-path is provided, ensuring a trailing slash for bundle creation and rotation.
+	if s.SupportBundlePath != "" {
+		destFilePathPrefix = strings.TrimSuffix(s.SupportBundlePath, "/") + "/"
+	}
 	if errs := s.validateParams(); len(errs) > 0 {
 		errMessage := strings.Join(errs, ", ")
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid params for collecting support bundle Report for Agent for SAP", errors.New(errMessage))
@@ -560,18 +574,23 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 	reqFilePaths = append(reqFilePaths, s.agentLogFiles(ctx, linuxLogFilesPath, fs)...)
 	reqFilePaths = append(reqFilePaths, s.agentOTELogFiles(ctx, agentOnetimeFilesPath, fs)...)
+	// If the invoking OTE command used a custom -log-path outside the default /var/log/google-cloud-sap-agent/
+	// directory, explicitly include that log file in the support bundle.
+	if s.IIOTEParams != nil && s.IIOTEParams.Lp.LogFileName != "" && !strings.HasPrefix(s.IIOTEParams.Lp.LogFileName, agentOnetimeFilesPath) && !slices.Contains(reqFilePaths, s.IIOTEParams.Lp.LogFileName) {
+		reqFilePaths = append(reqFilePaths, s.IIOTEParams.Lp.LogFileName)
+	}
 	reqFilePaths = append(reqFilePaths, s.pacemakerLogFiles(ctx, linuxLogFilesPath, fs)...)
 
-	for _, path := range reqFilePaths {
-		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", path))
-		destPath := destFilesPath + path
-		if err := copyFile(path, destPath, fs); err != nil {
-			errMessage := "Error while copying file: " + path
+	for _, filePath := range reqFilePaths {
+		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", filePath))
+		destPath := path.Join(destFilesPath, filePath)
+		if err := copyFile(filePath, destPath, fs); err != nil {
+			errMessage := "Error while copying file: " + filePath
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
 			continue
 		}
-		if s.MaskIPs && (strings.Contains(path, "messages") || strings.Contains(path, "pacemaker")) {
+		if s.MaskIPs && (strings.Contains(filePath, "messages") || strings.Contains(filePath, "pacemaker")) {
 			if err := s.anonymizeFile(ctx, destPath, fs); err != nil {
 				errMessage := "Error while masking file: " + destPath
 				s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -613,6 +632,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		msg := fmt.Sprintf("Zipped destination support bundle file HANA/Backint at %s", zipfile)
 		s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
 		successMsgs = append(successMsgs, msg)
+		s.removeUncompressedFiles(ctx, destFilesPath, s.BundleName+".zip", fs)
 	}
 
 	if s.ResultBucket != "" {
@@ -794,9 +814,10 @@ func copyFile(src, dst string, fs filesystem.FileSystem) error {
 }
 
 func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper) error {
-	// Creating zip at a temporary location to prevent a blank zip file from
-	// being created in the final bundle.
-	tempZip := "/tmp/tmp-support-bundle.zip"
+	// Creating zip at a temporary location in the bundle parent directory to
+	// prevent a blank zip file from being created in the final bundle and avoid
+	// cross-device rename errors when a custom support bundle path is used.
+	tempZip := path.Join(path.Dir(source), fmt.Sprintf("tmp-%s.zip", path.Base(source)))
 	f, err := fs.Create(tempZip)
 	if err != nil {
 		return err
@@ -807,9 +828,14 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 	defer z.Close(writer)
 
 	if err := fs.WalkAndZip(source, z, writer); err != nil {
+		fs.RemoveAll(tempZip)
 		return err
 	}
-	return fs.Rename(tempZip, target)
+	if err := fs.Rename(tempZip, target); err != nil {
+		fs.RemoveAll(tempZip)
+		return err
+	}
+	return nil
 }
 
 func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
@@ -1879,6 +1905,30 @@ func (s *SupportBundle) processDiscoveryData(ctx context.Context, baseURL, destF
 	return nil
 }
 
+// removeUncompressedFiles removes all uncompressed collected files and subdirectories inside
+// destFilesPath after the zip archive has been created, keeping only zipFileName.
+func (s *SupportBundle) removeUncompressedFiles(ctx context.Context, destFilesPath, zipFileName string, fs filesystem.FileSystem) error {
+	entries, err := fs.ReadDir(destFilesPath)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while reading destination folder %s for cleanup", destFilesPath), err)
+		return err
+	}
+	var removeErr error
+	for _, entry := range entries {
+		// Retain the generated zip archive and delete all other uncompressed files/subdirectories.
+		if entry.Name() == zipFileName {
+			continue
+		}
+		entryPath := path.Join(destFilesPath, entry.Name())
+		if err := fs.RemoveAll(entryPath); err != nil {
+			s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing uncompressed path %s", entryPath), err)
+			removeErr = err
+		}
+	}
+	return removeErr
+}
+
+// rotateOldBundles keeps the 5 most recent support bundles in dir and removes older ones.
 func (s *SupportBundle) rotateOldBundles(ctx context.Context, dir string, fs filesystem.FileSystem) error {
 	fds, err := fs.ReadDir(dir)
 	if err != nil {
@@ -1887,6 +1937,7 @@ func (s *SupportBundle) rotateOldBundles(ctx context.Context, dir string, fs fil
 	}
 	sort.Slice(fds, func(i, j int) bool { return fds[i].ModTime().After(fds[j].ModTime()) })
 	bundleCount := 0
+	var removeErr error
 	for _, fd := range fds {
 		if strings.Contains(fd.Name(), "supportbundle") {
 			bundleCount++
@@ -1894,10 +1945,11 @@ func (s *SupportBundle) rotateOldBundles(ctx context.Context, dir string, fs fil
 				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Removing old bundle %s", dir+fd.Name()))
 				if err := fs.RemoveAll(dir + fd.Name()); err != nil {
 					s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while removing old bundle %s", dir+fd.Name()), err)
-					return err
+					// Continue rotating remaining old bundles even if removing one fails (e.g. due to permissions).
+					removeErr = err
 				}
 			}
 		}
 	}
-	return nil
+	return removeErr
 }

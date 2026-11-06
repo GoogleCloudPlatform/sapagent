@@ -241,7 +241,7 @@ func (mfu mockedfilesystem) WriteStringToFile(f *os.File, content string) (int, 
 	return 10, nil
 }
 func (mfu mockedfilesystem) Rename(old, new string) error {
-	if strings.Contains(old, "failure") {
+	if strings.Contains(old, "failure") || strings.Contains(new, "failure") {
 		return cmpopts.AnyError
 	}
 	return nil
@@ -265,7 +265,7 @@ func (mfu mockedfilesystem) Stat(path string) (os.FileInfo, error) {
 	return mockedFileInfo{name: mfu.readDirContent[0].Name(), mode: mfu.readDirContent[0].Mode()}, nil
 }
 func (mfu mockedfilesystem) WalkAndZip(path string, z zipper.Zipper, w *zip.Writer) error {
-	if path == "failure" {
+	if path == "failure" || path == "walk-failure" {
 		return cmpopts.AnyError
 	}
 	if strings.Contains(path, "test") {
@@ -385,7 +385,7 @@ func TestSetFlagsForSOSReport(t *testing.T) {
 	flags := []string{
 		"sid", "instance-numbers", "hostname", "pacemaker-diagnosis", "agent-logs-only",
 		"metrics", "mask-ips", "timestamp", "before-duration", "after-duration", "h",
-		"loglevel", "result-bucket", "log-path",
+		"loglevel", "result-bucket", "support-bundle-path", "log-path",
 	}
 	sosrc.SetFlags(fs)
 	for _, flagName := range flags {
@@ -1786,8 +1786,16 @@ func TestZipSource(t *testing.T) {
 		},
 		{
 			name:   "WalkAndZipError",
-			source: "failure",
+			source: "walk-failure",
 			target: "destFile",
+			fu:     mockedfilesystem{},
+			z:      mockedZipper{},
+			want:   cmpopts.AnyError,
+		},
+		{
+			name:   "RenameError",
+			source: "bundle",
+			target: "failure",
 			fu:     mockedfilesystem{},
 			z:      mockedZipper{},
 			want:   cmpopts.AnyError,
@@ -1868,12 +1876,81 @@ func TestRotateOldBundles(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "ErrorWhileRemovingOldBundleContinues",
+			dir:  "success",
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "supportbundle1"},
+					mockedFileInfo{name: "supportbundle2"},
+					mockedFileInfo{name: "supportbundle3"},
+					mockedFileInfo{name: "supportbundle4"},
+					mockedFileInfo{name: "supportbundle5"},
+					mockedFileInfo{name: "supportbundle6-failure"},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := sosr.rotateOldBundles(context.Background(), test.dir, test.fs)
 			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
 				t.Errorf("rotateOldBundles(%q) = %v, want %v", test.dir, got, test.want)
+			}
+		})
+	}
+}
+
+func TestRemoveUncompressedFiles(t *testing.T) {
+	sosr := SupportBundle{
+		oteLogger: defaultOTELogger,
+	}
+	tests := []struct {
+		name          string
+		destFilesPath string
+		zipFile       string
+		fu            filesystem.FileSystem
+		want          error
+	}{
+		{
+			name:          "ReadDirError",
+			destFilesPath: "failure",
+			zipFile:       "bundle.zip",
+			fu:            mockedfilesystem{},
+			want:          cmpopts.AnyError,
+		},
+		{
+			name:          "RemoveAllError",
+			destFilesPath: "success",
+			zipFile:       "bundle.zip",
+			fu: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "bundle.zip"},
+					mockedFileInfo{name: "failure"},
+				},
+			},
+			want: cmpopts.AnyError,
+		},
+		{
+			name:          "Success",
+			destFilesPath: "success",
+			zipFile:       "bundle.zip",
+			fu: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{name: "bundle.zip"},
+					mockedFileInfo{name: "etc"},
+					mockedFileInfo{name: "var"},
+				},
+			},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := sosr.removeUncompressedFiles(t.Context(), test.destFilesPath, test.zipFile, test.fu)
+			if !cmp.Equal(got, test.want, cmpopts.EquateErrors()) {
+				t.Errorf("removeUncompressedFiles(%q, %q) = %v, want %v", test.destFilesPath, test.zipFile, got, test.want)
 			}
 		})
 	}
