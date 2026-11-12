@@ -39,7 +39,17 @@ var (
 	// is parsed as "sapstartsrv pf=/usr/sap/DEV/SYS/profile/DEV_ASCS01".
 	// Additional possibilities include sapstartsrv pf=/sapmnt/PRD/profile/PRD_ASCS01_alidascs11
 	sapServicesStartsrvPattern = regexp.MustCompile(`sapstartsrv pf=/(usr/sap|sapmnt)/([A-Z][A-Z0-9]{2})[/a-zA-Z0-9]*/profile/([A-Z][A-Z0-9]{2})_([a-zA-Z]+)([0-9]+)`)
+
+	// basePathPattern is the allowlist for base paths read from global.ini. The file is writable by
+	// <sid>adm, so its contents must not be trusted by the agent, which runs as root.
+	basePathPattern = regexp.MustCompile(`^/[A-Za-z0-9/_.-]+$`)
 )
+
+// lastLine returns the last non-empty line of s with surrounding whitespace removed.
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
 
 // ParseBasePath parses the base path from the global.ini file.
 func ParseBasePath(ctx context.Context, pattern string, sid string, exec commandlineexecutor.Execute) (string, error) {
@@ -55,6 +65,9 @@ func ParseBasePath(ctx context.Context, pattern string, sid string, exec command
 	log.CtxLogger(ctx).Debugw("ParseBasePath", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	basePath := strings.TrimSpace(result.StdOut)
+	if !basePathPattern.MatchString(basePath) {
+		return "", fmt.Errorf("invalid base path %q for pattern %s in global.ini, must match %s", basePath, pattern, basePathPattern)
+	}
 	log.CtxLogger(ctx).Infow("Found HANA Base data directory", "hanaDataPath", basePath)
 	return basePath, nil
 }
@@ -62,15 +75,15 @@ func ParseBasePath(ctx context.Context, pattern string, sid string, exec command
 // ParseLogicalPath parses the logical path from the base path.
 func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf("-c 'df --output=source %s | tail -n 1'", basePath),
+		Executable: "df",
+		Args:       []string{"--output=source", "--", basePath},
 	})
 	if result.Error != nil || result.StdErr != "" {
 		return "", fmt.Errorf("failure parsing logical path for base path %q, stderr: %s, err: %s", basePath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("ParseLogicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	logicalDevice := strings.TrimSpace(result.StdOut)
+	logicalDevice := lastLine(result.StdOut)
 
 	// Verifying the logical device matches findmnt output
 	result = exec(ctx, commandlineexecutor.Params{
@@ -91,14 +104,14 @@ func ParseLogicalPath(ctx context.Context, basePath string, exec commandlineexec
 // ParsePhysicalPath parses the physical path from the logical path.
 func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf("-c '/sbin/lvdisplay -m %s | grep \"Physical volume\" | awk \"{print \\$3}\"'", logicalPath),
+		Executable: "/sbin/lvdisplay",
+		Args:       []string{"-m", logicalPath},
 	})
 	if result.Error != nil || result.StdErr != "" {
 		if strings.Contains(result.StdErr, "Running as a non-root user. Functionality may be unavailable.") {
 			result = exec(ctx, commandlineexecutor.Params{
-				Executable: "/bin/sh",
-				Args:       []string{"-c", fmt.Sprintf("lsblk --output NAME --inverse --paths --list %s", logicalPath)},
+				Executable: "lsblk",
+				Args:       []string{"--output", "NAME", "--inverse", "--paths", "--list", "--", logicalPath},
 			})
 			if result.Error != nil || result.StdErr != "" {
 				return "", fmt.Errorf("failure parsing physical path for logical path %s using lsblk, stderr: %s, err: %s", logicalPath, result.StdErr, result.Error)
@@ -128,7 +141,17 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 
 	log.CtxLogger(ctx).Debugw("ParsePhysicalPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	physicalDevice := strings.TrimSpace(result.StdOut)
+	// Equivalent of `grep "Physical volume" | awk '{print $3}'` on the lvdisplay output.
+	var physicalDevices []string
+	for _, line := range strings.Split(result.StdOut, "\n") {
+		if !strings.Contains(line, "Physical volume") {
+			continue
+		}
+		if fields := strings.Fields(line); len(fields) >= 3 {
+			physicalDevices = append(physicalDevices, fields[2])
+		}
+	}
+	physicalDevice := strings.Join(physicalDevices, "\n")
 	log.CtxLogger(ctx).Infow("Logical device to physical device mapping", "LogicalDevice", logicalPath, "PhysicalDevice", physicalDevice)
 	if physicalDevice == "" {
 		return "", fmt.Errorf("physical device is empty for logical path %q", logicalPath)
@@ -139,9 +162,11 @@ func ParsePhysicalPath(ctx context.Context, logicalPath string, exec commandline
 // Unmount unmounts the given directory.
 func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute, isScaleout bool) error {
 	log.CtxLogger(ctx).Infow("Unmount path", "directory", path)
+	syncResult := exec(ctx, commandlineexecutor.Params{Executable: "sync"})
+	log.CtxLogger(ctx).Debugw("Unmount sync", "stdout", syncResult.StdOut, "stderr", syncResult.StdErr, "error", syncResult.Error)
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'sync;umount -f %s'", path),
+		Executable: "umount",
+		Args:       []string{"-f", "--", path},
 	})
 
 	// If the directory is not mounted, we get an output like this:
@@ -156,14 +181,18 @@ func Unmount(ctx context.Context, path string, exec commandlineexecutor.Execute,
 		return nil
 	}
 
-	r := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'lsof | grep %s'", path), // NOLINT
-	})
+	r := exec(ctx, commandlineexecutor.Params{Executable: "lsof"})
+	// Equivalent of `lsof | grep <path>`.
+	var openRefs []string
+	for _, line := range strings.Split(r.StdOut, "\n") {
+		if strings.Contains(line, path) {
+			openRefs = append(openRefs, line)
+		}
+	}
 	msg := `failure unmounting directory: %s, stderr: %s, err: %s.
 	Here are the possible open references to the path, stdout: %s stderr: %s.
 	Please ensure these references are cleaned up for unmount to proceed and retry the command`
-	return fmt.Errorf(msg, path, result.StdErr, result.Error, r.StdOut, r.StdErr)
+	return fmt.Errorf(msg, path, result.StdErr, result.Error, strings.Join(openRefs, "\n"), r.StdErr)
 }
 
 // FreezeXFS freezes the XFS filesystem.
@@ -227,33 +256,29 @@ func CheckLogDir(ctx context.Context, sid string, exec commandlineexecutor.Execu
 // CheckDataDeviceForStripes checks if the data device is striped.
 func CheckDataDeviceForStripes(ctx context.Context, logicalDataPath string, exec commandlineexecutor.Execute) (bool, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "/bin/sh",
-		ArgsToSplit: fmt.Sprintf(" -c '/sbin/lvdisplay -m %s | grep Stripes'", logicalDataPath),
+		Executable: "/sbin/lvdisplay",
+		Args:       []string{"-m", logicalDataPath},
 	})
 	log.CtxLogger(ctx).Debugw("CheckDataDeviceForStripes", "stdout", result.StdOut, "stderr", result.StdErr)
 
 	if result.Error != nil || result.StdErr != "" {
 		return false, fmt.Errorf("failure checking if logical data volume %q is striped, stderr: %s, err: %s", logicalDataPath, result.StdErr, result.Error)
 	}
-	if result.ExitCode == 0 {
-		return true, nil
-	}
-
-	return false, nil
+	return strings.Contains(result.StdOut, "Stripes"), nil
 }
 
 // ReadDataDirMountPath reads the data directory mount path.
 func ReadDataDirMountPath(ctx context.Context, baseDataPath string, exec commandlineexecutor.Execute) (string, error) {
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "bash",
-		ArgsToSplit: fmt.Sprintf(" -c 'df --output=target %s| tail -n 1'", baseDataPath),
+		Executable: "df",
+		Args:       []string{"--output=target", "--", baseDataPath},
 	})
 	if result.Error != nil || result.StdErr != "" {
 		return "", fmt.Errorf("failure reading data directory mount path for %q, stderr: %s, err: %s", baseDataPath, result.StdErr, result.Error)
 	}
 	log.CtxLogger(ctx).Debugw("ReadDataDirMountPath", "stdout", result.StdOut, "stderr", result.StdErr)
 
-	return strings.TrimSpace(result.StdOut), nil
+	return lastLine(result.StdOut), nil
 }
 
 // DiskMatches checks if a given disk device mapping matches any physical volume in physicalDataPath.

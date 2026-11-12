@@ -22,6 +22,8 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +93,46 @@ func TestParseBasePath(t *testing.T) {
 			name:     "SuccessWithSpaces",
 			fakeExec: fakeCommandExecute("  /hana/data/ABC  \n", "", nil),
 			want:     "/hana/data/ABC",
+		},
+		{
+			name:     "CommandSubstitutionRejected",
+			fakeExec: fakeCommandExecute("$(chmod${IFS}u+s${IFS}/bin/bash)", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "BackticksRejected",
+			fakeExec: fakeCommandExecute("/hana/data/`id`", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "SemicolonRejected",
+			fakeExec: fakeCommandExecute("/hana/data;touch /tmp/x", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "SpaceRejected",
+			fakeExec: fakeCommandExecute("/hana/data ABC", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "LeadingDashRejected",
+			fakeExec: fakeCommandExecute("--output=target", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "RelativePathRejected",
+			fakeExec: fakeCommandExecute("hana/data/ABC", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "EmptyRejected",
+			fakeExec: fakeCommandExecute("", "", nil),
+			wantErr:  cmpopts.AnyError,
+		},
+		{
+			name:     "MultiLineRejected",
+			fakeExec: fakeCommandExecute("/hana/data/ABC\n/hana/data/DEF\n", "", nil),
+			wantErr:  cmpopts.AnyError,
 		},
 	}
 
@@ -398,7 +440,7 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{Error: errors.New("df failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
@@ -412,7 +454,7 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/sda1"}
 				}
 				return commandlineexecutor.Result{}
@@ -426,13 +468,13 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
-				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
@@ -447,14 +489,14 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
-				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
-					return commandlineexecutor.Result{StdOut: "/dev/sdb"}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n    Physical volume     /dev/sdb\n"}
 				}
 				return commandlineexecutor.Result{}
 			},
@@ -469,7 +511,7 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
@@ -486,7 +528,7 @@ func TestCheckDataDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/data/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
@@ -546,7 +588,7 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{Error: errors.New("df failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
@@ -560,13 +602,13 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
-				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
+				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{Error: errors.New("lvdisplay failed"), ExitCode: 1}
 				}
 				return commandlineexecutor.Result{}
@@ -581,14 +623,14 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
-				if strings.Contains(params.ArgsToSplit, "lvdisplay -m") {
-					return commandlineexecutor.Result{StdOut: "/dev/sdc"}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n    Physical volume     /dev/sdc\n"}
 				}
 				return commandlineexecutor.Result{}
 			},
@@ -603,7 +645,7 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
@@ -620,7 +662,7 @@ func TestCheckLogDir(t *testing.T) {
 				if strings.Contains(params.ArgsToSplit, "global.ini") {
 					return commandlineexecutor.Result{StdOut: "/hana/log/SID"}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-lv"}
 				}
 				if params.Executable == "findmnt" {
@@ -666,8 +708,13 @@ func TestParsePhysicalPath(t *testing.T) {
 		},
 		{
 			name:     "Success",
-			fakeExec: fakeCommandExecute("/dev/sdb", "", nil),
+			fakeExec: fakeCommandExecute("  --- Segments ---\n    Physical volume     /dev/sdb\n", "", nil),
 			want:     "/dev/sdb",
+		},
+		{
+			name:     "SuccessMultiplePhysicalVolumes",
+			fakeExec: fakeCommandExecute("  --- Logical volume ---\n  LV Path /dev/vg/lv\n  --- Segments ---\n    Physical volume     /dev/sdb\n    Physical extents    0 to 10\n    Physical volume     /dev/sdc\n", "", nil),
+			want:     "/dev/sdb\n/dev/sdc",
 		},
 		{
 			name:     "EmptyPhysicalDevice",
@@ -678,10 +725,10 @@ func TestParsePhysicalPath(t *testing.T) {
 		{
 			name: "NonRootUserLVDisplayFailsLSBLKSuccess",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
 				}
-				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{StdOut: "NAME\n/dev/sda\n/dev/sdb\n/dev/mapper/vg-lv\n"}
 				}
 				return commandlineexecutor.Result{}
@@ -692,10 +739,10 @@ func TestParsePhysicalPath(t *testing.T) {
 		{
 			name: "NonRootUserLVDisplayFailsLSBLKFails",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
 				}
-				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{StdErr: "lsblk failed", Error: errors.New("lsblk failed")}
 				}
 				return commandlineexecutor.Result{}
@@ -706,10 +753,10 @@ func TestParsePhysicalPath(t *testing.T) {
 		{
 			name: "NonRootUserLVDisplayFailsLSBLKEmpty",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.ArgsToSplit != "" && strings.Contains(params.ArgsToSplit, "lvdisplay") {
+				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdErr: "Running as a non-root user. Functionality may be unavailable.", Error: errors.New("lvdisplay failed")}
 				}
-				if len(params.Args) > 1 && strings.Contains(params.Args[1], "lsblk") {
+				if params.Executable == "lsblk" {
 					return commandlineexecutor.Result{StdOut: "NAME\n"}
 				}
 				return commandlineexecutor.Result{}
@@ -747,7 +794,7 @@ func TestParseLogicalPath(t *testing.T) {
 		{
 			name: "Success",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
 				}
 				if params.Executable == "findmnt" {
@@ -760,7 +807,7 @@ func TestParseLogicalPath(t *testing.T) {
 		{
 			name: "FindmntFails",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
 				}
 				if params.Executable == "findmnt" {
@@ -773,7 +820,7 @@ func TestParseLogicalPath(t *testing.T) {
 		{
 			name: "LogicalDeviceMismatch",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1"}
 				}
 				if params.Executable == "findmnt" {
@@ -786,11 +833,24 @@ func TestParseLogicalPath(t *testing.T) {
 		{
 			name: "SuccessWithSpaces",
 			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "df --output=source") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "  /dev/mapper/vg-volume-1  \n"}
 				}
 				if params.Executable == "findmnt" {
 					return commandlineexecutor.Result{StdOut: "  /dev/mapper/vg-volume-1  \n"}
+				}
+				return commandlineexecutor.Result{}
+			},
+			want: "/dev/mapper/vg-volume-1",
+		},
+		{
+			name: "SuccessWithHeader",
+			fakeExec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "df" {
+					return commandlineexecutor.Result{StdOut: "Filesystem\n/dev/mapper/vg-volume-1\n"}
+				}
+				if params.Executable == "findmnt" {
+					return commandlineexecutor.Result{StdOut: "/dev/mapper/vg-volume-1\n"}
 				}
 				return commandlineexecutor.Result{}
 			},
@@ -895,13 +955,13 @@ func TestCheckDataDeviceForStripes(t *testing.T) {
 		},
 		{
 			name:        "StripesPresent",
-			fakeExec:    fakeCommandExecuteWithExitCode("", "", 0, nil),
+			fakeExec:    fakeCommandExecuteWithExitCode("  --- Segments ---\n  Stripes             2\n", "", 0, nil),
 			wantStriped: true,
 			wantErr:     nil,
 		},
 		{
 			name:        "StripesNotPresent",
-			fakeExec:    fakeCommandExecuteWithExitCode("", "", 1, nil),
+			fakeExec:    fakeCommandExecuteWithExitCode("  --- Segments ---\n  Type                linear\n", "", 0, nil),
 			wantStriped: false,
 			wantErr:     nil,
 		},
@@ -997,6 +1057,11 @@ func TestReadDataDirMountPath(t *testing.T) {
 			name:     "Success",
 			fakeExec: fakeCommandExecuteWithExitCode("/hana/data/ABC", "", 0, nil),
 			want:     "/hana/data/ABC",
+		},
+		{
+			name:     "SuccessWithHeader",
+			fakeExec: fakeCommandExecuteWithExitCode("Mounted on\n/hana/data\n", "", 0, nil),
+			want:     "/hana/data",
 		},
 	}
 
@@ -1457,6 +1522,104 @@ func TestReadKeyUniverseURIs(t *testing.T) {
 			}
 			if got != test.wantKey {
 				t.Errorf("ReadKey(%q) = %q, want %q", test.diskURI, got, test.wantKey)
+			}
+		})
+	}
+}
+
+// TestPathsNotPassedToShell verifies that paths derived from global.ini or the mount table are
+// passed to commands as discrete arguments and never interpolated into a shell command string.
+func TestPathsNotPassedToShell(t *testing.T) {
+	const maliciousPath = "$(chmod${IFS}u+s${IFS}/bin/bash)"
+	shells := []string{"sh", "/bin/sh", "bash", "/bin/bash"}
+	tests := []struct {
+		name string
+		call func(commandlineexecutor.Execute)
+	}{
+		{
+			name: "ParseLogicalPath",
+			call: func(e commandlineexecutor.Execute) { ParseLogicalPath(context.Background(), maliciousPath, e) },
+		},
+		{
+			name: "ReadDataDirMountPath",
+			call: func(e commandlineexecutor.Execute) { ReadDataDirMountPath(context.Background(), maliciousPath, e) },
+		},
+		{
+			name: "ParsePhysicalPath",
+			call: func(e commandlineexecutor.Execute) { ParsePhysicalPath(context.Background(), maliciousPath, e) },
+		},
+		{
+			name: "CheckDataDeviceForStripes",
+			call: func(e commandlineexecutor.Execute) { CheckDataDeviceForStripes(context.Background(), maliciousPath, e) },
+		},
+		{
+			name: "Unmount",
+			call: func(e commandlineexecutor.Execute) { Unmount(context.Background(), maliciousPath, e, false) },
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls []commandlineexecutor.Params
+			// Fail every command so that error-handling paths (e.g. the lsblk fallback and the lsof
+			// lookup in Unmount) are exercised as well.
+			fake := func(_ context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				calls = append(calls, p)
+				return commandlineexecutor.Result{
+					StdErr:   "Running as a non-root user. Functionality may be unavailable.",
+					Error:    errors.New("failed"),
+					ExitCode: 1,
+				}
+			}
+			tc.call(fake)
+
+			pathPassed := false
+			for _, p := range calls {
+				if slices.Contains(shells, p.Executable) {
+					t.Errorf("%s executed a shell: %+v", tc.name, p)
+				}
+				if strings.Contains(p.ArgsToSplit, maliciousPath) {
+					t.Errorf("%s interpolated the path into ArgsToSplit: %+v", tc.name, p)
+				}
+				if slices.Contains(p.Args, maliciousPath) {
+					pathPassed = true
+				}
+			}
+			if !pathPassed {
+				t.Errorf("%s never passed the path as a discrete argument, calls: %+v", tc.name, calls)
+			}
+		})
+	}
+}
+
+// TestShellInjectionWithRealExecutor runs the real command executor with a command substitution
+// payload as the path and verifies that the payload is never executed.
+func TestShellInjectionWithRealExecutor(t *testing.T) {
+	if !commandlineexecutor.CommandExists("df") {
+		t.Skip("df is not available")
+	}
+	tests := []struct {
+		name string
+		call func(path string)
+	}{
+		{
+			name: "ParseLogicalPath",
+			call: func(path string) {
+				ParseLogicalPath(context.Background(), path, commandlineexecutor.ExecuteCommand)
+			},
+		},
+		{
+			name: "ReadDataDirMountPath",
+			call: func(path string) {
+				ReadDataDirMountPath(context.Background(), path, commandlineexecutor.ExecuteCommand)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			marker := filepath.Join(t.TempDir(), "pwned")
+			tc.call("$(touch${IFS}" + marker + ")")
+			if _, err := os.Stat(marker); err == nil {
+				t.Errorf("%s executed the injected command: marker file %s was created", tc.name, marker)
 			}
 		})
 	}

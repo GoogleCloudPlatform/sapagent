@@ -860,6 +860,9 @@ func TestValidateDisks(t *testing.T) {
 						ExitCode: 0,
 					}
 				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
+				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
 					StdErr:   "",
@@ -1221,6 +1224,9 @@ func TestValidateDisks(t *testing.T) {
 						ExitCode: 0,
 					}
 				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
+				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
 					StdErr:   "",
@@ -1310,6 +1316,9 @@ func TestValidateDisks(t *testing.T) {
 						Error:    nil,
 						ExitCode: 0,
 					}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
@@ -1765,6 +1774,9 @@ func TestValidateScaleupDisks(t *testing.T) {
 						ExitCode: 0,
 					}
 				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
+				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
 					StdErr:   "",
@@ -2126,6 +2138,9 @@ func TestValidateScaleupDisks(t *testing.T) {
 						ExitCode: 0,
 					}
 				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
+				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
 					StdErr:   "",
@@ -2217,6 +2232,9 @@ func TestValidateScaleupDisks(t *testing.T) {
 						Error:    nil,
 						ExitCode: 0,
 					}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
@@ -2503,6 +2521,9 @@ func TestVerifyStriping(t *testing.T) {
 						ExitCode: 0,
 					}
 				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
+				}
 				return commandlineexecutor.Result{
 					StdOut:   "",
 					StdErr:   "",
@@ -2594,6 +2615,9 @@ func TestVerifyStriping(t *testing.T) {
 						Error:    nil,
 						ExitCode: 0,
 					}
+				}
+				if params.Executable == "/sbin/lvdisplay" {
+					return commandlineexecutor.Result{StdOut: "  --- Segments ---\n  Stripes             2\n"}
 				}
 				return commandlineexecutor.Result{
 					StdOut:   "",

@@ -2189,7 +2189,7 @@ func TestPrepare(t *testing.T) {
 				return nil
 			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if strings.Contains(params.ArgsToSplit, "sync;umount") {
+				if params.Executable == "umount" {
 					return commandlineexecutor.Result{
 						ExitCode: 1,
 						Error:    cmpopts.AnyError,
@@ -4134,7 +4134,7 @@ func TestVerifyDataVolumeState(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdOut: successLVDisplay}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{ExitCode: 1, Error: fmt.Errorf("df error")}
 				}
 				return commandlineexecutor.Result{}
@@ -4155,7 +4155,7 @@ func TestVerifyDataVolumeState(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdOut: successLVDisplay}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/hana/data"}
 				}
 				if params.Executable == "mountpoint" {
@@ -4179,7 +4179,7 @@ func TestVerifyDataVolumeState(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdOut: successLVDisplay}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/hana/data"}
 				}
 				if params.Executable == "mountpoint" {
@@ -4206,7 +4206,7 @@ func TestVerifyDataVolumeState(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" {
 					return commandlineexecutor.Result{StdOut: successLVDisplay}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/hana/data"}
 				}
 				if params.Executable == "mountpoint" {
@@ -4233,7 +4233,7 @@ func TestVerifyDataVolumeState(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" && params.ArgsToSplit == "/dev/mapper/vg_hana_data-data" {
 					return commandlineexecutor.Result{StdOut: successLVDisplay}
 				}
-				if strings.Contains(params.ArgsToSplit, "df --output=target") {
+				if params.Executable == "df" {
 					return commandlineexecutor.Result{StdOut: "/hana/data"}
 				}
 				if params.Executable == "mountpoint" {

@@ -221,7 +221,7 @@ func TestDiskRestore(t *testing.T) {
 				if params.Executable == "/sbin/lvdisplay" && params.ArgsToSplit == "/dev/mapper/vg-lv" {
 					return commandlineexecutor.Result{StdOut: "lv"}
 				}
-				if params.Executable == "bash" && strings.Contains(params.ArgsToSplit, "df --output=target /hana/data") {
+				if params.Executable == "df" && strings.Join(params.Args, " ") == "--output=target -- /hana/data" {
 					return commandlineexecutor.Result{StdOut: "/hana/data"}
 				}
 				if params.Executable == "mountpoint" && params.ArgsToSplit == "/hana/data" {
