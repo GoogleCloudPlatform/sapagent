@@ -439,8 +439,9 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 	clusterCollectorCreated := false
 	for _, instance := range sapInstances.GetInstances() {
 		sids[instance.GetSapsid()] = true
+		sanitizedInstance := sapdiscovery.SAPInstanceToPrint(instance)
 		if clusterCollectorCreated == false {
-			log.CtxLogger(ctx).Infow("Creating cluster collector for instance", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating cluster collector for instance", "instance", sanitizedInstance)
 			clusterCollector := &cluster.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -462,7 +463,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 		}
 		p.Collectors = append(p.Collectors, linuxOsMetricsCollector)
 		if instance.GetType() == sapb.InstanceType_HANA {
-			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating HANA per process CPU, memory usage metrics collector for instance", "instance", sanitizedInstance)
 			hanaComputeresourcesCollector := &computeresources.HANAInstanceProperties{
 				Config:           p.Config,
 				Client:           p.Client,
@@ -474,7 +475,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
-			log.CtxLogger(ctx).Infow("Creating HANA collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating HANA collector for instance.", "instance", sanitizedInstance)
 			hanaCollector := &hana.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,
@@ -487,7 +488,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 			}
 			p.Collectors = append(p.Collectors, hanaComputeresourcesCollector, hanaCollector)
 
-			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for HANA", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for HANA", "instance", sanitizedInstance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,
@@ -500,7 +501,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 			p.FastMovingCollectors = append(p.FastMovingCollectors, fmCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
-			log.CtxLogger(ctx).Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating Netweaver per process CPU, memory usage metrics collector for instance.", "instance", sanitizedInstance)
 			netweaverComputeresourcesCollector := &computeresources.NetweaverInstanceProperties{
 				Config:           p.Config,
 				Client:           p.Client,
@@ -512,7 +513,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 				PMBackoffPolicy:  cloudmonitoring.LongExponentialBackOffPolicy(ctx, time.Duration(pmSlowFreq)*time.Second, 3, 3*time.Minute, 2*time.Minute),
 			}
 
-			log.CtxLogger(ctx).Infow("Creating Netweaver collector for instance.", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating Netweaver collector for instance.", "instance", sanitizedInstance)
 			netweaverCollector := &netweaver.InstanceProperties{
 				SAPInstance:     instance,
 				Config:          p.Config,
@@ -522,7 +523,7 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 			}
 			p.Collectors = append(p.Collectors, netweaverComputeresourcesCollector, netweaverCollector)
 
-			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for Netweaver", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating FastMoving Collector for Netweaver", "instance", sanitizedInstance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,
@@ -573,7 +574,11 @@ func createProcessCollectors(ctx context.Context, params Parameters, client clou
 // SAP instances on this machine and update DB Credentials from configuration
 // into the instances.
 func instancesWithCredentials(ctx context.Context, params *Parameters) *sapb.SAPInstances {
-	sapInstances := params.Discovery.GetSAPInstances()
+	rawInstances := params.Discovery.GetSAPInstances()
+	if rawInstances == nil {
+		return nil
+	}
+	sapInstances := proto.Clone(rawInstances).(*sapb.SAPInstances)
 	for _, instance := range sapInstances.GetInstances() {
 		if instance.GetType() == sapb.InstanceType_HANA {
 			var err error
@@ -723,8 +728,9 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, sapInst
 	// Attempt - 3 Failure: wait for 120 seconds
 
 	for _, instance := range sapInstances.GetInstances() {
+		sanitizedInstance := sapdiscovery.SAPInstanceToPrint(instance)
 		if instance.GetType() == sapb.InstanceType_HANA {
-			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for HANA", "instance", sanitizedInstance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,
@@ -737,7 +743,7 @@ func createReliabilityCollectors(ctx context.Context, params Parameters, sapInst
 			p.ReliabilityCollectors = append(p.ReliabilityCollectors, fmCollector)
 		}
 		if instance.GetType() == sapb.InstanceType_NETWEAVER {
-			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for Netweaver", "instance", instance)
+			log.CtxLogger(ctx).Infow("Creating reliability metrics collector for Netweaver", "instance", sanitizedInstance)
 			fmCollector := &fastmovingmetrics.InstanceProperties{
 				SAPInstance:        instance,
 				Config:             p.Config,

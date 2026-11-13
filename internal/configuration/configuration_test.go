@@ -21,6 +21,8 @@ import (
 	_ "embed"
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -1695,6 +1697,159 @@ func TestDefaultDataWarehouseEndpoint(t *testing.T) {
 			}
 			if got := applyDefaultCollectionConfiguration(&cpb.CollectionConfiguration{}).GetDataWarehouseEndpoint(); got != tc.want {
 				t.Errorf("applyDefaultCollectionConfiguration().GetDataWarehouseEndpoint() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestConfigToPrint(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *cpb.Configuration
+		want   *cpb.Configuration
+	}{
+		{
+			name:   "NilConfig",
+			config: nil,
+			want:   nil,
+		},
+		{
+			name: "NoPasswords",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:               "SYSTEM",
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+			want: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:               "SYSTEM",
+						HanaDbPasswordSecretName: "my-secret",
+					},
+				},
+			},
+		},
+		{
+			name: "MasksAllPasswords",
+			config: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:     "SYSTEM",
+						HanaDbPassword: "pm-password",
+					},
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:     "SYSTEM",
+						HanaDbPassword: "wlm-password",
+					},
+				},
+				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+					HanaInstances: []*cpb.HANAInstance{
+						{Name: "inst1", Password: "hm-password-1"},
+						{Name: "inst2", SecretName: "hm-secret-2"},
+					},
+				},
+			},
+			want: &cpb.Configuration{
+				CollectionConfiguration: &cpb.CollectionConfiguration{
+					HanaMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:     "SYSTEM",
+						HanaDbPassword: "***",
+					},
+					WorkloadValidationDbMetricsConfig: &cpb.HANAMetricsConfig{
+						HanaDbUser:     "SYSTEM",
+						HanaDbPassword: "***",
+					},
+				},
+				HanaMonitoringConfiguration: &cpb.HANAMonitoringConfiguration{
+					HanaInstances: []*cpb.HANAInstance{
+						{Name: "inst1", Password: "***"},
+						{Name: "inst2", SecretName: "hm-secret-2"},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ConfigToPrint(tc.config)
+			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("ConfigToPrint() returned unexpected diff (-want +got):\n%s", diff)
+			}
+			if tc.name == "MasksAllPasswords" {
+				if tc.config.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbPassword() != "pm-password" {
+					t.Errorf("ConfigToPrint() mutated original HanaMetricsConfig.HanaDbPassword")
+				}
+				if tc.config.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPassword() != "wlm-password" {
+					t.Errorf("ConfigToPrint() mutated original WorkloadValidationDbMetricsConfig.HanaDbPassword")
+				}
+				if tc.config.GetHanaMonitoringConfiguration().GetHanaInstances()[0].GetPassword() != "hm-password-1" {
+					t.Errorf("ConfigToPrint() mutated original HanaInstances[0].Password")
+				}
+			}
+		})
+	}
+}
+
+func TestReadMalformedJSONRedactsPasswords(t *testing.T) {
+	tests := []struct {
+		name           string
+		content        string
+		forbiddenTerms []string
+	}{
+		{
+			name:           "SnakeCasePassword",
+			content:        `{"collection_configuration": {"hana_metrics_config": {"hana_db_password": "secret-snake-pass",`,
+			forbiddenTerms: []string{"secret-snake-pass"},
+		},
+		{
+			name:           "CamelCasePassword",
+			content:        `{"collectionConfiguration": {"hanaMetricsConfig": {"hanaDbPassword": "secret-camel-pass",`,
+			forbiddenTerms: []string{"secret-camel-pass"},
+		},
+		{
+			name:           "EscapedQuotesAndBackslashes",
+			content:        `{"hana_db_password": "pa\"ss\\word-secret", "password": "hm\"pass\\word",`,
+			forbiddenTerms: []string{`pa\"ss\\word-secret`, "word-secret", `hm\"pass\\word`},
+		},
+		{
+			name:           "UnclosedString",
+			content:        "{\n  \"hana_db_password\": \"unclosed-secret-pass\n}",
+			forbiddenTerms: []string{"unclosed-secret-pass"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logFile := filepath.Join(t.TempDir(), "config-test.log")
+			log.SetupLogging(log.Parameters{
+				LogFileName: logFile,
+				Level:       zapcore.ErrorLevel,
+			})
+			t.Cleanup(log.SetupLoggingForTest)
+
+			_, err := Read("test-config.json", func(string) ([]byte, error) {
+				return []byte(tc.content), nil
+			})
+			if err == nil {
+				t.Fatalf("Read() succeeded on malformed JSON, want error")
+			}
+
+			logBytes, readErr := os.ReadFile(logFile)
+			if readErr != nil {
+				t.Fatalf("failed to read test log file %q: %v", logFile, readErr)
+			}
+			logOutput := string(logBytes)
+			for _, secret := range tc.forbiddenTerms {
+				if strings.Contains(logOutput, secret) {
+					t.Errorf("log output contains unredacted secret %q:\n%s", secret, logOutput)
+				}
+			}
+			if !strings.Contains(logOutput, `***`) {
+				t.Errorf("log output does not contain masked value \"***\":\n%s", logOutput)
 			}
 		})
 	}

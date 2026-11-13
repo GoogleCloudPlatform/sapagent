@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 	"github.com/GoogleCloudPlatform/sapagent/internal/pacemaker"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -642,4 +643,30 @@ func ReadHANACredentials(ctx context.Context, projectID string, hanaConfig *cpb.
 		return "", "", "", err
 	}
 	return user, password, "", nil
+}
+
+// SAPInstanceToPrint returns a copy of the SAPInstance with sensitive fields masked for logging.
+func SAPInstanceToPrint(instance *sapb.SAPInstance) *sapb.SAPInstance {
+	if instance == nil {
+		return nil
+	}
+	masked := proto.Clone(instance).(*sapb.SAPInstance)
+	if masked.GetHanaDbPassword() != "" {
+		masked.HanaDbPassword = "***"
+	}
+	return masked
+}
+
+// SAPInstancesToPrint returns a copy of SAPInstances with sensitive fields masked for logging.
+func SAPInstancesToPrint(instances *sapb.SAPInstances) *sapb.SAPInstances {
+	if instances == nil {
+		return nil
+	}
+	masked := proto.Clone(instances).(*sapb.SAPInstances)
+	for _, instance := range masked.GetInstances() {
+		if instance.GetHanaDbPassword() != "" {
+			instance.HanaDbPassword = "***"
+		}
+	}
+	return masked
 }

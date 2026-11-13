@@ -233,7 +233,7 @@ func collectHANAAvailabilityMetrics(ctx context.Context, ip *InstanceProperties,
 			log.CtxLogger(ctx).Debugw("Error executing GetProcessList SAPControl command, failed to get exitStatus", log.Error(err))
 			return nil, err
 		}
-		log.CtxLogger(ctx).Debugw("HA availability for sapcontrol", "haReplicationValue", haReplicationValue, "sapControlResult", sapControlResult, "sapinstance", ip.SAPInstance)
+		log.CtxLogger(ctx).Debugw("HA availability for sapcontrol", "haReplicationValue", haReplicationValue, "sapControlResult", sapControlResult, "sapinstance", sapdiscovery.SAPInstanceToPrint(ip.SAPInstance))
 		haAvailabilityValue := haAvailabilityValue(ip, int64(sapControlResult), haReplicationValue)
 		extraLabels := map[string]string{
 			"ha_members": strings.Join(ip.SAPInstance.GetHanaHaMembers(), ","),
@@ -282,7 +282,7 @@ func hanaAvailability(p *InstanceProperties, processes map[int]*sapcontrol.Proce
 }
 
 func haAvailabilityValue(p *InstanceProperties, sapControlResult int64, replicationStatus int64) int64 {
-	log.Logger.Debugw("HANA HA availability for sapcontrol", "replicationStatus", replicationStatus, "sapControlResult", sapControlResult, "sapInstance", p.SAPInstance)
+	log.Logger.Debugw("HANA HA availability for sapcontrol", "replicationStatus", replicationStatus, "sapControlResult", sapControlResult, "sapInstance", sapdiscovery.SAPInstanceToPrint(p.SAPInstance))
 	var value int64 = unknownState
 	if p.SAPInstance.GetSite() == sapb.InstanceSite_HANA_SECONDARY {
 		return currentNodeSecondary

@@ -739,7 +739,7 @@ func (d *Daemon) Restart(cancel context.CancelFunc) context.CancelFunc {
 	cancel()
 	time.Sleep(5 * time.Second)
 	ctx, newCancel := context.WithCancel(context.Background())
-	log.Logger.Infow("Restarting daemon services", "d", d)
+	log.Logger.Infow("Restarting daemon services", "config", configuration.ConfigToPrint(d.config))
 	go d.startdaemonHandler(ctx, newCancel, true)
 	return newCancel
 }

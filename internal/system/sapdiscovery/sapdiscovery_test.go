@@ -1513,3 +1513,94 @@ func TestBuildURLAndServiceName(t *testing.T) {
 		})
 	}
 }
+
+func TestSAPInstanceToPrint(t *testing.T) {
+	tests := []struct {
+		name     string
+		instance *sapb.SAPInstance
+		want     *sapb.SAPInstance
+	}{
+		{
+			name:     "Nil",
+			instance: nil,
+			want:     nil,
+		},
+		{
+			name: "NoPassword",
+			instance: &sapb.SAPInstance{
+				Sapsid:     "HDB",
+				HanaDbUser: "SYSTEM",
+			},
+			want: &sapb.SAPInstance{
+				Sapsid:     "HDB",
+				HanaDbUser: "SYSTEM",
+			},
+		},
+		{
+			name: "WithPassword",
+			instance: &sapb.SAPInstance{
+				Sapsid:         "HDB",
+				HanaDbUser:     "SYSTEM",
+				HanaDbPassword: "secret-password",
+			},
+			want: &sapb.SAPInstance{
+				Sapsid:         "HDB",
+				HanaDbUser:     "SYSTEM",
+				HanaDbPassword: "***",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := SAPInstanceToPrint(test.instance)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("SAPInstanceToPrint() returned unexpected diff (-want +got):\n%s", diff)
+			}
+			if test.name == "WithPassword" && test.instance.GetHanaDbPassword() != "secret-password" {
+				t.Errorf("SAPInstanceToPrint() mutated original HanaDbPassword")
+			}
+		})
+	}
+}
+
+func TestSAPInstancesToPrint(t *testing.T) {
+	tests := []struct {
+		name      string
+		instances *sapb.SAPInstances
+		want      *sapb.SAPInstances
+	}{
+		{
+			name:      "Nil",
+			instances: nil,
+			want:      nil,
+		},
+		{
+			name: "MasksPasswords",
+			instances: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", HanaDbUser: "SYSTEM", HanaDbPassword: "secret-password"},
+					{Sapsid: "ASCS"},
+				},
+			},
+			want: &sapb.SAPInstances{
+				Instances: []*sapb.SAPInstance{
+					{Sapsid: "HDB", HanaDbUser: "SYSTEM", HanaDbPassword: "***"},
+					{Sapsid: "ASCS"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := SAPInstancesToPrint(test.instances)
+			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("SAPInstancesToPrint() returned unexpected diff (-want +got):\n%s", diff)
+			}
+			if test.name == "MasksPasswords" && test.instances.GetInstances()[0].GetHanaDbPassword() != "secret-password" {
+				t.Errorf("SAPInstancesToPrint() mutated original HanaDbPassword")
+			}
+		})
+	}
+}

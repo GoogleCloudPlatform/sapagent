@@ -19,6 +19,8 @@ package processmetrics
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -705,6 +707,11 @@ func TestInstancesWithCredentials(t *testing.T) {
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("instancesWithCredentials() returned diff (-want +got):\n%s", diff)
 			}
+			for _, inst := range test.params.Discovery.GetSAPInstances().GetInstances() {
+				if inst.GetHanaDbPassword() != "" {
+					t.Errorf("instancesWithCredentials() mutated Discovery instance HanaDbPassword = %q, want empty", inst.GetHanaDbPassword())
+				}
+			}
 		})
 	}
 }
@@ -1259,5 +1266,46 @@ func TestSAPInstancesEqual(t *testing.T) {
 				t.Errorf("sapInstancesEqual(%v, %v) = %v, want %v", test.old, test.new, got, test.want)
 			}
 		})
+	}
+}
+
+func TestCreateCollectorsDoesNotLogPassword(t *testing.T) {
+	logFile := filepath.Join(t.TempDir(), "sapagent-test.log")
+	log.SetupLogging(log.Parameters{
+		LogFileName: logFile,
+		Level:       log.StringLevelToZapcore("info"),
+	})
+	t.Cleanup(log.SetupLoggingForTest)
+
+	secretPass := "SuperSecretPassword123!"
+	instances := &sapb.SAPInstances{
+		Instances: []*sapb.SAPInstance{
+			{
+				Sapsid:         "HDB",
+				InstanceNumber: "00",
+				Type:           sapb.InstanceType_HANA,
+				HanaDbUser:     "SYSTEM",
+				HanaDbPassword: secretPass,
+			},
+		},
+	}
+	params := Parameters{
+		Config:   defaultConfig,
+		BackOffs: defaultBackOffIntervals,
+	}
+
+	createProcessCollectors(context.Background(), params, &fake.TimeSeriesCreator{}, instances)
+	createReliabilityCollectors(context.Background(), params, instances)
+
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("failed to read test log file %q: %v", logFile, err)
+	}
+	logOutput := string(content)
+	if strings.Contains(logOutput, secretPass) {
+		t.Errorf("log output contains clear-text password %q:\n%s", secretPass, logOutput)
+	}
+	if !strings.Contains(logOutput, "***") {
+		t.Errorf("log output does not contain masked password \"***\":\n%s", logOutput)
 	}
 }

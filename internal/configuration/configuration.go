@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -56,8 +57,9 @@ type StatFile func(string) (os.FileInfo, error)
 type MkdirAll func(string, os.FileMode) error
 
 var (
-	ros            = runtime.GOOS
-	fetchParameter = parametermanager.FetchParameter
+	ros                 = runtime.GOOS
+	fetchParameter      = parametermanager.FetchParameter
+	passwordFieldsRegex = regexp.MustCompile(`(?im)("(?:hana_?db_?password|password)"\s*:\s*)"(?:[^"\\\r\n]|\\[^\r\n]?)*(?:"|\r?$)`)
 )
 
 //go:embed defaultconfigs/configuration.json
@@ -122,7 +124,8 @@ func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
-		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", string(content))
+		sanitizedContent := passwordFieldsRegex.ReplaceAllString(string(content), `$1"***"`)
+		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", sanitizedContent)
 		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", path, err)
 	}
 	return config, err
@@ -184,7 +187,7 @@ func ReadFromFile(path string, read ReadConfigFile, pmClient *parametermanager.C
 	}
 
 	config.HanaMonitoringConfiguration = prepareHMConf(config.HanaMonitoringConfiguration)
-	log.Logger.Debugw("Configuration read for the agent", "Configuration", config)
+	log.Logger.Debugw("Configuration read for the agent", "Configuration", ConfigToPrint(config))
 	validateAgentConfiguration(config)
 	return config, pmVersion, err
 }
@@ -564,4 +567,24 @@ func EnsureConfigExists(stat StatFile, mkdirAll MkdirAll, write WriteConfigFile)
 
 	log.Logger.Infow("Default configuration file created", "path", path)
 	return nil
+}
+
+// ConfigToPrint returns a copy of the configuration with sensitive fields masked for logging.
+func ConfigToPrint(config *cpb.Configuration) *cpb.Configuration {
+	if config == nil {
+		return nil
+	}
+	maskedConfig := proto.Clone(config).(*cpb.Configuration)
+	if maskedConfig.GetCollectionConfiguration().GetHanaMetricsConfig().GetHanaDbPassword() != "" {
+		maskedConfig.CollectionConfiguration.HanaMetricsConfig.HanaDbPassword = "***"
+	}
+	if maskedConfig.GetCollectionConfiguration().GetWorkloadValidationDbMetricsConfig().GetHanaDbPassword() != "" {
+		maskedConfig.CollectionConfiguration.WorkloadValidationDbMetricsConfig.HanaDbPassword = "***"
+	}
+	for _, instance := range maskedConfig.GetHanaMonitoringConfiguration().GetHanaInstances() {
+		if instance.GetPassword() != "" {
+			instance.Password = "***"
+		}
+	}
+	return maskedConfig
 }

@@ -259,7 +259,7 @@ func (c *Configure) modifyConfig(ctx context.Context, read configuration.ReadCon
 		c.oteLogger.LogMessageToFileAndConsole(ctx, "Unable to read configuration.json")
 		return "Unable to read configuration.json", subcommands.ExitFailure
 	}
-	log.CtxLogger(ctx).Infow("Config before any changes", "config", config)
+	log.CtxLogger(ctx).Infow("Config before any changes", "config", configuration.ConfigToPrint(config))
 
 	isCmdValid := false
 	if len(c.LogLevel) > 0 {
@@ -518,7 +518,12 @@ func (c *Configure) writeFile(ctx context.Context, config *cpb.Configuration, pa
 
 	var fileBuf bytes.Buffer
 	json.Indent(&fileBuf, file, "", "  ")
-	log.CtxLogger(ctx).Info("Config file data we're about to write: ", fileBuf.String())
+	sanitizedFile, sanitizedErr := protojson.MarshalOptions{UseProtoNames: true}.Marshal(configuration.ConfigToPrint(config))
+	if sanitizedErr == nil {
+		var sanitizedBuf bytes.Buffer
+		json.Indent(&sanitizedBuf, sanitizedFile, "", "  ")
+		log.CtxLogger(ctx).Info("Config file data we're about to write: ", sanitizedBuf.String())
+	}
 
 	err = os.WriteFile(path, fileBuf.Bytes(), 0644)
 	if err != nil {

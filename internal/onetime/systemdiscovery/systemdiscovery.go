@@ -139,7 +139,7 @@ func (sd *SystemDiscovery) systemDiscoveryHandler(ctx context.Context, cloudLogg
 	//
 	// else it will be logged to systemdiscovery.log.
 	log.CtxLogger(ctx).Info("SystemDiscovery one time execution initialized successfully.")
-	log.CtxLogger(ctx).Infof("config: %v", config)
+	log.CtxLogger(ctx).Infof("config: %v", configuration.ConfigToPrint(config))
 
 	// Initialize params to default if they are not already set.
 	if err := sd.initDefaults(ctx, cloudLoggingClient, gce.NewGCEClient); err != nil {
@@ -161,7 +161,7 @@ func (sd *SystemDiscovery) systemDiscoveryHandler(ctx context.Context, cloudLogg
 	if ok := system.StartSAPSystemDiscovery(ctx, config, discovery); !ok {
 		return nil, fmt.Errorf("failed to start the SAP system discovery")
 	}
-	log.CtxLogger(ctx).Infof("SAP Instances discovered: %v", discovery.GetSAPInstances())
+	log.CtxLogger(ctx).Infof("SAP Instances discovered: %v", sapdiscovery.SAPInstancesToPrint(discovery.GetSAPInstances()))
 	log.CtxLogger(ctx).Infof("SAP Systems discovered: %v", discovery.GetSAPSystems())
 
 	return discovery, nil
