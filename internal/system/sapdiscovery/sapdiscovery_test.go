@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
@@ -1553,12 +1554,13 @@ func TestSAPInstanceToPrint(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			orig := proto.Clone(test.instance)
 			got := SAPInstanceToPrint(test.instance)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("SAPInstanceToPrint() returned unexpected diff (-want +got):\n%s", diff)
 			}
-			if test.name == "WithPassword" && test.instance.GetHanaDbPassword() != "secret-password" {
-				t.Errorf("SAPInstanceToPrint() mutated original HanaDbPassword")
+			if diff := cmp.Diff(orig, test.instance, protocmp.Transform()); diff != "" {
+				t.Errorf("SAPInstanceToPrint() mutated input instance (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1594,12 +1596,13 @@ func TestSAPInstancesToPrint(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			orig := proto.Clone(test.instances)
 			got := SAPInstancesToPrint(test.instances)
 			if diff := cmp.Diff(test.want, got, protocmp.Transform()); diff != "" {
 				t.Errorf("SAPInstancesToPrint() returned unexpected diff (-want +got):\n%s", diff)
 			}
-			if test.name == "MasksPasswords" && test.instances.GetInstances()[0].GetHanaDbPassword() != "secret-password" {
-				t.Errorf("SAPInstancesToPrint() mutated original HanaDbPassword")
+			if diff := cmp.Diff(orig, test.instances, protocmp.Transform()); diff != "" {
+				t.Errorf("SAPInstancesToPrint() mutated input instances (-want +got):\n%s", diff)
 			}
 		})
 	}

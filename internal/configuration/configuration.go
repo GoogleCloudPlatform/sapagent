@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -57,9 +56,8 @@ type StatFile func(string) (os.FileInfo, error)
 type MkdirAll func(string, os.FileMode) error
 
 var (
-	ros                 = runtime.GOOS
-	fetchParameter      = parametermanager.FetchParameter
-	passwordFieldsRegex = regexp.MustCompile(`(?im)("(?:hana_?db_?password|password)"\s*:\s*)"(?:[^"\\\r\n]|\\[^\r\n]?)*(?:"|\r?$)`)
+	ros            = runtime.GOOS
+	fetchParameter = parametermanager.FetchParameter
 )
 
 //go:embed defaultconfigs/configuration.json
@@ -124,8 +122,7 @@ func Read(path string, read ReadConfigFile) (*cpb.Configuration, error) {
 	err = protojson.Unmarshal(content, config)
 	if err != nil {
 		usagemetrics.Error(usagemetrics.MalformedConfigFile)
-		sanitizedContent := passwordFieldsRegex.ReplaceAllString(string(content), `$1"***"`)
-		log.Logger.Errorw("Invalid content in the configuration file", "file", path, "content", sanitizedContent)
+		log.Logger.Errorw("Invalid content in the configuration file", "file", path)
 		log.Logger.Errorf("Configuration JSON at '%s' has error: %v. Only hostmetrics will be started. Please fix the JSON and restart the agent", path, err)
 	}
 	return config, err

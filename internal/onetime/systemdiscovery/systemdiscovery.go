@@ -139,7 +139,6 @@ func (sd *SystemDiscovery) systemDiscoveryHandler(ctx context.Context, cloudLogg
 	//
 	// else it will be logged to systemdiscovery.log.
 	log.CtxLogger(ctx).Info("SystemDiscovery one time execution initialized successfully.")
-	log.CtxLogger(ctx).Infof("config: %v", configuration.ConfigToPrint(config))
 
 	// Initialize params to default if they are not already set.
 	if err := sd.initDefaults(ctx, cloudLoggingClient, gce.NewGCEClient); err != nil {
