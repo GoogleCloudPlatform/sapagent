@@ -215,7 +215,7 @@ func TestAppendSSHArgs(t *testing.T) {
 		{
 			name:       "appendsSSHArgumentsScp",
 			isScp:      true,
-			wantInArgs: []string{"-i", "keypath", "/usr/bin/google_cloud_sap_agent", "username" + "@" + "sshHostAddress" + ":" + "/tmp/google_cloud_sap_agent"},
+			wantInArgs: []string{"-i", "keypath", "/usr/bin/google_cloud_sap_agent", "username" + "@" + "sshHostAddress" + ":" + "/etc/google-cloud-sap-agent/google_cloud_sap_agent"},
 		},
 		{
 			name:       "appendsSSHArgumentsSsh",
@@ -669,5 +669,71 @@ func TestRemoteCollectSSH(t *testing.T) {
 				t.Errorf("collectRemoteSSH() unexpected diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+// recordCommands returns a fake command executor that records every command it is asked to run in
+// got, and answers each of them with the default output of a remote collection.
+func recordCommands(got *[][]string) commandlineexecutor.Execute {
+	return func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+		*got = append(*got, append([]string{params.Executable}, params.Args...))
+		return commandlineexecutor.Result{StdOut: defaultRemoteCollectionStdout}
+	}
+}
+
+// The binary is executed as root on the remote host, so the binary and the configuration must only
+// be placed in a directory that only root can write to.
+func TestCollectRemoteGcloudCommands(t *testing.T) {
+	var got [][]string
+	ch := make(chan WorkloadMetrics)
+	go collectRemoteGcloud(context.Background(), collectOptions{
+		exists:     func(string) bool { return true },
+		execute:    recordCommands(&got),
+		configPath: "/local/workload-validation.json",
+		rc:         &cfgpb.WorkloadValidationRemoteCollection{RemoteCollectionGcloud: &cfgpb.RemoteCollectionGcloud{}},
+		i:          defaultRemoteInstance,
+		wm:         ch,
+	})
+	<-ch
+
+	want := [][]string{
+		{"gcloud", "compute", "ssh", "--project", "projectId", "--zone", "some-region-zone", "instanceName", "--command", "sudo mkdir -p -m 755 /etc/google-cloud-sap-agent && sudo rm -f /etc/google-cloud-sap-agent/google_cloud_sap_agent"},
+		{"gcloud", "compute", "scp", "--project", "projectId", "--zone", "some-region-zone", "/local/workload-validation.json", "instanceName:/etc/google-cloud-sap-agent/workload-validation.json"},
+		{"gcloud", "compute", "scp", "--project", "projectId", "--zone", "some-region-zone", "/usr/bin/google_cloud_sap_agent", "instanceName:/etc/google-cloud-sap-agent/google_cloud_sap_agent"},
+		{"gcloud", "compute", "ssh", "--project", "projectId", "--zone", "some-region-zone", "instanceName", "--command", "sudo /etc/google-cloud-sap-agent/google_cloud_sap_agent remote -c=/etc/google-cloud-sap-agent/workload-validation.json -p=projectId -z=some-region-zone -i=instanceId -n=instanceName; rm /etc/google-cloud-sap-agent/google_cloud_sap_agent; rm /etc/google-cloud-sap-agent/workload-validation.json"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("collectRemoteGcloud() ran unexpected commands (-want +got):\n%s", diff)
+	}
+}
+
+func TestCollectRemoteSSHCommands(t *testing.T) {
+	var got [][]string
+	ch := make(chan WorkloadMetrics)
+	go collectRemoteSSH(context.Background(), collectOptions{
+		execute:    recordCommands(&got),
+		configPath: "/local/workload-validation.json",
+		rc: &cfgpb.WorkloadValidationRemoteCollection{
+			RemoteCollectionSsh: &cfgpb.RemoteCollectionSsh{SshUsername: "root", SshPrivateKeyPath: "keypath"},
+		},
+		i: &cfgpb.RemoteCollectionInstance{
+			ProjectId:      "projectId",
+			Zone:           "some-region-zone",
+			InstanceId:     "instanceId",
+			InstanceName:   "instanceName",
+			SshHostAddress: "sshHostAddress",
+		},
+		wm: ch,
+	})
+	<-ch
+
+	want := [][]string{
+		{"ssh", "-i", "keypath", "root@sshHostAddress", "mkdir -p -m 755 /etc/google-cloud-sap-agent && rm -f /etc/google-cloud-sap-agent/google_cloud_sap_agent"},
+		{"scp", "-i", "keypath", "/local/workload-validation.json", "root@sshHostAddress:/etc/google-cloud-sap-agent/workload-validation.json"},
+		{"scp", "-i", "keypath", "/usr/bin/google_cloud_sap_agent", "root@sshHostAddress:/etc/google-cloud-sap-agent/google_cloud_sap_agent"},
+		{"ssh", "-i", "keypath", "root@sshHostAddress", "/etc/google-cloud-sap-agent/google_cloud_sap_agent", "remote", "-c=/etc/google-cloud-sap-agent/workload-validation.json -p=projectId -i=instanceId -n=instanceName -z=some-region-zone", "; rm /etc/google-cloud-sap-agent/google_cloud_sap_agent", "; rm /etc/google-cloud-sap-agent/workload-validation.json"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("collectRemoteSSH() ran unexpected commands (-want +got):\n%s", diff)
 	}
 }

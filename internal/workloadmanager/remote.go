@@ -39,9 +39,14 @@ import (
 )
 
 const (
-	agentBinary            = "/usr/bin/google_cloud_sap_agent"
-	remoteAgentBinary      = "/tmp/google_cloud_sap_agent"
-	remoteValidationConfig = "/tmp/workload-validation.json"
+	agentBinary = "/usr/bin/google_cloud_sap_agent"
+	// remoteDir is the directory on the remote host that the agent binary and the workload
+	// validation configuration are copied to. Only root can write to it, so no other user of the
+	// remote host can replace the files before they are used. The remote host must therefore be
+	// accessed as root. Do not use a directory that other users can write to, such as /tmp.
+	remoteDir              = "/etc/google-cloud-sap-agent"
+	remoteAgentBinary      = remoteDir + "/google_cloud_sap_agent"
+	remoteValidationConfig = remoteDir + "/workload-validation.json"
 )
 
 // CollectMetricsToJSON will collect all of the workload manager metrics and return the
@@ -246,16 +251,17 @@ func collectRemoteGcloud(ctx context.Context, a any) {
 
 	log.CtxLogger(ctx).Infow("Collecting remote metrics using gcloud", "instance", opts.i)
 	iName := gcloudInstanceName(opts.rc, opts.i)
-	// remove the binary just in case it still exists on the remote
+	// create the directory if it does not exist on the remote, and remove the binary just in case
+	// it still exists there
 	sshArgs := []string{"compute", "ssh"}
 	sshArgs = appendCommonGcloudArgs(sshArgs, opts.rc, opts.i)
-	sshArgs = append(sshArgs, iName, "--command", "sudo rm -f "+remoteAgentBinary)
+	sshArgs = append(sshArgs, iName, "--command", "sudo mkdir -p -m 755 "+remoteDir+" && sudo rm -f "+remoteAgentBinary)
 	result := opts.execute(ctx, commandlineexecutor.Params{
 		Executable: "gcloud",
 		Args:       sshArgs,
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", opts.i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to create the directory and remove the existing binary", "instance", opts.i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 	}
 
 	// gcloud compute scp --project someproject --zone somezone [--tunnel-through-iap] [--internal-ip] [otherargs] filetotransfer [user@]instancename:path
@@ -362,14 +368,14 @@ func collectRemoteSSH(ctx context.Context, a any) {
 
 	rmArgs := []string{}
 	rmArgs = appendSSHArgs(rmArgs, opts.rc, opts.i, false)
-	// append "rm -f remoteAgentBinary"
-	rmArgs = append(rmArgs, "rm -f "+remoteAgentBinary)
+	// append "mkdir -p -m 755 remoteDir && rm -f remoteAgentBinary"
+	rmArgs = append(rmArgs, "mkdir -p -m 755 "+remoteDir+" && rm -f "+remoteAgentBinary)
 	result := opts.execute(ctx, commandlineexecutor.Params{
 		Executable: "ssh",
 		Args:       rmArgs,
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to remove existing tmp binary", "instance", opts.i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
+		log.CtxLogger(ctx).Errorw("Could not ssh to remote instance to create the directory and remove the existing binary", "instance", opts.i, "error", result.Error, "stderr", result.StdErr, "stdout", result.StdOut)
 	}
 
 	var metrics []*mrpb.TimeSeries
