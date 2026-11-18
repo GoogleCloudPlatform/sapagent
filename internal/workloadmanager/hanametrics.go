@@ -166,7 +166,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 			l[k] = fmt.Sprint(checkDRRegions(ctx, sidAdm, params))
 		}
 	}
-	hanaBackupMetrics := hanaBackupMetrics(ctx, params.Execute)
+	hanaBackupMetrics := hanaBackupMetrics(ctx, instance, params.Execute)
 	for _, m := range hana.GetHanaBackupMetrics() {
 		k := m.GetMetricInfo().GetLabel()
 		switch m.GetValue() {
@@ -484,6 +484,7 @@ func instanceNameFromResources(resources []*systempb.SapDiscovery_Resource) stri
 
 // hanaBackupMetrics gathers information about the backups for the HANA DB.
 //
+// Metrics are collected for primary/standalone HANA DB instances only.
 // The following metrics are returned:
 //   - oldest_backup_tenant_name: The tenant that has the oldest last
 //     full backup.
@@ -497,7 +498,7 @@ func instanceNameFromResources(resources []*systempb.SapDiscovery_Resource) stri
 //     snapshot backup.
 //   - oldest_last_snapshot_backup_timestamp_utc: The UTC timestamp of the
 //     oldest last snapshot backup in ISO 8601 format.
-func hanaBackupMetrics(ctx context.Context, exec commandlineexecutor.Execute) map[string]string {
+func hanaBackupMetrics(ctx context.Context, instance *sapb.SAPInstance, exec commandlineexecutor.Execute) map[string]string {
 	results := map[string]string{
 		"oldest_backup_tenant_name":                 "",
 		"oldest_last_backup_timestamp_utc":          "",
@@ -505,6 +506,10 @@ func hanaBackupMetrics(ctx context.Context, exec commandlineexecutor.Execute) ma
 		"oldest_last_delta_backup_timestamp_utc":    "",
 		"oldest_snapshot_backup_tenant_name":        "",
 		"oldest_last_snapshot_backup_timestamp_utc": "",
+	}
+	if instance.GetSite() == sapb.InstanceSite_HANA_SECONDARY || instance.GetSite() == sapb.InstanceSite_HANA_DR {
+		log.CtxLogger(ctx).Debugw("Skipping HANA backup metrics collection on non-primary/non-standalone node", "site", instance.GetSite().String())
+		return results
 	}
 	tenants := discoverHANADBTenants(ctx, exec)
 	if len(tenants) == 0 {

@@ -1279,6 +1279,7 @@ func TestHANABackupMetrics(t *testing.T) {
 		Error:  cmpopts.AnyError,
 	}
 	execEmptyResponse := commandlineexecutor.Result{}
+	defaultInstance := &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_PRIMARY}
 
 	metricsAllEmpty := map[string]string{
 		"oldest_backup_tenant_name":                 "",
@@ -1306,12 +1307,24 @@ func TestHANABackupMetrics(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
-		exec func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
-		want map[string]string
+		name     string
+		instance *sapb.SAPInstance
+		exec     func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		want     map[string]string
 	}{
 		{
-			name: "discoverHANAdbTenantsError",
+			name:     "secondarySkipped",
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_SECONDARY},
+			want:     metricsAllEmpty,
+		},
+		{
+			name:     "drSkipped",
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_DR},
+			want:     metricsAllEmpty,
+		},
+		{
+			name:     "discoverHANAdbTenantsError",
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_INSTANCE_SITE_UNDEFINED},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
 				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
@@ -1468,7 +1481,8 @@ command: backup data for sbx using backint ('FULL_20240514')
 			},
 		},
 		{
-			name: "successMultipleTenantDBs",
+			name:     "successMultipleTenantDBs",
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_STANDALONE},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
 				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
@@ -1532,7 +1546,10 @@ systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/pr
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := hanaBackupMetrics(context.Background(), test.exec)
+			if test.instance == nil {
+				test.instance = defaultInstance
+			}
+			got := hanaBackupMetrics(context.Background(), test.instance, test.exec)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("hanaBackupMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
