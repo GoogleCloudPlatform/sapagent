@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/safetext/shsprintf"
 	"golang.org/x/exp/slices"
 	"github.com/GoogleCloudPlatform/sapagent/internal/instanceinfo"
 	"github.com/GoogleCloudPlatform/sapagent/internal/system/clouddiscovery"
@@ -48,7 +47,6 @@ const (
 var instanceURIRegex = regexp.MustCompile("/projects/(.+)/zones/(.+)/instances/(.+)")
 var successfulBackupRegex = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\+\-]\d{2}:\d{2})\s+\S+\s+(\S+)\s+INFO\s+BACKUP\s+(SNAPSHOT|SAVE DATA)\s+finished\s+successfully`)
 var backupCommandRegex = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\+\-]\d{2}:\d{2}\s+\S+\s+(\S+)\s+INFO\s+BACKUP\s+command: (.*)`)
-var sapServicesStartsrvPattern = regexp.MustCompile(`startsrv pf=/usr/sap/([A-Z][A-Z|0-9][A-Z|0-9])[/|a-z|A-Z|0-9]+/profile/([A-Z][A-Z|0-9][A-Z|0-9])_([a-z|A-Z]+)([0-9]+)_(\S+)`)
 
 type lsblkdevicechild struct {
 	Name       string
@@ -73,12 +71,6 @@ type hanaBackupLog struct {
 	finishTime time.Time
 	backupID   string
 	backupType string
-}
-
-type hanaDBTenant struct {
-	sid        string
-	instanceID string
-	tenantName string
 }
 
 type hanaBackupType string
@@ -166,7 +158,7 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 			l[k] = fmt.Sprint(checkDRRegions(ctx, sidAdm, params))
 		}
 	}
-	hanaBackupMetrics := hanaBackupMetrics(ctx, instance, params.Execute)
+	hanaBackupMetrics := hanaBackupMetrics(ctx, instance, params.Discovery, params.Execute)
 	for _, m := range hana.GetHanaBackupMetrics() {
 		k := m.GetMetricInfo().GetLabel()
 		switch m.GetValue() {
@@ -486,19 +478,22 @@ func instanceNameFromResources(resources []*systempb.SapDiscovery_Resource) stri
 //
 // Metrics are collected for primary/standalone HANA DB instances only.
 // The following metrics are returned:
-//   - oldest_backup_tenant_name: The tenant that has the oldest last
-//     full backup.
+//   - oldest_backup_tenant_name: Always empty string (""); retained for schema
+//     compatibility.
 //   - oldest_last_backup_timestamp_utc: The UTC timestamp of the oldest last
-//     full backup in ISO 8601 format.
-//   - oldest_delta_backup_tenant_name: The tenant that has the oldest last
-//     delta backup.
+//     full backup across SYSTEMDB and tenant DBs in ISO 8601 format, or "" if
+//     not found.
+//   - oldest_delta_backup_tenant_name: Always empty string (""); retained for
+//     schema compatibility.
 //   - oldest_last_delta_backup_timestamp_utc: The UTC timestamp of the oldest
-//     last delta backup in ISO 8601 format.
-//   - oldest_snapshot_backup_tenant_name: The tenant that has the oldest last
-//     snapshot backup.
+//     last delta backup across SYSTEMDB and tenant DBs in ISO 8601 format, or
+//     "" if not found.
+//   - oldest_snapshot_backup_tenant_name: Always empty string (""); retained
+//     for schema compatibility.
 //   - oldest_last_snapshot_backup_timestamp_utc: The UTC timestamp of the
-//     oldest last snapshot backup in ISO 8601 format.
-func hanaBackupMetrics(ctx context.Context, instance *sapb.SAPInstance, exec commandlineexecutor.Execute) map[string]string {
+//     oldest last snapshot backup across SYSTEMDB and tenant DBs in ISO 8601
+//     format, or "" if not found.
+func hanaBackupMetrics(ctx context.Context, instance *sapb.SAPInstance, discovery discoveryInterface, exec commandlineexecutor.Execute) map[string]string {
 	results := map[string]string{
 		"oldest_backup_tenant_name":                 "",
 		"oldest_last_backup_timestamp_utc":          "",
@@ -511,84 +506,83 @@ func hanaBackupMetrics(ctx context.Context, instance *sapb.SAPInstance, exec com
 		log.CtxLogger(ctx).Debugw("Skipping HANA backup metrics collection on non-primary/non-standalone node", "site", instance.GetSite().String())
 		return results
 	}
-	tenants := discoverHANADBTenants(ctx, exec)
-	if len(tenants) == 0 {
-		log.CtxLogger(ctx).Debug("No HANA DB tenants found")
+	traceDirs := discoverHANADBTraceDirs(ctx, instance, discovery)
+	if len(traceDirs) == 0 {
+		log.CtxLogger(ctx).Debug("No HANA DB trace directories found")
 		return results
 	}
 
-	timestampFull := time.Now().UTC()
-	timestampDelta := time.Now().UTC()
-	timestampSnapshot := time.Now().UTC()
-	for _, tenant := range tenants {
-		full, delta, snapshot, err := fetchLastBackupTimestamps(ctx, tenant, exec)
+	var timestampFull, timestampDelta, timestampSnapshot time.Time
+	for i, dirPath := range traceDirs {
+		full, delta, snapshot, err := fetchLastBackupTimestamps(ctx, dirPath, exec)
 		if err != nil {
-			log.CtxLogger(ctx).Debugw("Could not find last backup timestamps", "tenant", tenant.tenantName, "error", err)
-			results["oldest_backup_tenant_name"] = tenant.tenantName
-			results["oldest_delta_backup_tenant_name"] = tenant.tenantName
-			results["oldest_snapshot_backup_tenant_name"] = tenant.tenantName
+			log.CtxLogger(ctx).Debugw("Could not find last backup timestamps", "dirPath", dirPath, "error", err)
 			return results
 		}
-		if full.Before(timestampFull) {
+		if i == 0 || full.Before(timestampFull) {
 			timestampFull = full
-			results["oldest_backup_tenant_name"] = tenant.tenantName
 		}
-		if delta.Before(timestampDelta) {
+		if i == 0 || delta.Before(timestampDelta) {
 			timestampDelta = delta
-			results["oldest_delta_backup_tenant_name"] = tenant.tenantName
 		}
-		if snapshot.Before(timestampSnapshot) {
+		if i == 0 || snapshot.Before(timestampSnapshot) {
 			timestampSnapshot = snapshot
-			results["oldest_snapshot_backup_tenant_name"] = tenant.tenantName
 		}
 	}
 
-	results["oldest_last_backup_timestamp_utc"] = timestampFull.Format(time.RFC3339)
-	results["oldest_last_delta_backup_timestamp_utc"] = timestampDelta.Format(time.RFC3339)
-	results["oldest_last_snapshot_backup_timestamp_utc"] = timestampSnapshot.Format(time.RFC3339)
+	if !timestampFull.IsZero() {
+		results["oldest_last_backup_timestamp_utc"] = timestampFull.UTC().Format(time.RFC3339)
+	}
+	if !timestampDelta.IsZero() {
+		results["oldest_last_delta_backup_timestamp_utc"] = timestampDelta.UTC().Format(time.RFC3339)
+	}
+	if !timestampSnapshot.IsZero() {
+		results["oldest_last_snapshot_backup_timestamp_utc"] = timestampSnapshot.UTC().Format(time.RFC3339)
+	}
 	return results
 }
 
-// discoverHANADBTenants returns the list of HANA DB tenants running on the host.
-func discoverHANADBTenants(ctx context.Context, exec commandlineexecutor.Execute) []hanaDBTenant {
-	var instances []hanaDBTenant
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "grep",
-		ArgsToSplit: "'pf=' /usr/sap/sapservices",
-	})
-
-	if result.Error != nil {
-		log.CtxLogger(ctx).Debugw("Could not find HANA tenants", "error", result.Error)
-		return instances
+// discoverHANADBTraceDirs returns the trace directory paths for SYSTEMDB and
+// each tenant database belonging to the given HANA instance.
+func discoverHANADBTraceDirs(ctx context.Context, instance *sapb.SAPInstance, discovery discoveryInterface) []string {
+	if instance.GetSapsid() == "" || instance.GetInstanceNumber() == "" || instance.GetHostname() == "" {
+		log.CtxLogger(ctx).Debugw("Incomplete HANA instance metadata, cannot determine backup trace directories", "sapsid", instance.GetSapsid(), "instanceNumber", instance.GetInstanceNumber(), "hostname", instance.GetHostname())
+		return nil
 	}
+	baseTraceDir := fmt.Sprintf("/usr/sap/%s/HDB%s/%s/trace/", instance.GetSapsid(), instance.GetInstanceNumber(), instance.GetHostname())
+	traceDirs := []string{baseTraceDir}
 
-	lines := strings.Split(strings.TrimSuffix(result.StdOut, "\n"), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "#") {
-			log.CtxLogger(ctx).Debugw("Not processing the commented entry", "line", line)
-			continue
+	var tenantNames []string
+	if discovery != nil {
+		for _, system := range discovery.GetSAPSystems() {
+			dbLayer := system.GetDatabaseLayer()
+			dbProps := dbLayer.GetDatabaseProperties()
+			if dbProps.GetDatabaseSid() != instance.GetSapsid() || dbProps.GetInstanceNumber() != instance.GetInstanceNumber() {
+				continue
+			}
+			tenant := dbLayer.GetSid()
+			if tenant == "" || strings.EqualFold(tenant, "SYSTEMDB") || slices.Contains(tenantNames, tenant) {
+				continue
+			}
+			tenantNames = append(tenantNames, tenant)
 		}
-		match := sapServicesStartsrvPattern.FindStringSubmatch(line)
-		if len(match) != 6 || match[3] != "HDB" {
-			continue
-		}
-
-		instances = append(instances, hanaDBTenant{
-			sid:        match[1],
-			instanceID: match[4],
-			tenantName: match[5],
-		})
 	}
-	return instances
+	if len(tenantNames) == 0 {
+		tenantNames = []string{instance.GetSapsid()}
+	}
+	for _, tenant := range tenantNames {
+		traceDirs = append(traceDirs, fmt.Sprintf("%sDB_%s/", baseTraceDir, tenant))
+	}
+	return traceDirs
 }
 
-// fetchLastBackupTimestamps fetches the following timestamps for a tenant db:
+// fetchLastBackupTimestamps fetches the following timestamps from backup logs
+// in dirPath:
 //   - The timestamp of the latest successful full backup.
 //   - The timestamp of the latest incremental or differential backup.
 //   - The timestamp of the latest successful snapshot backup.
-func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec commandlineexecutor.Execute) (full, delta, snapshot time.Time, err error) {
+func fetchLastBackupTimestamps(ctx context.Context, dirPath string, exec commandlineexecutor.Execute) (full, delta, snapshot time.Time, err error) {
 	full, delta, snapshot = time.Time{}, time.Time{}, time.Time{}
-	dirPath := fmt.Sprintf("/usr/sap/%s/HDB%s/%s/trace/", dbTenant.sid, dbTenant.instanceID, dbTenant.tenantName)
 
 	// Fetch a list of successful backups and process them from most to least
 	// recent to find a timestamp for each backup type (full, delta, snapshot).
@@ -597,7 +591,7 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 		return full, delta, snapshot, err
 	}
 	if len(backups) == 0 {
-		log.CtxLogger(ctx).Debugw("No successful HANA backups found", "tenant", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No successful HANA backups found", "dirPath", dirPath)
 		return full, delta, snapshot, nil
 	}
 	backupTypeMap, err := fetchBackupThreadIDs(ctx, dirPath, exec)
@@ -605,7 +599,7 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 		return full, delta, snapshot, err
 	}
 	if len(backupTypeMap) == 0 {
-		log.CtxLogger(ctx).Debugw("No HANA backup commands found", "tenant", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No HANA backup commands found", "dirPath", dirPath)
 		return full, delta, snapshot, nil
 	}
 
@@ -617,38 +611,40 @@ func fetchLastBackupTimestamps(ctx context.Context, dbTenant hanaDBTenant, exec 
 		if backupType, ok := backupTypeMap[backup.backupID]; ok {
 			switch {
 			case full.IsZero() && backupType == hanaBackupFull:
-				// This is the latest successful full backup for this tenant.
+				// This is the latest successful full backup for this database.
 				full = backup.finishTime
 			case delta.IsZero() && backupType == hanaBackupDelta:
-				// This is the latest delta backup for this tenant.
+				// This is the latest delta backup for this database.
 				delta = backup.finishTime
 			case snapshot.IsZero() && backupType == hanaBackupSnapshot:
-				// This is the latest snapshot backup for this tenant.
+				// This is the latest snapshot backup for this database.
 				snapshot = backup.finishTime
 			}
 		}
 	}
 
 	if full.IsZero() {
-		log.CtxLogger(ctx).Debugw("No full backup found", "tenant", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No full backup found", "dirPath", dirPath)
 	}
 	if delta.IsZero() {
-		log.CtxLogger(ctx).Debugw("No delta backup found", "tenant", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No delta backup found", "dirPath", dirPath)
 	}
 	if snapshot.IsZero() {
-		log.CtxLogger(ctx).Debugw("No snapshot backup found", "tenant", dbTenant.tenantName)
+		log.CtxLogger(ctx).Debugw("No snapshot backup found", "dirPath", dirPath)
 	}
 	return full, delta, snapshot, nil
 }
 
 // fetchSuccessfulBackups fetches the list of successful backups from the
-// backup.log files in the given tenant directory.
+// backup.log files directly inside the given trace directory.
 func fetchSuccessfulBackups(ctx context.Context, dirPath string, exec commandlineexecutor.Execute) ([]hanaBackupLog, error) {
 	var backupList []hanaBackupLog
-	args, _ := shsprintf.Sprintf(`sh -c 'find %s -name "backup.*log" -exec grep --no-filename -E "(SNAPSHOT|SAVE DATA) finished successfully" {} + '`, dirPath)
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "sudo",
-		ArgsToSplit: args,
+		Executable: "sudo",
+		Args: []string{
+			"find", dirPath, "-maxdepth", "1", "-name", "backup.*log",
+			"-exec", "grep", "--no-filename", "-E", "(SNAPSHOT|SAVE DATA) finished successfully", "{}", "+",
+		},
 	})
 	if result.Error != nil {
 		log.CtxLogger(ctx).Debugw("Could not find HANA backups", "error", result.Error)
@@ -678,14 +674,16 @@ func fetchSuccessfulBackups(ctx context.Context, dirPath string, exec commandlin
 	return backupList, nil
 }
 
-// fetchBackupThreadIDs parses backup logs in a given tenant directory to
-// return a map of backup thread IDs to backup type.
+// fetchBackupThreadIDs parses backup logs directly inside the given trace
+// directory to return a map of backup thread IDs to backup type.
 func fetchBackupThreadIDs(ctx context.Context, dirPath string, exec commandlineexecutor.Execute) (map[string]hanaBackupType, error) {
 	backups := make(map[string]hanaBackupType)
-	args, _ := shsprintf.Sprintf(`sh -c 'find %s -name "backup.*log" -exec grep --no-filename -E "INFO\s+BACKUP\s+command:" {} + '`, dirPath)
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable:  "sudo",
-		ArgsToSplit: args,
+		Executable: "sudo",
+		Args: []string{
+			"find", dirPath, "-maxdepth", "1", "-name", "backup.*log",
+			"-exec", "grep", "--no-filename", "-E", "INFO\\s+BACKUP\\s+command:", "{}", "+",
+		},
 	})
 	if result.Error != nil {
 		log.CtxLogger(ctx).Debugw("Could not find commands for HANA backups", "error", result.Error)

@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/exp/slices"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -61,6 +62,15 @@ type fakeDiscoveryInterface struct {
 
 func (d *fakeDiscoveryInterface) GetSAPSystems() []*spb.SapDiscovery  { return d.systems }
 func (d *fakeDiscoveryInterface) GetSAPInstances() *sapb.SAPInstances { return d.instances }
+
+func execArgsContains(args []string, sub string) bool {
+	for _, arg := range args {
+		if strings.Contains(arg, sub) {
+			return true
+		}
+	}
+	return false
+}
 
 func createHANAWorkloadMetrics(labels map[string]string, value float64) WorkloadMetrics {
 	return WorkloadMetrics{
@@ -327,9 +337,7 @@ Mounted on
 		},
 		ListZoneOperationsErr: []error{nil},
 	}
-	defaultIIR         = instanceinfo.New(defaultDiskMapper, defaultGCEService)
-	sapservicesGrepOut = `systemctl --no-ask-password start SAPSBX_00 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB00_tst-backup-test
-`
+	defaultIIR              = instanceinfo.New(defaultDiskMapper, defaultGCEService)
 	backupLogGrepCommandOut = `2024-05-14T17:55:39+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CREATE SNAPSHOT COMMENT 'snapshot-srk-backup-test-data00001-20240514-175538'
 2024-05-14T17:56:37+00:00  P0013384      18f783ee5cd INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
 2024-05-14T17:13:23+00:00  P0013384      18f781834c9 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
@@ -353,7 +361,6 @@ Mounted on
 	backupLogGrepSuccessOutNoFull = `2024-05-14T17:36:46+00:00  P0013384      18f782d8922 INFO    BACKUP   SAVE DATA finished successfully
 2024-05-14T17:37:11+00:00  P0013384      18f782deb71 INFO    BACKUP   SAVE DATA finished successfully
 `
-	oldestBackedUpTenant         = `tst-backup-test`
 	oldestLastFullBackupTime     = `2024-05-14T17:13:49Z`
 	oldestLastDeltaBackupTime    = `2024-05-14T17:37:11Z`
 	oldestLastSnapshotBackupTime = `2024-05-14T17:56:39Z`
@@ -1111,21 +1118,18 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 		{
 			name: "TestHanaAllLabelsEnabled",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "grep") {
-					if strings.Contains(params.ArgsToSplit, "finished successfully") {
-						return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-					}
-					if strings.Contains(params.ArgsToSplit, "command:") {
-						return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
-					}
+				if params.Executable == "sudo" {
 					if strings.Contains(params.ArgsToSplit, "hdbnsutil") {
 						return commandlineexecutor.Result{StdOut: "mode: primary"}
 					}
+					if execArgsContains(params.Args, "finished successfully") {
+						return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
+					}
+					if execArgsContains(params.Args, "command:") {
+						return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
+					}
 				}
 				if params.Executable == "grep" {
-					if strings.Contains(params.ArgsToSplit, "sapservices") {
-						return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-					}
 					if strings.Contains(params.ArgsToSplit, "basepath_logvolumes") {
 						return commandlineexecutor.Result{StdOut: "basepath location /hana/log"}
 					}
@@ -1171,7 +1175,14 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			discovery: &fakeDiscoveryInterface{
 				instances: &sapb.SAPInstances{
 					Instances: []*sapb.SAPInstance{
-						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0", Site: sapb.InstanceSite_HANA_PRIMARY},
+						&sapb.SAPInstance{
+							Type:           sapb.InstanceType_HANA,
+							Sapsid:         "QE0",
+							InstanceNumber: "00",
+							InstanceId:     "HDB00",
+							Hostname:       "tst-backup-test",
+							Site:           sapb.InstanceSite_HANA_PRIMARY,
+						},
 					},
 				},
 				systems: []*spb.SapDiscovery{
@@ -1222,11 +1233,11 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"tables_preloaded_in_parallel":              "32",
 				"load_table_numa_aware":                     "true",
 				"numa_balancing":                            "enabled",
-				"oldest_backup_tenant_name":                 oldestBackedUpTenant,
+				"oldest_backup_tenant_name":                 "",
 				"oldest_last_backup_timestamp_utc":          oldestLastFullBackupTime,
-				"oldest_delta_backup_tenant_name":           oldestBackedUpTenant,
+				"oldest_delta_backup_tenant_name":           "",
 				"oldest_last_delta_backup_timestamp_utc":    oldestLastDeltaBackupTime,
-				"oldest_snapshot_backup_tenant_name":        oldestBackedUpTenant,
+				"oldest_snapshot_backup_tenant_name":        "",
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 				"transparent_hugepages":                     "enabled",
 				"ha_in_same_zone":                           "other-instance-1",
@@ -1279,7 +1290,40 @@ func TestHANABackupMetrics(t *testing.T) {
 		Error:  cmpopts.AnyError,
 	}
 	execEmptyResponse := commandlineexecutor.Result{}
-	defaultInstance := &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_PRIMARY}
+	defaultInstance := &sapb.SAPInstance{
+		Type:           sapb.InstanceType_HANA,
+		Sapsid:         "SBX",
+		InstanceNumber: "00",
+		InstanceId:     "HDB00",
+		Hostname:       "tst-backup-test",
+		Site:           sapb.InstanceSite_HANA_PRIMARY,
+	}
+	tenantDiscovery := &fakeDiscoveryInterface{
+		systems: []*spb.SapDiscovery{
+			{
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid: "TNT",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseSid:    "SBX",
+							InstanceNumber: "00",
+						},
+					},
+				},
+			},
+			{
+				DatabaseLayer: &spb.SapDiscovery_Component{
+					Sid: "OTH",
+					Properties: &spb.SapDiscovery_Component_DatabaseProperties_{
+						DatabaseProperties: &spb.SapDiscovery_Component_DatabaseProperties{
+							DatabaseSid:    "OTH",
+							InstanceNumber: "01",
+						},
+					},
+				},
+			},
+		},
+	}
 
 	metricsAllEmpty := map[string]string{
 		"oldest_backup_tenant_name":                 "",
@@ -1289,135 +1333,97 @@ func TestHANABackupMetrics(t *testing.T) {
 		"oldest_snapshot_backup_tenant_name":        "",
 		"oldest_last_snapshot_backup_timestamp_utc": "",
 	}
-	metricsEmptyTimestamps := map[string]string{
-		"oldest_backup_tenant_name":                 oldestBackedUpTenant,
-		"oldest_last_backup_timestamp_utc":          "",
-		"oldest_delta_backup_tenant_name":           oldestBackedUpTenant,
-		"oldest_last_delta_backup_timestamp_utc":    "",
-		"oldest_snapshot_backup_tenant_name":        oldestBackedUpTenant,
-		"oldest_last_snapshot_backup_timestamp_utc": "",
-	}
-	metricsZeroTimestamps := map[string]string{
-		"oldest_backup_tenant_name":                 oldestBackedUpTenant,
-		"oldest_last_backup_timestamp_utc":          "0001-01-01T00:00:00Z",
-		"oldest_delta_backup_tenant_name":           oldestBackedUpTenant,
-		"oldest_last_delta_backup_timestamp_utc":    "0001-01-01T00:00:00Z",
-		"oldest_snapshot_backup_tenant_name":        oldestBackedUpTenant,
-		"oldest_last_snapshot_backup_timestamp_utc": "0001-01-01T00:00:00Z",
-	}
 
 	tests := []struct {
-		name     string
-		instance *sapb.SAPInstance
-		exec     func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
-		want     map[string]string
+		name      string
+		instance  *sapb.SAPInstance
+		discovery discoveryInterface
+		exec      func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result
+		want      map[string]string
 	}{
 		{
 			name:     "secondarySkipped",
-			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_SECONDARY},
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", InstanceNumber: "00", Hostname: "tst-backup-test", Site: sapb.InstanceSite_HANA_SECONDARY},
 			want:     metricsAllEmpty,
 		},
 		{
 			name:     "drSkipped",
-			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_DR},
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", InstanceNumber: "00", Hostname: "tst-backup-test", Site: sapb.InstanceSite_HANA_DR},
 			want:     metricsAllEmpty,
 		},
 		{
-			name:     "discoverHANAdbTenantsError",
-			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_INSTANCE_SITE_UNDEFINED},
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return execErrorResponse
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
-					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
-					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
-				}
-				return execEmptyResponse
-			},
-			want: metricsAllEmpty,
-		},
-		{
-			name: "noHANAdbTenants",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{
-						StdOut: `
-#systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB02_tst-commented-test
-systemctl --no-ask-password start SAPSBX_01 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_NOT_HDB_tst-backup1-test
-systemctl --no-ask-password start SAPSBX_03 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB03
-						`,
-					}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
-					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
-					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
-				}
-				return execEmptyResponse
-			},
-			want: metricsAllEmpty,
+			name:     "incompleteInstanceMetadata",
+			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_PRIMARY},
+			want:     metricsAllEmpty,
 		},
 		{
 			name: "fetchSuccessfulBackupsError",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return execErrorResponse
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
 				}
 				return execEmptyResponse
 			},
-			want: metricsEmptyTimestamps,
+			want: metricsAllEmpty,
+		},
+		{
+			name:      "missingTenantDBDir",
+			discovery: tenantDiscovery,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if execArgsContains(params.Args, "/trace/DB_TNT/") {
+					return execErrorResponse
+				}
+				switch {
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
+					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
+					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
+				}
+				return execEmptyResponse
+			},
+			want: metricsAllEmpty,
 		},
 		{
 			name: "noSuccessfulBackups",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return commandlineexecutor.Result{
 						StdOut: `
 9999-99-99T99:99:99+99:99  P0013384      18f781834c9 INFO    BACKUP   SAVE DATA finished successfully
 2024-05-14T19:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   finished successfully
 						`,
 					}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
 				}
 				return execEmptyResponse
 			},
-			want: metricsZeroTimestamps,
+			want: metricsAllEmpty,
 		},
 		{
 			name: "fetchBackupThreadIDsError",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return execErrorResponse
 				}
 				return execEmptyResponse
 			},
-			want: metricsEmptyTimestamps,
+			want: metricsAllEmpty,
 		},
 		{
 			name: "noBackupThreadIDs",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return commandlineexecutor.Result{
 						StdOut: `
 2024-05-14T19:37:06+00:00  P0013384      18f782deb71 INFO    BACKUP   command:
@@ -1427,15 +1433,13 @@ command: backup data for sbx using backint ('FULL_20240514')
 				}
 				return execEmptyResponse
 			},
-			want: metricsZeroTimestamps,
+			want: metricsAllEmpty,
 		},
 		{
 			name: "backupThreadIDMismatch",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return commandlineexecutor.Result{
 						StdOut: `
 2024-05-14T19:13:49+00:00  P0013384      18f78180001 INFO    BACKUP   SAVE DATA finished successfully
@@ -1444,7 +1448,7 @@ command: backup data for sbx using backint ('FULL_20240514')
 2024-05-14T19:56:39+00:00  P0013384      18f78180004 INFO    BACKUP   SNAPSHOT finished successfully
 						`,
 					}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return commandlineexecutor.Result{
 						StdOut: `
 2024-05-14T19:13:23+00:00  P0013384      18f78180005 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
@@ -1456,49 +1460,65 @@ command: backup data for sbx using backint ('FULL_20240514')
 				}
 				return execEmptyResponse
 			},
-			want: metricsZeroTimestamps,
+			want: metricsAllEmpty,
 		},
 		{
-			name: "successSingleTenantDB",
+			name: "discoveryFallbackToSID",
+			instance: &sapb.SAPInstance{
+				Type:           sapb.InstanceType_HANA,
+				Sapsid:         "SBX",
+				InstanceNumber: "00",
+				InstanceId:     "HDB00",
+				Hostname:       "tst-backup-test",
+				Site:           sapb.InstanceSite_INSTANCE_SITE_UNDEFINED,
+			},
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				hasSystemDBPath := slices.Contains(params.Args, "/usr/sap/SBX/HDB00/tst-backup-test/trace/")
+				hasFallbackTenantPath := slices.Contains(params.Args, "/usr/sap/SBX/HDB00/tst-backup-test/trace/DB_SBX/")
+				if !hasSystemDBPath && !hasFallbackTenantPath {
+					return execErrorResponse
+				}
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{StdOut: sapservicesGrepOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
 					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
 				}
 				return execEmptyResponse
 			},
 			want: map[string]string{
-				"oldest_backup_tenant_name":                 oldestBackedUpTenant,
+				"oldest_backup_tenant_name":                 "",
 				"oldest_last_backup_timestamp_utc":          oldestLastFullBackupTime,
-				"oldest_delta_backup_tenant_name":           oldestBackedUpTenant,
+				"oldest_delta_backup_tenant_name":           "",
 				"oldest_last_delta_backup_timestamp_utc":    oldestLastDeltaBackupTime,
-				"oldest_snapshot_backup_tenant_name":        oldestBackedUpTenant,
+				"oldest_snapshot_backup_tenant_name":        "",
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 			},
 		},
 		{
-			name:     "successMultipleTenantDBs",
-			instance: &sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "SBX", Site: sapb.InstanceSite_HANA_STANDALONE},
+			name: "systemDBAndTenantBothFresh",
+			instance: &sapb.SAPInstance{
+				Type:           sapb.InstanceType_HANA,
+				Sapsid:         "SBX",
+				InstanceNumber: "00",
+				InstanceId:     "HDB00",
+				Hostname:       "tst-backup-test",
+				Site:           sapb.InstanceSite_HANA_STANDALONE,
+			},
+			discovery: tenantDiscovery,
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				isSystemDB := slices.Contains(params.Args, "/usr/sap/SBX/HDB00/tst-backup-test/trace/")
+				isTenantDB := slices.Contains(params.Args, "/usr/sap/SBX/HDB00/tst-backup-test/trace/DB_TNT/")
+				if !isSystemDB && !isTenantDB {
+					return execErrorResponse
+				}
 				switch {
-				case params.Executable == "grep" && strings.Contains(params.ArgsToSplit, "sapservices"):
-					return commandlineexecutor.Result{
-						StdOut: `
-systemctl --no-ask-password start SAPSBX_01 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB01_tst-backup-test-1
-systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/profile/SBX_HDB02_tst-backup-test-2
-						`,
-					}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "finished successfully"):
-					if strings.Contains(params.ArgsToSplit, "tst-backup-test-1") {
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
+					if isSystemDB {
 						return commandlineexecutor.Result{
 							StdOut: `
 2024-05-14T17:10:00+00:00  P0013384      18f78180001 INFO    BACKUP   SAVE DATA finished successfully
-2024-05-14T17:20:00+00:00  P0013384      18f78180002 INFO    BACKUP   SAVE DATA finished successfully
-2024-05-14T17:30:00+00:00  P0013384      18f78180003 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T18:30:00+00:00  P0013384      18f78180003 INFO    BACKUP   SAVE DATA finished successfully
 2024-05-14T17:40:00+00:00  P0013384      18f78180004 INFO    BACKUP   SNAPSHOT finished successfully
 							`,
 						}
@@ -1506,41 +1526,83 @@ systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/pr
 					return commandlineexecutor.Result{
 						StdOut: `
 2024-05-14T18:10:00+00:00  P0013384      18f78180005 INFO    BACKUP   SAVE DATA finished successfully
-2024-05-14T18:20:00+00:00  P0013384      18f78180006 INFO    BACKUP   SAVE DATA finished successfully
-2024-05-14T18:30:00+00:00  P0013384      18f78180007 INFO    BACKUP   SAVE DATA finished successfully
+2024-05-14T17:25:00+00:00  P0013384      18f78180006 INFO    BACKUP   SAVE DATA finished successfully
 2024-05-14T18:40:00+00:00  P0013384      18f78180008 INFO    BACKUP   SNAPSHOT finished successfully
 						`,
 					}
-				case params.Executable == "sudo" && strings.Contains(params.ArgsToSplit, "command:"):
-					if strings.Contains(params.ArgsToSplit, "tst-backup-test-1") {
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
+					if isSystemDB {
 						return commandlineexecutor.Result{
 							StdOut: `
-2024-05-14T17:09:00+00:00  P0013384      18f78180001 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
-2024-05-14T17:19:00+00:00  P0013384      18f78180002 INFO    BACKUP   command: backup data incremental for sbx using backint ('INCR_20240514' )
-2024-05-14T17:29:00+00:00  P0013384      18f78180003 INFO    BACKUP   command: backup data differential for sbx using backint ('DIFF_20240514')
-2024-05-14T17:39:00+00:00  P0013384      18f78180004 INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T17:09:00+00:00  P0013384      18f78180001 INFO    BACKUP   command: backup data using backint ('FULL_20240514')
+2024-05-14T18:29:00+00:00  P0013384      18f78180003 INFO    BACKUP   command: backup data differential using backint ('DIFF_20240514')
+2024-05-14T17:39:00+00:00  P0013384      18f78180004 INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snap-1'
 							`,
 						}
 					}
 					return commandlineexecutor.Result{
 						StdOut: `
-2024-05-14T18:09:00+00:00  P0013384      18f78180005 INFO    BACKUP   command: backup data for sbx using backint ('FULL_20240514')
-2024-05-14T18:19:00+00:00  P0013384      18f78180006 INFO    BACKUP   command: backup data incremental for sbx using backint ('INCR_20240514' )
-2024-05-14T18:29:00+00:00  P0013384      18f78180007 INFO    BACKUP   command: backup data differential for sbx using backint ('DIFF_20240514')
-2024-05-14T18:39:00+00:00  P0013384      18f78180008 INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snapshot-srk-backup-test-data00001-20240514-175538'
+2024-05-14T18:09:00+00:00  P0013384      18f78180005 INFO    BACKUP   command: backup data for tnt using backint ('FULL_20240514')
+2024-05-14T17:24:00+00:00  P0013384      18f78180006 INFO    BACKUP   command: backup data incremental for tnt using backint ('INCR_20240514')
+2024-05-14T18:39:00+00:00  P0013384      18f78180008 INFO    BACKUP   command: BACKUP DATA FOR FULL SYSTEM CLOSE SNAPSHOT BACKUP_ID 1715709339085 SUCCESSFUL 'snap-1'
 						`,
 					}
 				}
 				return execEmptyResponse
 			},
 			want: map[string]string{
-				"oldest_backup_tenant_name":                 "tst-backup-test-1",
+				"oldest_backup_tenant_name":                 "",
 				"oldest_last_backup_timestamp_utc":          "2024-05-14T17:10:00Z",
-				"oldest_delta_backup_tenant_name":           "tst-backup-test-1",
-				"oldest_last_delta_backup_timestamp_utc":    "2024-05-14T17:30:00Z",
-				"oldest_snapshot_backup_tenant_name":        "tst-backup-test-1",
+				"oldest_delta_backup_tenant_name":           "",
+				"oldest_last_delta_backup_timestamp_utc":    "2024-05-14T17:25:00Z",
+				"oldest_snapshot_backup_tenant_name":        "",
 				"oldest_last_snapshot_backup_timestamp_utc": "2024-05-14T17:40:00Z",
 			},
+		},
+		{
+			name:      "systemDBFreshTenantMissingFullAndSnapshot",
+			discovery: tenantDiscovery,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				isTenantDB := execArgsContains(params.Args, "/trace/DB_TNT/")
+				switch {
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
+					if isTenantDB {
+						return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOutNoFull}
+					}
+					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
+					if isTenantDB {
+						return commandlineexecutor.Result{StdOut: backupLogGrepCommandOutNoFull}
+					}
+					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
+				}
+				return execEmptyResponse
+			},
+			want: map[string]string{
+				"oldest_backup_tenant_name":                 "",
+				"oldest_last_backup_timestamp_utc":          "",
+				"oldest_delta_backup_tenant_name":           "",
+				"oldest_last_delta_backup_timestamp_utc":    oldestLastDeltaBackupTime,
+				"oldest_snapshot_backup_tenant_name":        "",
+				"oldest_last_snapshot_backup_timestamp_utc": "",
+			},
+		},
+		{
+			name:      "tenantFreshSystemDBStale",
+			discovery: tenantDiscovery,
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if slices.Contains(params.Args, "/usr/sap/SBX/HDB00/tst-backup-test/trace/") {
+					return execEmptyResponse
+				}
+				switch {
+				case params.Executable == "sudo" && execArgsContains(params.Args, "finished successfully"):
+					return commandlineexecutor.Result{StdOut: backupLogGrepSuccessOut}
+				case params.Executable == "sudo" && execArgsContains(params.Args, "command:"):
+					return commandlineexecutor.Result{StdOut: backupLogGrepCommandOut}
+				}
+				return execEmptyResponse
+			},
+			want: metricsAllEmpty,
 		},
 	}
 
@@ -1549,7 +1611,14 @@ systemctl --no-ask-password start SAPSBX_02 # sapstartsrv pf=/usr/sap/SBX/SYS/pr
 			if test.instance == nil {
 				test.instance = defaultInstance
 			}
-			got := hanaBackupMetrics(context.Background(), test.instance, test.exec)
+			exec := test.exec
+			if exec == nil {
+				exec = func(_ context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+					t.Errorf("hanaBackupMetrics() unexpectedly executed command: %+v", params)
+					return execEmptyResponse
+				}
+			}
+			got := hanaBackupMetrics(context.Background(), test.instance, test.discovery, exec)
 			if diff := cmp.Diff(test.want, got); diff != "" {
 				t.Errorf("hanaBackupMetrics() returned unexpected diff (-want +got):\n%s", diff)
 			}
