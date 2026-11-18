@@ -69,6 +69,7 @@ enum HANABackupVariable {
 enum HANAHighAvailabilityVariable {
   HA_VARIABLE_UNSPECIFIED = 0;
   HA_IN_SAME_ZONE = 1;
+  HA_INSTANCE_SITE = 2;
 }
 
 enum HANADisasterRecoveryVariable {

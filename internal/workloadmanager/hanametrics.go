@@ -155,6 +155,8 @@ func CollectHANAMetricsFromConfig(ctx context.Context, params Parameters) Worklo
 		switch m.GetValue() {
 		case wpb.HANAHighAvailabilityVariable_HA_IN_SAME_ZONE:
 			l[k] = fmt.Sprint(checkHAZones(ctx, params))
+		case wpb.HANAHighAvailabilityVariable_HA_INSTANCE_SITE:
+			l[k] = instance.GetSite().String()
 		}
 	}
 	for _, m := range hana.GetDrMetrics() {

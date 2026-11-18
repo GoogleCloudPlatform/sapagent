@@ -1099,6 +1099,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": "",
 				"transparent_hugepages":                     "disabled",
 				"ha_in_same_zone":                           "",
+				"ha_instance_site":                          "INSTANCE_SITE_UNDEFINED",
 				"dr_in_same_region":                         "",
 				"hana_data_volume":                          "",
 				"hana_log_volume":                           "",
@@ -1170,7 +1171,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 			discovery: &fakeDiscoveryInterface{
 				instances: &sapb.SAPInstances{
 					Instances: []*sapb.SAPInstance{
-						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0"},
+						&sapb.SAPInstance{Type: sapb.InstanceType_HANA, Sapsid: "QE0", Site: sapb.InstanceSite_HANA_PRIMARY},
 					},
 				},
 				systems: []*spb.SapDiscovery{
@@ -1229,6 +1230,7 @@ func TestCollectHANAMetricsFromConfig(t *testing.T) {
 				"oldest_last_snapshot_backup_timestamp_utc": oldestLastSnapshotBackupTime,
 				"transparent_hugepages":                     "enabled",
 				"ha_in_same_zone":                           "other-instance-1",
+				"ha_instance_site":                          "HANA_PRIMARY",
 				"dr_in_same_region":                         "dr-instance-1",
 				"hana_data_volume":                          "/dev/sdb",
 				"hana_log_volume":                           "/dev/sdc",
