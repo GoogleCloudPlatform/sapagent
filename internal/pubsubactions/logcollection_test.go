@@ -480,6 +480,26 @@ func TestBundleCollection(t *testing.T) {
 			wantBundlePath: "",
 			wantErr:        cmpopts.AnyError,
 		},
+		{
+			name: "HostnameTraversalRejected",
+			logMessage: ActionMessage{
+				EventType:  "LOG_COLLECTION",
+				GCEDetails: GCEDetails{InstanceID: "test-instance", GCSBucket: "test-bucket"},
+				SAPDetails: SAPDetails{SID: "DEH", Hostname: "../../../../victim/pwn", InstanceNums: "00"},
+			},
+			wantBundlePath: "",
+			wantErr:        cmpopts.AnyError,
+		},
+		{
+			name: "InstanceNumsTraversalRejected",
+			logMessage: ActionMessage{
+				EventType:  "LOG_COLLECTION",
+				GCEDetails: GCEDetails{InstanceID: "test-instance", GCSBucket: "test-bucket"},
+				SAPDetails: SAPDetails{SID: "DEH", Hostname: "sample_host", InstanceNums: ".."},
+			},
+			wantBundlePath: "",
+			wantErr:        cmpopts.AnyError,
+		},
 	}
 
 	for _, tc := range tests {

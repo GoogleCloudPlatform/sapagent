@@ -859,6 +859,32 @@ func TestSOSReportHandler(t *testing.T) {
 			wantMessage:    "Pacemaker logs are collected and sent to directory",
 			wantExitStatus: subcommands.ExitFailure,
 		},
+		{
+			name: "EscapingCustomLogPath",
+			sosr: &SupportBundle{
+				Sid:           "DEH",
+				InstanceNums:  "00",
+				Hostname:      "sample_host",
+				AgentLogsOnly: true,
+				IIOTEParams: &onetime.InternallyInvokedOTE{
+					Lp: log.Parameters{LogFileName: "../../../../etc/passwd"},
+				},
+			},
+			destFilePrefix: "/tmp/google-cloud-sap-agent/",
+			ctx:            context.Background(),
+			exec:           fakeExec,
+			fs: mockedfilesystem{
+				readDirContent: []fs.FileInfo{
+					mockedFileInfo{
+						name: "samplefile",
+						mode: 0777,
+					},
+				},
+			},
+			z:              mockedZipper{},
+			wantMessage:    "Error while copying file: ../../../../etc/passwd",
+			wantExitStatus: subcommands.ExitFailure,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -2574,6 +2600,31 @@ func TestProcessDiscoveryData(t *testing.T) {
 			wantInstanceNums: []string{"00"},
 			wantHostname:     "test-hostname",
 		},
+		{
+			name: "LowercaseDiscoveredSIDUppercased",
+			s: &SupportBundle{
+				rest: &rest.Rest{
+					HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+					TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+						return &mockToken{
+							token: &oauth2.Token{
+								AccessToken: "access-token",
+							},
+							err: nil,
+						}, nil
+					},
+				},
+			},
+			destFilePathPrefix: "sap-discovery-success",
+			cp:                 defaultCloudProperties,
+			fs: mockedfilesystem{
+				fileContent: `{"databaseLayer":{"sid":"hdb","resources":[{"resourceKind":"RESOURCE_KIND_INSTANCE","instanceProperties":{"virtualHostname":"test-hostname","appInstances":[{"number":"01"}]}}]}}`,
+			},
+			wantErr:          nil,
+			wantSID:          "HDB",
+			wantInstanceNums: []string{"01"},
+			wantHostname:     "test-hostname",
+		},
 	}
 
 	ctx := context.Background()
@@ -3989,5 +4040,232 @@ func TestCloudLoggingURL(t *testing.T) {
 				t.Errorf("cloudLoggingURL() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestValidateParamsSecurity(t *testing.T) {
+	tests := []struct {
+		name    string
+		sb      SupportBundle
+		wantSub string
+	}{
+		{
+			name:    "HostnamePathTraversal",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "00", Hostname: "../../../../victim/pwn"},
+			wantSub: "invalid hostname",
+		},
+		{
+			name:    "HostnameDoubleDot",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "00", Hostname: "host..name"},
+			wantSub: "invalid hostname",
+		},
+		{
+			name:    "HostnameArgumentInjection",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "00", Hostname: "host /etc/shadow"},
+			wantSub: "invalid hostname",
+		},
+		{
+			name:    "HostnameLeadingHyphen",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "00", Hostname: "-r"},
+			wantSub: "invalid hostname",
+		},
+		{
+			name:    "InstanceNumsDoubleDot",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "..", Hostname: "sample_host"},
+			wantSub: "invalid instance number ..",
+		},
+		{
+			name:    "InstanceNumsFlagInjection",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "-r", Hostname: "sample_host"},
+			wantSub: "invalid instance number -r",
+		},
+		{
+			name:    "InstanceNumsAlpha",
+			sb:      SupportBundle{Sid: "DEH", InstanceNums: "ab", Hostname: "sample_host"},
+			wantSub: "invalid instance number ab",
+		},
+		{
+			name:    "BundleNameTraversal",
+			sb:      SupportBundle{AgentLogsOnly: true, BundleName: "../../etc/cron.d/pwn"},
+			wantSub: "invalid bundle name",
+		},
+		{
+			name:    "BundleNameSlash",
+			sb:      SupportBundle{AgentLogsOnly: true, BundleName: "sub/bundle"},
+			wantSub: "invalid bundle name",
+		},
+		{
+			name:    "AgentLogsOnlyHostnameTraversal",
+			sb:      SupportBundle{AgentLogsOnly: true, Hostname: "../../etc/cron.d/pwn"},
+			wantSub: "invalid hostname",
+		},
+		{
+			name: "AgentLogsOnlyValidHostname",
+			sb:   SupportBundle{AgentLogsOnly: true, Hostname: "sample_host"},
+		},
+		{
+			name: "ValidFQDNAndSingleCharHostname",
+			sb:   SupportBundle{Sid: "DEH", InstanceNums: "00 01", Hostname: "a", BundleName: "supportbundle-2026-11-18T00-00-00Z"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.sb.oteLogger = defaultOTELogger
+			errs := tc.sb.validateParams()
+			joined := strings.Join(errs, ", ")
+			if tc.wantSub == "" && len(errs) != 0 {
+				t.Errorf("validateParams() unexpected errors: %v", errs)
+			}
+			if tc.wantSub != "" && !strings.Contains(joined, tc.wantSub) {
+				t.Errorf("validateParams() = %v, want substring %q", errs, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestProcessDiscoveryDataRejectsInvalidValues(t *testing.T) {
+	serv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, sampleDiscoveryResponse)
+	}))
+	defer serv.Close()
+
+	makeSB := func() *SupportBundle {
+		return &SupportBundle{
+			oteLogger: defaultOTELogger,
+			rest: &rest.Rest{
+				HTTPClient: defaultNewClient(10*time.Minute, defaultTransport()),
+				TokenGetter: func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+					return &mockToken{token: &oauth2.Token{AccessToken: "access-token"}}, nil
+				},
+			},
+		}
+	}
+
+	baseDiscoveryJSON := `{
+		"databaseLayer": {
+			"sid": "HDB",
+			"resources": [{
+				"resourceKind": "RESOURCE_KIND_INSTANCE",
+				"instanceProperties": {
+					"virtualHostname": "test-hostname",
+					"appInstances": [{"number": "01"}]
+				}
+			}]
+		}
+	}`
+
+	tests := []struct {
+		name        string
+		fileContent string
+		wantErrSub  string
+	}{
+		{
+			name:        "DiscoveredHostnameTraversal",
+			fileContent: strings.Replace(baseDiscoveryJSON, `"virtualHostname": "test-hostname"`, `"virtualHostname": "../../../../victim/pwn"`, 1),
+			wantErrSub:  "invalid hostname",
+		},
+		{
+			name:        "DiscoveredSIDTraversal",
+			fileContent: strings.Replace(baseDiscoveryJSON, `"sid": "HDB"`, `"sid": "../"`, 1),
+			wantErrSub:  "invalid SID",
+		},
+		{
+			name:        "DiscoveredInstanceNumTraversal",
+			fileContent: strings.Replace(baseDiscoveryJSON, `"number": "01"`, `"number": ".."`, 1),
+			wantErrSub:  "invalid instance number",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sb := makeSB()
+			err := sb.processDiscoveryData(context.Background(), serv.URL, "sap-discovery-success", defaultCloudProperties, mockedfilesystem{fileContent: tc.fileContent})
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrSub) {
+				t.Errorf("processDiscoveryData() error = %v, want substring %q", err, tc.wantErrSub)
+			}
+		})
+	}
+}
+
+func TestConfinementHelpers(t *testing.T) {
+	if _, err := confinedSubpath("/tmp/bundle", ""); err == nil {
+		t.Errorf("confinedSubpath empty subPath succeeded, want error")
+	}
+	if _, err := confinedSubpath("/tmp/bundle", `foo\bar`); err == nil {
+		t.Errorf("confinedSubpath backslash subPath succeeded, want error")
+	}
+	if _, err := confinedSubpath("/tmp/bundle", "."); err == nil {
+		t.Errorf("confinedSubpath dot subPath succeeded, want error")
+	}
+	if _, err := confinedSubpath("/tmp/bundle", "../../etc/cron.d/pwn"); err == nil {
+		t.Errorf("confinedSubpath traversal succeeded, want error")
+	}
+	if got, err := confinedSubpath("/", "etc/config"); err != nil || got != "/etc/config" {
+		t.Errorf("confinedSubpath root base = (%q, %v), want (/etc/config, nil)", got, err)
+	}
+	for _, bad := range []string{"", ".", "..", "../pwn", "sub/file", `sub\file`, "bad\x00file"} {
+		if _, err := confinedBundleFile("/tmp/bundle", bad); err == nil {
+			t.Errorf("confinedBundleFile(%q) succeeded, want error", bad)
+		}
+	}
+	if got, err := confinedBundleFile("/tmp/bundle", "host_processes.txt"); err != nil || got != "/tmp/bundle/host_processes.txt" {
+		t.Errorf("confinedBundleFile valid = (%q, %v), want (/tmp/bundle/host_processes.txt, nil)", got, err)
+	}
+
+	sosr := SupportBundle{oteLogger: defaultOTELogger}
+	if !sosr.copyVarLogMessagesToBundle(context.Background(), "/tmp/bundle", "../../etc/", mockedfilesystem{}) {
+		t.Errorf("copyVarLogMessagesToBundle() with traversal hostname returned false, want true")
+	}
+	if err := sosr.execAndWriteToFile(context.Background(), "/tmp/bundle", "../../etc/", fakeExec, commandlineexecutor.Params{}, "processes.txt", mockedfilesystem{}); err == nil {
+		t.Errorf("execAndWriteToFile() with traversal hostname succeeded, want error")
+	}
+	if !sosr.extractHANAVersion(context.Background(), "/tmp/bundle", "../", "testhost", fakeExec, mockedfilesystem{}) {
+		t.Errorf("extractHANAVersion() with invalid SID returned false, want true")
+	}
+}
+
+func TestDiscreteSubprocessArgsNoShellSplitting(t *testing.T) {
+	sosr := SupportBundle{oteLogger: defaultOTELogger}
+	var captured []commandlineexecutor.Params
+	recordExec := func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+		captured = append(captured, p)
+		return commandlineexecutor.Result{ExitCode: 0, StdOut: "ok"}
+	}
+	fsMock := mockedfilesystem{
+		readDirContent: []fs.FileInfo{mockedFileInfo{name: "backint.log"}},
+	}
+
+	sosr.extractSystemDBErrors(context.Background(), "bundle", "host1", []string{"/usr/sap/DEH/HDB00/host1"}, recordExec, fsMock)
+	sosr.extractTenantDBErrors(context.Background(), "bundle", "TEN", "host1", []string{"/usr/sap/DEH/HDB00/host1"}, recordExec, fsMock)
+	sosr.extractBackintErrors(context.Background(), "bundle", "/usr/sap/DEH/SYS/global/hdb", "host1", recordExec, fsMock)
+	sosr.extractHANAVersion(context.Background(), "bundle", "DEH", "host1", recordExec, fsMock)
+
+	if len(captured) != 4 {
+		t.Fatalf("captured %d exec calls, want 4", len(captured))
+	}
+	for i, p := range captured {
+		if p.ArgsToSplit != "" {
+			t.Errorf("call %d used ArgsToSplit=%q, want discrete Args only", i, p.ArgsToSplit)
+		}
+	}
+	wantSysArgs := []string{"-w", "ERROR", "--", "/usr/sap/DEH/HDB00/host1/trace/backup.log"}
+	if diff := cmp.Diff(wantSysArgs, captured[0].Args); diff != "" {
+		t.Errorf("extractSystemDBErrors Args diff (-want +got):\n%s", diff)
+	}
+	wantTenArgs := []string{"-w", "ERROR", "--", "/usr/sap/DEH/HDB00/host1/trace/DB_TEN/backup.log"}
+	if diff := cmp.Diff(wantTenArgs, captured[1].Args); diff != "" {
+		t.Errorf("extractTenantDBErrors Args diff (-want +got):\n%s", diff)
+	}
+	wantBackintArgs := []string{"-w", "SEVERE", "--", "/usr/sap/DEH/SYS/global/hdb/opt/backint/backint-gcs/logs/backint.log"}
+	if diff := cmp.Diff(wantBackintArgs, captured[2].Args); diff != "" {
+		t.Errorf("extractBackintErrors Args diff (-want +got):\n%s", diff)
+	}
+	wantHANAArgs := []string{"-c", `source "/usr/sap/$1/home/.sapenv.sh" && /usr/sap/"$1"/*/HDB version`, "_", "DEH"}
+	if diff := cmp.Diff(wantHANAArgs, captured[3].Args); diff != "" {
+		t.Errorf("extractHANAVersion Args diff (-want +got):\n%s", diff)
+	}
+	if captured[3].User != "dehadm" {
+		t.Errorf("extractHANAVersion User = %q, want dehadm", captured[3].User)
 	}
 }

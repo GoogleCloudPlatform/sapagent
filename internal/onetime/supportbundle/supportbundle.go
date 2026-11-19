@@ -71,6 +71,9 @@ var (
 	backintLogRegex           = regexp.MustCompile(`backint(.*?).log`)
 	rteDumpRegex              = regexp.MustCompile(`.*rtedump.*\.trc$`)
 	sidRegex                  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]{2}$`)
+	instanceNumRegex          = regexp.MustCompile(`^[0-9]{2}$`)
+	hostnameRegex             = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._-]{0,253}[a-zA-Z0-9])?$`)
+	bundleNameRegex           = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 )
 
 // SupportBundle is the structure for the support bundle command.
@@ -583,7 +586,13 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 	for _, filePath := range reqFilePaths {
 		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", filePath))
-		destPath := path.Join(destFilesPath, filePath)
+		destPath, err := confinedSubpath(destFilesPath, filePath)
+		if err != nil {
+			errMessage := "Error while copying file: " + filePath
+			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
+			failureMsgs = append(failureMsgs, errMessage)
+			continue
+		}
 		if err := copyFile(filePath, destPath, fs); err != nil {
 			errMessage := "Error while copying file: " + filePath
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
@@ -838,6 +847,32 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 	return nil
 }
 
+// confinedSubpath joins subPath under destFilesPath and rejects any path that escapes destFilesPath.
+func confinedSubpath(destFilesPath, subPath string) (string, error) {
+	if subPath == "" || strings.ContainsRune(subPath, 0) || strings.Contains(subPath, `\`) {
+		return "", fmt.Errorf("invalid bundle subpath %q", subPath)
+	}
+	base := path.Clean(destFilesPath)
+	joined := path.Join(base, subPath)
+	prefix := base + "/"
+	if base == "/" {
+		prefix = "/"
+	}
+	if joined == base || !strings.HasPrefix(joined, prefix) {
+		return "", fmt.Errorf("bundle destination %q escapes staging directory %q", joined, base)
+	}
+	return joined, nil
+}
+
+// confinedBundleFile ensures fileName is a single path segment without directory traversal before
+// joining it directly under destFilesPath.
+func confinedBundleFile(destFilesPath, fileName string) (string, error) {
+	if fileName == "" || fileName == "." || fileName == ".." || strings.ContainsAny(fileName, `/\`) || strings.ContainsRune(fileName, 0) {
+		return "", fmt.Errorf("invalid bundle output file name %q", fileName)
+	}
+	return confinedSubpath(destFilesPath, fileName)
+}
+
 func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
 
 	res := []string{globalPath + globalINIFile}
@@ -1019,7 +1054,11 @@ func (s *SupportBundle) copyVarLogMessagesToBundle(ctx context.Context, destFile
 		return true
 	}
 	defer srcFile.Close()
-	destFilePath := fmt.Sprintf("%s/%s%s", destFilesPath, hostname, varLogMessagesFile)
+	destFilePath, err := confinedBundleFile(destFilesPath, hostname+varLogMessagesFile)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid destination path for /var/log/messages", err)
+		return true
+	}
 	destFile, err := fu.OpenFile(destFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, fmt.Sprintf("Error while opening file: %s", destFilePath), err)
@@ -1046,11 +1085,12 @@ func (s *SupportBundle) extractSystemDBErrors(ctx context.Context, destFilesPath
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Extracting errors from System DB files...")
 	var hasErrors bool
 	for _, hanaPath := range hanaPaths {
+		backupLogPath := fmt.Sprintf("%s/trace/backup.log", hanaPath)
 		p := commandlineexecutor.Params{
-			Executable:  "grep",
-			ArgsToSplit: fmt.Sprintf("-w ERROR %s/trace/backup.log", hanaPath),
+			Executable: "grep",
+			Args:       []string{"-w", "ERROR", "--", backupLogPath},
 		}
-		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR "+hanaPath+"/trace/backup.log")
+		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR "+backupLogPath)
 		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, systemDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
 			hasErrors = true
 		}
@@ -1065,8 +1105,8 @@ func (s *SupportBundle) extractTenantDBErrors(ctx context.Context, destFilesPath
 	for _, hanaPath := range hanaPaths {
 		filePath := fmt.Sprintf("%s/trace/DB_%s/backup.log", hanaPath, tenantSID)
 		p := commandlineexecutor.Params{
-			Executable:  "grep",
-			ArgsToSplit: "-w ERROR " + filePath,
+			Executable: "grep",
+			Args:       []string{"-w", "ERROR", "--", filePath},
 		}
 		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w ERROR"+filePath)
 		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, tenantDBErrorsFile, fu); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1087,8 +1127,8 @@ func (s *SupportBundle) extractBackintErrors(ctx context.Context, destFilesPath,
 	for _, fd := range fds {
 		logFilePath := fmt.Sprintf("%s%s/logs/%s", globalPath, backintGCSPath, fd.Name())
 		p := commandlineexecutor.Params{
-			Executable:  "grep",
-			ArgsToSplit: "-w SEVERE " + logFilePath,
+			Executable: "grep",
+			Args:       []string{"-w", "SEVERE", "--", logFilePath},
 		}
 		s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: grep -w SEVERE"+logFilePath)
 		if err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, p, backintErrorsFile, fu); err != nil {
@@ -1100,11 +1140,14 @@ func (s *SupportBundle) extractBackintErrors(ctx context.Context, destFilesPath,
 
 // extractHANAVersion extracts the HANA version from the sap env.
 func (s *SupportBundle) extractHANAVersion(ctx context.Context, destFilesPath, sid, hostname string, exec commandlineexecutor.Execute, fu filesystem.FileSystem) bool {
-	cmd := "-c 'source /usr/sap/" + sid + "/home/.sapenv.sh && /usr/sap/" + sid + "/*/HDB version'"
+	if !sidRegex.MatchString(sid) {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid SID while extracting HANA version", fmt.Errorf("invalid SID %q", sid))
+		return true
+	}
 	params := commandlineexecutor.Params{
-		User:        fmt.Sprintf("%sadm", strings.ToLower(sid)),
-		Executable:  "bash",
-		ArgsToSplit: cmd,
+		User:       fmt.Sprintf("%sadm", strings.ToLower(sid)),
+		Executable: "bash",
+		Args:       []string{"-c", `source "/usr/sap/$1/home/.sapenv.sh" && /usr/sap/"$1"/*/HDB version`, "_", sid},
 	}
 	s.oteLogger.LogMessageToFileAndConsole(ctx, "Executing command: bash -c 'HDB version'")
 	err := s.execAndWriteToFile(ctx, destFilesPath, hostname, exec, params, hanaVersionFile, fu)
@@ -1116,6 +1159,11 @@ func (s *SupportBundle) extractHANAVersion(ctx context.Context, destFilesPath, s
 
 // execAndWriteToFile executes the command and writes the output to the file.
 func (s *SupportBundle) execAndWriteToFile(ctx context.Context, destFilesPath, hostname string, exec commandlineexecutor.Execute, params commandlineexecutor.Params, opFile string, fu filesystem.FileSystem) error {
+	destFilePath, err := confinedBundleFile(destFilesPath, hostname+opFile)
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Invalid destination file path", err)
+		return err
+	}
 	res := exec(ctx, params)
 	if res.ExitCode != 0 && res.StdErr != "" {
 		// "No such file or directory" is an expected error when a log file does not exist, so we can ignore it.
@@ -1126,7 +1174,7 @@ func (s *SupportBundle) execAndWriteToFile(ctx context.Context, destFilesPath, h
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while executing command", err)
 		return err
 	}
-	f, err := fu.OpenFile(path.Join(destFilesPath, hostname+opFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
+	f, err := fu.OpenFile(destFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while opening the file", err)
 		return err
@@ -1752,25 +1800,48 @@ func (s *SupportBundle) newMetricClient(ctx context.Context) (cloudmonitoring.Ti
 	return mmc, nil
 }
 
-func (s *SupportBundle) validateParams() []string {
+func isValidHostname(hostname string) bool {
+	return hostnameRegex.MatchString(hostname) && !strings.Contains(hostname, "..")
+}
+
+func isValidBundleName(bundleName string) bool {
+	return bundleNameRegex.MatchString(bundleName) && !strings.Contains(bundleName, "..")
+}
+
+func (s *SupportBundle) validateSAPFields() []string {
 	var errs []string
-	if s.AgentLogsOnly {
-		return errs
-	}
 	if s.Sid != "" && !sidRegex.MatchString(s.Sid) {
 		errs = append(errs, fmt.Sprintf("invalid SID %s, must be 3 alphanumeric characters starting with a letter", s.Sid))
 	}
 	if s.TenantSid != "" && !sidRegex.MatchString(s.TenantSid) {
 		errs = append(errs, fmt.Sprintf("invalid tenant SID %s, must be 3 alphanumeric characters starting with a letter", s.TenantSid))
 	}
-	if s.InstanceNums != "" {
-		s.instanceNumsAfterSplit = strings.Split(s.InstanceNums, " ")
-		for _, nos := range s.instanceNumsAfterSplit {
-			if len(nos) != 2 {
-				errs = append(errs, fmt.Sprintf("invalid instance number %s", nos))
-			}
+	if s.Hostname != "" && !isValidHostname(s.Hostname) {
+		errs = append(errs, fmt.Sprintf("invalid hostname %s", s.Hostname))
+	}
+	for _, nos := range s.instanceNumsAfterSplit {
+		if !instanceNumRegex.MatchString(nos) {
+			errs = append(errs, fmt.Sprintf("invalid instance number %s", nos))
 		}
 	}
+	return errs
+}
+
+func (s *SupportBundle) validateParams() []string {
+	var errs []string
+	if s.BundleName != "" && !isValidBundleName(s.BundleName) {
+		errs = append(errs, fmt.Sprintf("invalid bundle name %s", s.BundleName))
+	}
+	if s.AgentLogsOnly {
+		if s.Hostname != "" && !isValidHostname(s.Hostname) {
+			errs = append(errs, fmt.Sprintf("invalid hostname %s", s.Hostname))
+		}
+		return errs
+	}
+	if s.InstanceNums != "" {
+		s.instanceNumsAfterSplit = strings.Split(s.InstanceNums, " ")
+	}
+	errs = append(errs, s.validateSAPFields()...)
 	if s.Metrics && s.Timestamp == "" {
 		s.Timestamp = time.Now().Format("2006-01-02 15:04:05")
 	}
@@ -1863,7 +1934,7 @@ func (s *SupportBundle) processDiscoveryData(ctx context.Context, baseURL, destF
 	}
 
 	if s.Sid == "" && len(discoveredSIDs) > 0 {
-		s.Sid = discoveredSIDs[0]
+		s.Sid = strings.ToUpper(discoveredSIDs[0])
 	}
 
 	if len(s.instanceNumsAfterSplit) == 0 && len(discoveredInstanceNumbers) > 0 {
@@ -1901,6 +1972,9 @@ func (s *SupportBundle) processDiscoveryData(ctx context.Context, baseURL, destF
 	}
 	if s.Hostname == "" {
 		return fmt.Errorf("could not determine hostname, please provide with -hostname flag")
+	}
+	if errs := s.validateSAPFields(); len(errs) > 0 {
+		return fmt.Errorf("invalid discovered SAP parameters: %s", strings.Join(errs, ", "))
 	}
 	return nil
 }
