@@ -105,6 +105,7 @@ type SupportBundle struct {
 	rest                   RestService
 	createQueryClient      createQueryClient
 	createMetricClient     createMetricClient
+	geteuid                func() int
 	oteLogger              *onetime.OTELogger
 }
 
@@ -256,9 +257,11 @@ const (
 	globalINIFile         = `/custom/config/global.ini`
 	backintGCSPath        = `/opt/backint/backint-gcs`
 	sapDiscoveryFile      = `sapdiscovery.json`
-	workloadMetricPrefix  = "workload.googleapis.com"
-	computeMetricPrefix   = "compute.googleapis.com"
-	recentLogsCount       = 3
+	workloadMetricPrefix     = "workload.googleapis.com"
+	computeMetricPrefix      = "compute.googleapis.com"
+	recentLogsCount          = 3
+	maxBackintParamFileBytes = "10485760"
+	backintReadTimeoutSec    = 10
 )
 
 // cloudLoggingURL returns the Cloud Logging entries:list endpoint for the current universe.
@@ -532,6 +535,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 
 
 	reqFilePaths := []string{linuxConfigFilePath}
+	var backintParamFiles []string
 	globalPath := fmt.Sprintf(`/usr/sap/%s/SYS/global/hdb`, s.Sid)
 
 	var hanaPaths []string
@@ -571,7 +575,7 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 		reqFilePaths = append(reqFilePaths, s.nameServerTracesAndBackupLogs(ctx, hanaPaths, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.tenantDBNameServerTracesAndBackupLogs(ctx, hanaPaths, s.TenantSid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.dotFiles(ctx, hanaPaths, fs)...)
-		reqFilePaths = append(reqFilePaths, s.backintParameterFiles(ctx, globalPath, s.Sid, fs)...)
+		backintParamFiles = s.backintParameterFiles(ctx, globalPath, s.Sid, exec, fs)
 		reqFilePaths = append(reqFilePaths, s.backintLogs(ctx, globalPath, s.Sid, fs)...)
 		reqFilePaths = append(reqFilePaths, s.collectMessagesLogs(ctx, linuxLogFilesPath, fs)...)
 	}
@@ -584,20 +588,25 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 	}
 	reqFilePaths = append(reqFilePaths, s.pacemakerLogFiles(ctx, linuxLogFilesPath, fs)...)
 
-	for _, filePath := range reqFilePaths {
+	copyBundleFile := func(filePath string, asSIDAdm bool) {
 		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Copying file %s ...", filePath))
 		destPath, err := confinedSubpath(destFilesPath, filePath)
 		if err != nil {
 			errMessage := "Error while copying file: " + filePath
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
-			continue
+			return
 		}
-		if err := copyFile(filePath, destPath, fs); err != nil {
+		if asSIDAdm && s.isRoot() {
+			err = copyFileAsSIDAdm(ctx, filePath, destPath, s.Sid, exec, fs)
+		} else {
+			err = copyFile(filePath, destPath, fs)
+		}
+		if err != nil {
 			errMessage := "Error while copying file: " + filePath
 			s.oteLogger.LogErrorToFileAndConsole(ctx, errMessage, err)
 			failureMsgs = append(failureMsgs, errMessage)
-			continue
+			return
 		}
 		if s.MaskIPs && (strings.Contains(filePath, "messages") || strings.Contains(filePath, "pacemaker")) {
 			if err := s.anonymizeFile(ctx, destPath, fs); err != nil {
@@ -606,6 +615,12 @@ func (s *SupportBundle) supportBundleHandler(ctx context.Context, destFilePathPr
 				failureMsgs = append(failureMsgs, errMessage)
 			}
 		}
+	}
+	for _, filePath := range reqFilePaths {
+		copyBundleFile(filePath, false)
+	}
+	for _, filePath := range backintParamFiles {
+		copyBundleFile(filePath, true)
 	}
 
 	if !s.AgentLogsOnly {
@@ -847,6 +862,13 @@ func zipSource(source, target string, fs filesystem.FileSystem, z zipper.Zipper)
 	return nil
 }
 
+func (s *SupportBundle) isRoot() bool {
+	if s.geteuid != nil {
+		return s.geteuid() == 0
+	}
+	return os.Geteuid() == 0
+}
+
 // confinedSubpath joins subPath under destFilesPath and rejects any path that escapes destFilesPath.
 func confinedSubpath(destFilesPath, subPath string) (string, error) {
 	if subPath == "" || strings.ContainsRune(subPath, 0) || strings.Contains(subPath, `\`) {
@@ -873,28 +895,110 @@ func confinedBundleFile(destFilesPath, fileName string) (string, error) {
 	return confinedSubpath(destFilesPath, fileName)
 }
 
-func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, sid string, fs filesystem.FileSystem) []string {
+// isValidBackintParamPath validates paths read from <sid>adm-writable global.ini so they are clean
+// Unix absolute paths outside virtual/device filesystems.
+func isValidBackintParamPath(p string) bool {
+	if p == "" || !strings.HasPrefix(p, "/") || strings.Contains(p, `\`) || strings.ContainsRune(p, 0) {
+		return false
+	}
+	if p != path.Clean(p) || p == "/" {
+		return false
+	}
+	for _, disallowed := range []string{"/proc", "/sys", "/dev", "/root"} {
+		if p == disallowed || strings.HasPrefix(p, disallowed+"/") {
+			return false
+		}
+	}
+	return true
+}
 
-	res := []string{globalPath + globalINIFile}
+// readFileAsSIDAdm reads a file in a child subprocess running under <sid>adm's OS credentials so
+// the root daemon never uses ambient root authority to read <sid>adm-nominated paths.
+func readFileAsSIDAdm(ctx context.Context, src, sid string, exec commandlineexecutor.Execute) ([]byte, error) {
+	if !sidRegex.MatchString(sid) {
+		return nil, fmt.Errorf("invalid SID %q for reading file as <sid>adm", sid)
+	}
+	if exec == nil {
+		return nil, errors.New("command executor is nil")
+	}
+	res := exec(ctx, commandlineexecutor.Params{
+		User:       fmt.Sprintf("%sadm", strings.ToLower(sid)),
+		Executable: "head",
+		Args:       []string{"-c", maxBackintParamFileBytes, "--", src},
+		Timeout:    backintReadTimeoutSec,
+	})
+	if res.Error != nil {
+		if stdErr := strings.TrimSpace(res.StdErr); stdErr != "" {
+			return nil, fmt.Errorf("%w: %s", res.Error, stdErr)
+		}
+		return nil, res.Error
+	}
+	if res.ExitCode != 0 {
+		if res.StdErr != "" {
+			return nil, errors.New(res.StdErr)
+		}
+		return nil, fmt.Errorf("reading %s as %sadm exited with code %d", src, strings.ToLower(sid), res.ExitCode)
+	}
+	return []byte(res.StdOut), nil
+}
 
-	content, err := fs.ReadFile(globalPath + globalINIFile)
+// copyFileAsSIDAdm reads src as <sid>adm and writes its contents into dst inside the bundle folder.
+func copyFileAsSIDAdm(ctx context.Context, src, dst, sid string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) error {
+	content, err := readFileAsSIDAdm(ctx, src, sid, exec)
 	if err != nil {
-		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading file: "+globalPath+globalINIFile, err)
+		return err
+	}
+	if err := fs.MkdirAll(path.Dir(dst), 0777); err != nil {
+		return err
+	}
+	dstFD, err := fs.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer dstFD.Close()
+	_, err = fs.WriteStringToFile(dstFD, string(content))
+	return err
+}
+
+func (s *SupportBundle) backintParameterFiles(ctx context.Context, globalPath, sid string, exec commandlineexecutor.Execute, fs filesystem.FileSystem) []string {
+	globalINIPath := globalPath + globalINIFile
+	res := []string{globalINIPath}
+
+	var (
+		content []byte
+		err     error
+	)
+	if s.isRoot() {
+		content, err = readFileAsSIDAdm(ctx, globalINIPath, sid, exec)
+	} else {
+		content, err = fs.ReadFile(globalINIPath)
+	}
+	if err != nil {
+		s.oteLogger.LogErrorToFileAndConsole(ctx, "Error while reading file: "+globalINIPath, err)
 		return nil
 	}
 	contentData := string(content)
-	op := backupParameterFilesRegex.FindAllString(contentData, -1)
-	for _, path := range op {
-		pathSplit := strings.Split(path, "=")
-		if len(pathSplit) != 2 {
-			msg := fmt.Sprintf("Unexpected output from global.ini content for %s", path)
-			s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
-
+	for _, rawLine := range strings.Split(contentData, "\n") {
+		trimmedLine := strings.TrimSpace(rawLine)
+		if trimmedLine == "" || strings.HasPrefix(trimmedLine, "#") || strings.HasPrefix(trimmedLine, ";") {
 			continue
 		}
-		rfp := strings.TrimSpace(strings.Split(path, "=")[1])
-		s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", rfp))
-		res = append(res, rfp)
+		op := backupParameterFilesRegex.FindAllString(trimmedLine, -1)
+		for _, match := range op {
+			pathSplit := strings.Split(match, "=")
+			if len(pathSplit) != 2 {
+				msg := fmt.Sprintf("Unexpected output from global.ini content for %s", match)
+				s.oteLogger.LogMessageToFileAndConsole(ctx, msg)
+				continue
+			}
+			rfp := strings.TrimSpace(pathSplit[1])
+			if !isValidBackintParamPath(rfp) {
+				s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Skipping invalid backint parameter file path %s from global.ini.", rfp))
+				continue
+			}
+			s.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("Adding file %s to collection.", rfp))
+			res = append(res, rfp)
+		}
 	}
 	return res
 }

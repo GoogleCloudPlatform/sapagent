@@ -19,6 +19,7 @@ package supportbundle
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1555,27 +1556,36 @@ func TestDotFiles(t *testing.T) {
 	}
 }
 func TestBackintParameterFiles(t *testing.T) {
-	sosr := SupportBundle{
-		oteLogger: defaultOTELogger,
-	}
 	tests := []struct {
 		name       string
+		s          SupportBundle
 		globalPath string
 		sid        string
+		exec       commandlineexecutor.Execute
 		fu         filesystem.FileSystem
 		want       []string
 	}{
 		{
-			name:       "ReadFileError",
+			name: "ReadFileError",
+			s: SupportBundle{
+				oteLogger: defaultOTELogger,
+				geteuid:   func() int { return 1001 },
+			},
 			globalPath: "failure",
 			sid:        "DEH",
+			exec:       fakeExec,
 			fu:         mockedfilesystem{},
 			want:       nil,
 		},
 		{
-			name:       "UnexpectedContent",
+			name: "UnexpectedContent",
+			s: SupportBundle{
+				oteLogger: defaultOTELogger,
+				geteuid:   func() int { return 1001 },
+			},
 			globalPath: "success",
 			sid:        "DEH",
+			exec:       fakeExec,
 			fu: mockedfilesystem{
 				fileContent: `_backup_parameter_file = /usr/sap/file1
 				xyz_backup_parameter_file = /usr/sap/file2
@@ -1585,18 +1595,65 @@ func TestBackintParameterFiles(t *testing.T) {
 			want: []string{path.Join("success", globalINIFile), "/usr/sap/file1", "/usr/sap/file2"},
 		},
 		{
-			name:       "Success",
+			name: "Success",
+			s: SupportBundle{
+				oteLogger: defaultOTELogger,
+				geteuid:   func() int { return 1001 },
+			},
 			globalPath: "success",
 			sid:        "DEH",
+			exec:       fakeExec,
 			fu: mockedfilesystem{
 				fileContent: `_backup_parameter_file = /usr/sap/file1`,
 			},
 			want: []string{path.Join("success", globalINIFile), "/usr/sap/file1"},
 		},
+		{
+			name: "SkipsCommentsAndInvalidPaths",
+			s: SupportBundle{
+				oteLogger: defaultOTELogger,
+				geteuid:   func() int { return 1001 },
+			},
+			globalPath: "/usr/sap/DEH/SYS/global/hdb",
+			sid:        "DEH",
+			exec:       fakeExec,
+			fu: mockedfilesystem{
+				fileContent: `# data_backup_parameter_file = /usr/sap/commented_hash
+; log_backup_parameter_file = /usr/sap/commented_semi
+catalog_backup_parameter_file = ../../etc/shadow
+data_backup_parameter_file = /usr/sap/DEH/../../../etc/passwd
+log_backup_parameter_file = /dev/zero
+proc_backup_parameter_file = /proc/self/environ
+root_backup_parameter_file = /root/secret
+valid_backup_parameter_file = /hana/backup/parameters.json
+`,
+			},
+			want: []string{"/usr/sap/DEH/SYS/global/hdb/custom/config/global.ini", "/hana/backup/parameters.json"},
+		},
+		{
+			name: "RootReadsGlobalINIAsSIDAdm",
+			s: SupportBundle{
+				oteLogger: defaultOTELogger,
+				geteuid:   func() int { return 0 },
+			},
+			globalPath: "/usr/sap/DEH/SYS/global/hdb",
+			sid:        "DEH",
+			exec: func(ctx context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				if p.User != "dehadm" || p.Executable != "head" {
+					t.Errorf("unexpected exec params: %+v", p)
+				}
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					StdOut:   "data_backup_parameter_file = /usr/sap/DEH/SYS/global/hdb/opt/hdbconfig/parameters.json\n",
+				}
+			},
+			fu:   mockedfilesystem{reqErr: os.ErrPermission},
+			want: []string{"/usr/sap/DEH/SYS/global/hdb/custom/config/global.ini", "/usr/sap/DEH/SYS/global/hdb/opt/hdbconfig/parameters.json"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := sosr.backintParameterFiles(context.Background(), test.globalPath, test.sid, test.fu)
+			got := test.s.backintParameterFiles(context.Background(), test.globalPath, test.sid, test.exec, test.fu)
 			if !cmp.Equal(got, test.want) {
 				t.Errorf("backintParameterFiles(%q, %q, %q) = %q, want %q", test.globalPath, test.sid, test.fu, got, test.want)
 			}
@@ -4188,7 +4245,7 @@ func TestProcessDiscoveryDataRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-func TestConfinementHelpers(t *testing.T) {
+func TestConfinementAndBackintPathHelpers(t *testing.T) {
 	if _, err := confinedSubpath("/tmp/bundle", ""); err == nil {
 		t.Errorf("confinedSubpath empty subPath succeeded, want error")
 	}
@@ -4222,6 +4279,17 @@ func TestConfinementHelpers(t *testing.T) {
 	}
 	if !sosr.extractHANAVersion(context.Background(), "/tmp/bundle", "../", "testhost", fakeExec, mockedfilesystem{}) {
 		t.Errorf("extractHANAVersion() with invalid SID returned false, want true")
+	}
+
+	for _, invalid := range []string{"", "relative/path", "/", "/usr/sap/../etc/shadow", `/usr/sap\bad`, "/usr/sap/bad\x00", "/proc", "/proc/self/environ", "/sys", "/sys/kernel", "/dev", "/dev/zero", "/root", "/root/.ssh/id_rsa"} {
+		if isValidBackintParamPath(invalid) {
+			t.Errorf("isValidBackintParamPath(%q) = true, want false", invalid)
+		}
+	}
+	for _, valid := range []string{"/usr/sap/DEH/SYS/global/hdb/opt/hdbconfig/parameters.json", "/hana/shared/DEH/global/hdb/opt/backint/backint-gcs/parameters.json", "/hana/backup/parameters.txt"} {
+		if !isValidBackintParamPath(valid) {
+			t.Errorf("isValidBackintParamPath(%q) = false, want true", valid)
+		}
 	}
 }
 
@@ -4267,5 +4335,129 @@ func TestDiscreteSubprocessArgsNoShellSplitting(t *testing.T) {
 	}
 	if captured[3].User != "dehadm" {
 		t.Errorf("extractHANAVersion User = %q, want dehadm", captured[3].User)
+	}
+}
+
+func TestReadAndCopyFileAsSIDAdm(t *testing.T) {
+	ctx := context.Background()
+	if _, err := readFileAsSIDAdm(ctx, "/usr/sap/file1", "../", fakeExec); err == nil {
+		t.Errorf("readFileAsSIDAdm invalid SID succeeded, want error")
+	}
+	if _, err := readFileAsSIDAdm(ctx, "/usr/sap/file1", "DEH", nil); err == nil {
+		t.Errorf("readFileAsSIDAdm nil exec succeeded, want error")
+	}
+	if _, err := readFileAsSIDAdm(ctx, "/etc/shadow", "DEH", func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{ExitCode: 1, StdErr: "head: cannot open '/etc/shadow' for reading: Permission denied"}
+	}); err == nil {
+		t.Errorf("readFileAsSIDAdm permission denied succeeded, want error")
+	}
+	if _, err := readFileAsSIDAdm(ctx, "/etc/shadow", "DEH", func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{ExitCode: 1}
+	}); err == nil {
+		t.Errorf("readFileAsSIDAdm non-zero exit without stderr succeeded, want error")
+	}
+	if _, err := readFileAsSIDAdm(ctx, "/etc/shadow", "DEH", func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{Error: errors.New("lookup user failed")}
+	}); err == nil {
+		t.Errorf("readFileAsSIDAdm exec error succeeded, want error")
+	}
+	if _, err := readFileAsSIDAdm(ctx, "/etc/shadow", "DEH", func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+		return commandlineexecutor.Result{
+			ExitCode: 1,
+			Error:    errors.New("exit status 1"),
+			StdErr:   "head: cannot open '/etc/shadow' for reading: Permission denied\n",
+		}
+	}); err == nil || !strings.Contains(err.Error(), "Permission denied") {
+		t.Errorf("readFileAsSIDAdm error = %v, want error containing 'Permission denied'", err)
+	}
+
+	if err := copyFileAsSIDAdm(ctx, "/usr/sap/file1", "failure/out", "DEH", fakeExec, mockedfilesystem{}); err == nil {
+		t.Errorf("copyFileAsSIDAdm MkdirAll failure succeeded, want error")
+	}
+	if err := copyFileAsSIDAdm(ctx, "/usr/sap/file1", "ok/failure", "DEH", fakeExec, mockedfilesystem{}); err == nil {
+		t.Errorf("copyFileAsSIDAdm OpenFile failure succeeded, want error")
+	}
+	if err := copyFileAsSIDAdm(ctx, "/usr/sap/file1", "ok/nil-file", "DEH", fakeExec, mockedfilesystem{}); err == nil {
+		t.Errorf("copyFileAsSIDAdm WriteStringToFile failure succeeded, want error")
+	}
+
+	tmpDir := t.TempDir()
+	dst := path.Join(tmpDir, "usr/sap/DEH/parameters.json")
+	execOK := func(_ context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+		if p.User != "dehadm" || p.Executable != "head" {
+			t.Errorf("unexpected params: %+v", p)
+		}
+		wantArgs := []string{"-c", maxBackintParamFileBytes, "--", "/usr/sap/DEH/parameters.json"}
+		if diff := cmp.Diff(wantArgs, p.Args); diff != "" {
+			t.Errorf("Args diff (-want +got):\n%s", diff)
+		}
+		return commandlineexecutor.Result{ExitCode: 0, StdOut: `{"bucket":"my-bucket"}`}
+	}
+	if err := copyFileAsSIDAdm(ctx, "/usr/sap/DEH/parameters.json", dst, "DEH", execOK, filesystem.Helper{}); err != nil {
+		t.Fatalf("copyFileAsSIDAdm unexpected error: %v", err)
+	}
+	gotBytes, err := os.ReadFile(dst)
+	if err != nil || string(gotBytes) != `{"bucket":"my-bucket"}` {
+		t.Errorf("copied file = (%q, %v), want (`{\"bucket\":\"my-bucket\"}`, nil)", string(gotBytes), err)
+	}
+}
+
+func TestSupportBundleHandlerRootBlocksShadowExfiltration(t *testing.T) {
+	tmpDir := t.TempDir()
+	sb := &SupportBundle{
+		Sid:               "DEH",
+		InstanceNums:      "00",
+		Hostname:          "sample_host",
+		BundleName:        "testbundle",
+		SupportBundlePath: tmpDir,
+		oteLogger:         defaultOTELogger,
+		geteuid:           func() int { return 0 },
+		IIOTEParams: &onetime.InternallyInvokedOTE{
+			InvokedBy: "test",
+			Lp:        log.Parameters{LogFileName: "../../../../etc/passwd"},
+		},
+	}
+
+	globalINIPath := "/usr/sap/DEH/SYS/global/hdb/custom/config/global.ini"
+	legitParamPath := "/hana/backup/parameters.json"
+	shadowPath := "/etc/shadow"
+	headCalls := make(map[string]int)
+
+	execMock := func(_ context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+		if p.Executable == "head" && p.User == "dehadm" && len(p.Args) == 4 {
+			headCalls[p.Args[3]]++
+			switch p.Args[3] {
+			case globalINIPath:
+				return commandlineexecutor.Result{
+					ExitCode: 0,
+					StdOut: fmt.Sprintf(
+						"data_backup_parameter_file = %s\ncatalog_backup_parameter_file = %s\nlog_backup_parameter_file = %s\n",
+						legitParamPath, shadowPath, linuxConfigFilePath,
+					),
+				}
+			case legitParamPath:
+				return commandlineexecutor.Result{ExitCode: 0, StdOut: `{"bucket":"prod-backup"}`}
+			case shadowPath, linuxConfigFilePath:
+				return commandlineexecutor.Result{ExitCode: 1, StdErr: "Permission denied"}
+			}
+		}
+		return commandlineexecutor.Result{ExitCode: 0, StdOut: "ok"}
+	}
+
+	msg, _ := sb.supportBundleHandler(context.Background(), tmpDir+"/", execMock, mockedfilesystem{
+		readDirContent: []fs.FileInfo{mockedFileInfo{name: "sample", mode: 0644}},
+	}, mockedZipper{}, defaultCloudProperties)
+
+	if !strings.Contains(msg, "Error while copying file: /etc/shadow") {
+		t.Errorf("expected /etc/shadow copy failure as dehadm, got message:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Error while copying file: ../../../../etc/passwd") {
+		t.Errorf("expected escaping LogFileName to be rejected, got message:\n%s", msg)
+	}
+	if strings.Contains(msg, "Error while copying file: "+legitParamPath) {
+		t.Errorf("expected legitimate parameter file %s to succeed, got message:\n%s", legitParamPath, msg)
+	}
+	if headCalls[linuxConfigFilePath] != 1 {
+		t.Errorf("headCalls[%s] = %d, want 1 (agent config copy should not be downgraded to <sid>adm)", linuxConfigFilePath, headCalls[linuxConfigFilePath])
 	}
 }
