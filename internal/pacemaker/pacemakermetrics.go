@@ -41,7 +41,6 @@ import (
 )
 
 var (
-	sapInstanceRegex               = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
 	sapstartsrvRegex               = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
 	pacemakerClusterUnhealthyRegex = regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
 	ipAddressRegex                 = regexp.MustCompile(`\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)`)
@@ -285,7 +284,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
 
-	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
+	collectASCSInstance(ctx, labels, pacemakerDocument.Configuration.Resources, params.Execute)
 	collectEnqueueServer(ctx, labels, params.Execute)
 	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
@@ -647,58 +646,98 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 	return token, err
 }
 
-// collectASCSInstance determines the VM instances serving as the ASCS/ERS resource group.
-func collectASCSInstance(ctx context.Context, labels map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
+// collectASCSInstance determines the VM instances currently running the ASCS/SCS and ERS resources
+// by matching SAPInstance primitive IDs (classified via START_PROFILE or InstanceName in the CIB)
+// against active resource placements in crm_mon XML output.
+func collectASCSInstance(ctx context.Context, labels map[string]string, resources Resources, exec commandlineexecutor.Execute) {
 	labels["ascs_instance"] = ""
 	labels["ers_instance"] = ""
 
-	var command string
-	switch {
-	case exists("crm"):
-		command = "crm"
-	case exists("pcs"):
-		command = "pcs"
-	default:
-		log.CtxLogger(ctx).Debug("Could not determine Pacemaker command-line tool. Skipping ascs_instance metric collection.")
+	ascsID, ersID := sapInstancePrimitiveIDs(resources)
+	if ascsID == "" && ersID == "" {
 		return
 	}
 
 	result := exec(ctx, commandlineexecutor.Params{
-		Executable: command,
-		Args:       []string{"status"},
+		Executable: "crm_mon",
+		Args:       []string{"--as-xml"},
 	})
 	if result.Error != nil {
-		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Failed to get %s status. Skipping ascs_instance metric collection.", command), "error", result.Error)
+		log.CtxLogger(ctx).Debugw("Command 'crm_mon --as-xml' failed, skipping ascs_instance metric collection.", "error", result.Error)
+		return
+	}
+	crm, err := parseCRMMon([]byte(result.StdOut))
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Could not parse crm_mon XML output, skipping ascs_instance metric collection.", "error", err)
+		return
 	}
 
-	lines := strings.Split(result.StdOut, "\n")
-	inASCSResourceGroup, inERSResourceGroup := false, false
-	for _, line := range lines {
-		switch {
-		case strings.Contains(line, "Resource Group: ascs"):
-			inASCSResourceGroup = true
-			inERSResourceGroup = false
-		case strings.Contains(line, "Resource Group: ers"):
-			inERSResourceGroup = true
-			inASCSResourceGroup = false
-		case strings.Contains(line, "Resource Group:"):
-			inASCSResourceGroup = false
-			inERSResourceGroup = false
-		case inASCSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
-			match := sapInstanceRegex.FindStringSubmatch(line)
-			if len(match) != 2 {
-				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
-				continue
-			}
-			labels["ascs_instance"] = match[1]
-		case inERSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
-			match := sapInstanceRegex.FindStringSubmatch(line)
-			if len(match) != 2 {
-				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ERS instance name.", command), "line", line)
-				continue
-			}
-			labels["ers_instance"] = match[1]
+	var crmResources []CRMResource
+	crmResources = append(crmResources, crm.Resources.Group...)
+	crmResources = append(crmResources, crm.Resources.General...)
+	for _, r := range crmResources {
+		if r.Role != "Started" || r.Node.Name == "" || r.ID == "" {
+			continue
 		}
+		switch r.ID {
+		case ascsID:
+			labels["ascs_instance"] = r.Node.Name
+		case ersID:
+			labels["ers_instance"] = r.Node.Name
+		}
+	}
+}
+
+func sapInstancePrimitiveIDs(resources Resources) (ascsID, ersID string) {
+	var primitives []PrimitiveClass
+	for _, group := range resources.Groups {
+		primitives = append(primitives, group.Primitives...)
+	}
+	primitives = append(primitives, resources.Primitives...)
+
+	for _, primitive := range primitives {
+		if primitive.ClassType != "SAPInstance" || primitive.ID == "" {
+			continue
+		}
+		switch sapInstanceRole(sapInstanceProfileOrName(primitive.InstanceAttributes.NVPairs)) {
+		case "ascs":
+			if ascsID == "" {
+				ascsID = primitive.ID
+			}
+		case "ers":
+			if ersID == "" {
+				ersID = primitive.ID
+			}
+		}
+	}
+	return ascsID, ersID
+}
+
+func sapInstanceProfileOrName(nvPairs []NVPair) string {
+	var instanceName string
+	for _, nvPair := range nvPairs {
+		switch nvPair.Name {
+		case "START_PROFILE":
+			return nvPair.Value
+		case "InstanceName":
+			instanceName = nvPair.Value
+		}
+	}
+	return instanceName
+}
+
+func sapInstanceRole(value string) string {
+	switch {
+	case strings.Contains(value, "_ASCS"), strings.Contains(value, "_SCS"):
+		return "ascs"
+	case strings.Contains(value, "_ERS"):
+		return "ers"
+	case strings.Contains(value, "SCS"):
+		return "ascs"
+	case strings.Contains(value, "ERS"):
+		return "ers"
+	default:
+		return ""
 	}
 }
 
@@ -1113,7 +1152,7 @@ func setHealthCheckInternalLoadBalancerMetrics(labels map[string]string, groups 
 	labels["has_alias_ip"] = "false"
 
 	for _, group := range groups {
-		var settings = make(map[string]string)
+		settings := make(map[string]string)
 		var prefix string
 		for _, primitive := range group.Primitives {
 			switch primitive.ClassType {

@@ -2042,132 +2042,199 @@ func TestPacemakerHanaTopology(t *testing.T) {
 }
 
 func TestCollectASCSInstance(t *testing.T) {
-	tests := []struct {
-		name             string
-		exists           commandlineexecutor.Exists
-		exec             commandlineexecutor.Execute
-		wantASCSInstance string
-		wantERSInstance  string
-	}{
-		{
-			name:   "CommandLineToolNotExists",
-			exists: func(string) bool { return false },
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-`,
-				}
+	defaultCSResources := Resources{
+		Groups: []Group{
+			{
+				ID: "grp_RX1_ASCS00",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "rsc_sap_RX1_ASCS00",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_ASCS00_rx1ascs"},
+							},
+						},
+					},
+				},
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
-		},
-		{
-			name:   "CommandLineStatusError",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: errors.New("Something went wrong"),
-				}
+			{
+				ID: "nw8_ERS10_group",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "custom_ers_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_ERS10_rx1ers"},
+							},
+						},
+					},
+				},
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
-		},
-		{
-			name:   "ResourceGroupNotFound",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: other_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-`,
-				}
+			{
+				ID: "sap_app_servers",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "rsc_sap_RX1_D00",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_D00_rx1app"},
+							},
+						},
+					},
+				},
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
-		},
-		{
-			name:   "InstanceNotFound",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * fs_ascs_POS       (ocf::heartbeat:Filesystem):     Started sap-posascs11 (unmanaged)
-    * gcp_ascs_healthcheck      (ocf::heartbeat:anything):       Started sap-posascs11 (unmanaged)
-    * gcp_ipaddr2_ascs  (ocf::heartbeat:IPaddr2):        Started sap-posascs11 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * fs_ers_POS        (ocf::heartbeat:Filesystem):     Started sap-posers12 (unmanaged)
-    * gcp_ers_healthcheck       (ocf::heartbeat:anything):       Started sap-posers12 (unmanaged)
-    * gcp_ipaddr2_ers   (ocf::heartbeat:IPaddr2):        Started sap-posers12 (unmanaged)
-`,
-				}
-			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
-		},
-		{
-			name:   "InstanceParseError",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Stopped sap-posascs11 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Stopped sap-posers12 (unmanaged)
-`,
-				}
-			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
-		},
-		{
-			name:   "Success",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-`,
-				}
-			},
-			wantASCSInstance: "sap-posascs11",
-			wantERSInstance:  "sap-posers12",
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	tests := []struct {
+		name      string
+		resources Resources
+		exec      commandlineexecutor.Execute
+		want      map[string]string
+	}{
+		{
+			name:      "NoSAPInstancePrimitives",
+			resources: Resources{},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: errors.New("unexpected crm_mon call")}
+			},
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
+			},
+		},
+		{
+			name:      "CRMMonCommandError",
+			resources: defaultCSResources,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{Error: errors.New("crm_mon failed")}
+			},
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
+			},
+		},
+		{
+			name:      "InvalidCRMMonXML",
+			resources: defaultCSResources,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{StdOut: "invalid xml"}
+			},
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
+			},
+		},
+		{
+			name:      "StoppedResources",
+			resources: defaultCSResources,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `<?xml version="1.0"?>
+<crm_mon version="2.0.1">
+  <resources>
+    <group id="grp_RX1_ASCS00">
+      <resource id="rsc_sap_RX1_ASCS00" resource_agent="ocf::heartbeat:SAPInstance" role="Stopped"/>
+    </group>
+    <group id="nw8_ERS10_group">
+      <resource id="custom_ers_primitive" resource_agent="ocf::heartbeat:SAPInstance" role="Stopped"/>
+    </group>
+  </resources>
+</crm_mon>`,
+				}
+			},
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
+			},
+		},
+		{
+			name:      "CustomGroupAndResourceNamesWithAppServerGroup",
+			resources: defaultCSResources,
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `<?xml version="1.0"?>
+<crm_mon version="2.0.1">
+  <resources>
+    <group id="sap_app_servers">
+      <resource id="rsc_sap_RX1_D00" resource_agent="ocf::heartbeat:SAPInstance" role="Started">
+        <node name="sap-app01"/>
+      </resource>
+    </group>
+    <group id="nw8_ERS10_group">
+      <resource id="custom_ers_primitive" resource_agent="ocf::heartbeat:SAPInstance" role="Started">
+        <node name="sap-posers12"/>
+      </resource>
+    </group>
+    <group id="grp_RX1_ASCS00">
+      <resource id="rsc_sap_RX1_ASCS00" resource_agent="ocf::heartbeat:SAPInstance" role="Started">
+        <node name="sap-posascs11"/>
+      </resource>
+    </group>
+  </resources>
+</crm_mon>`,
+				}
+			},
+			want: map[string]string{
+				"ascs_instance": "sap-posascs11",
+				"ers_instance":  "sap-posers12",
+			},
+		},
+		{
+			name: "JavaSCSInstanceNameFallbackAndUngroupedResources",
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "java_scs_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "InstanceName", Value: "ERS_SCS01_ax1scs"},
+							},
+						},
+					},
+					{
+						ID:        "java_ers_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/SCS/profile/SCS_ERS10_ax1ers"},
+							},
+						},
+					},
+				},
+			},
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: `<?xml version="1.0"?>
+<crm_mon version="2.0.1">
+  <resources>
+    <resource id="java_scs_primitive" resource_agent="ocf:heartbeat:SAPInstance" role="Started">
+      <node name="sap-javascs01"/>
+    </resource>
+    <resource id="java_ers_primitive" resource_agent="ocf:heartbeat:SAPInstance" role="Started">
+      <node name="sap-javaers02"/>
+    </resource>
+  </resources>
+</crm_mon>`,
+				}
+			},
+			want: map[string]string{
+				"ascs_instance": "sap-javascs01",
+				"ers_instance":  "sap-javaers02",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			got := map[string]string{}
-			collectASCSInstance(context.Background(), got, test.exists, test.exec)
-			if got["ascs_instance"] != test.wantASCSInstance {
-				t.Errorf("collectASCSInstance() got %v, want %v", got["ascs_instance"], test.wantASCSInstance)
-			}
-			if got["ers_instance"] != test.wantERSInstance {
-				t.Errorf("collectASCSInstance() got %v, want %v", got["ers_instance"], test.wantERSInstance)
+			collectASCSInstance(t.Context(), got, tc.resources, tc.exec)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("collectASCSInstance(%v) returned unexpected diff (-want +got):\n%s", tc.resources, diff)
 			}
 		})
 	}
