@@ -212,11 +212,6 @@ func waitForDataWarehouseActivation(ctx context.Context, params Parameters, freq
 // collectWorkloadMetricsOnce issues a heartbeat and initiates one round of metric collection.
 func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 	params.HeartbeatSpec.Beat()
-	if params.Remote {
-		log.CtxLogger(ctx).Info("Collecting metrics from remote instances")
-		collectAndSendRemoteMetrics(ctx, params)
-		return
-	}
 	log.CtxLogger(ctx).Info("Collecting metrics from this instance")
 	metrics := collectMetricsFromConfig(ctx, params, metricOverridePath)
 	sendMetrics(ctx, sendMetricsParams{
@@ -233,8 +228,7 @@ func collectWorkloadMetricsOnce(ctx context.Context, params Parameters) {
 // StartMetricsCollection continuously collects Workload Manager metrics for SAP workloads.
 // Returns true if the collection goroutine is started, and false otherwise.
 func StartMetricsCollection(ctx context.Context, params Parameters) bool {
-	if params.Config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() == nil &&
-		!params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
+	if !params.Config.GetCollectionConfiguration().GetCollectWorkloadValidationMetrics().GetValue() {
 		log.CtxLogger(ctx).Info("Not collecting Workload Manager metrics")
 		return false
 	}
@@ -252,14 +246,10 @@ func StartMetricsCollection(ctx context.Context, params Parameters) bool {
 				usagemetrics.LogActionDaily(v)
 			}
 		},
+		RoutineArg:          usagemetrics.CollectWLMMetrics,
 		ErrorCode:           usagemetrics.UsageMetricsDailyLogError,
 		UsageLogger:         *usagemetrics.Logger,
 		ExpectedMinDuration: 24 * time.Hour,
-	}
-	if params.Remote {
-		dailyUsageRoutine.RoutineArg = usagemetrics.RemoteWLMMetricsCollection
-	} else {
-		dailyUsageRoutine.RoutineArg = usagemetrics.CollectWLMMetrics
 	}
 	dailyUsageRoutine.StartRoutine(ctx)
 	collectRoutine = &recovery.RecoverableRoutine{

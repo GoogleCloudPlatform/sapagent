@@ -68,7 +68,6 @@ type Parameters struct {
 	Config                *cpb.Configuration
 	WorkloadConfig        *wlmpb.WorkloadValidation
 	WorkloadConfigCh      <-chan *cdpb.CollectionDefinition
-	Remote                bool
 	ConfigFileReader      ConfigFileReader
 	OSStatReader          OSStatReader
 	Execute               commandlineexecutor.Execute

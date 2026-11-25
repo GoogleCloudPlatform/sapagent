@@ -97,8 +97,6 @@ const (
 	WLMCollectionPacemakerRoutineFailure           = 56 //	Panic during WLMCollectionPacemaker routine
 	WLMCollectionCustomRoutineFailure              = 57 //	Panic during WLMCollectionCustom routine
 	AgentMetricsCollectAndSubmitFailure            = 58 //	AgentMetricsCollectAndSubmitFailure
-	RemoteCollectSSHFailure                        = 59 //	RemoteCollectSSHFailure
-	RemoteCollectGcloudFailure                     = 60 //	RemoteCollectGcloudFailure
 	ConfigureBackintFailure                        = 61 //	ConfigureBackint error during configuration/migration
 	CollectionDefinitionUpdateRoutineFailure       = 62 //	CollectionDefinitionUpdateRoutineFailure
 	HANAMonitoringCreateWorkerPoolFailure          = 63 //	HANAMonitoringCreateWorkerPoolFailure
@@ -120,7 +118,6 @@ const (
 	StatusCollectionFailure                        = 82 //	StatusCollectionFailure
 	HANAChangeDiskTypeSnapshotFailure              = 83 //	HANAChangeDiskTypeSnapshotFailure
 	HANAChangeDiskTypeRestoreFailure               = 84 //	HANAChangeDiskTypeRestoreFailure
-	RemoteValidationOTEFailure                     = 85 //	RemoteValidationFailure
 	SupportBundleUploadFailure                     = 86 //	SupportBundleUploadFailure
 	LogCollectionFailure                           = 87 //	LogCollectionFailure
 	CMEKDiskRestoreFailure                         = 88 //	CMEKDiskRestoreFailure
@@ -153,7 +150,6 @@ const (
 	ReadMetricsFinished                     = 20 //	ReadMetrics finished
 	InstallBackintStarted                   = 21 //	InstallBackint started
 	InstallBackintFinished                  = 22 //	InstallBackint finished
-	RemoteWLMMetricsCollection              = 23 //	Remote WLM Metrics Collection
 	ReliabilityStarted                      = 24 //	Reliability Started
 	ReliabilityFinished                     = 25 //	Reliability Finished
 	ConfigureBackintStarted                 = 26 //	ConfigureBackintStarted
@@ -210,8 +206,6 @@ const (
 	CollectStatus                           = 84 //	Collecting Status
 	HANAChangeDiskTypeStarted               = 85 //	HANAChangeDiskTypeStarted
 	HANAChangeDiskTypeFinished              = 86 //	HANAChangeDiskTypeFinished
-	RemoteValidationOTEStarted              = 87 //	RemoteValidationOTEStarted
-	RemoteValidationOTEFinished             = 88 //	RemoteValidationOTEFinished
 	SupportBundle                           = 89 //	SupportBundle
 	SupportBundleUploadStarted              = 90 //	SupportBundleUploadStarted
 	SupportBundleLocalCollection            = 91 //	SupportBundleLocalCollection

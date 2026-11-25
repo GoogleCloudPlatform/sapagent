@@ -196,12 +196,6 @@ func TestErrorConstants(t *testing.T) {
 	if AgentMetricsCollectAndSubmitFailure != 58 {
 		t.Errorf("AgentMetricsCollectAndSubmitFailure = %v, want 58", AgentMetricsCollectAndSubmitFailure)
 	}
-	if RemoteCollectSSHFailure != 59 {
-		t.Errorf("RemoteCollectSSHFailure = %v, want 59", RemoteCollectSSHFailure)
-	}
-	if RemoteCollectGcloudFailure != 60 {
-		t.Errorf("RemoteCollectGcloudFailure = %v, want 60", RemoteCollectGcloudFailure)
-	}
 	if ConfigureBackintFailure != 61 {
 		t.Errorf("ConfigureBackintFailure = %v, want 61", ConfigureBackintFailure)
 	}
@@ -264,9 +258,6 @@ func TestErrorConstants(t *testing.T) {
 	}
 	if HANAChangeDiskTypeRestoreFailure != 84 {
 		t.Errorf("HANAChangeDiskTypeRestoreFailure = %v, want 84", HANAChangeDiskTypeRestoreFailure)
-	}
-	if RemoteValidationOTEFailure != 85 {
-		t.Errorf("RemoteValidationOTEFailure = %v, want 85", RemoteValidationOTEFailure)
 	}
 	if SupportBundleUploadFailure != 86 {
 		t.Errorf("PacemakerDiagnosisFailure = %v, want 83", SupportBundleUploadFailure)
@@ -348,9 +339,6 @@ func TestActionConstants(t *testing.T) {
 	}
 	if InstallBackintFinished != 22 {
 		t.Errorf("InstallBackintFinished = %v, want 22", InstallBackintFinished)
-	}
-	if RemoteWLMMetricsCollection != 23 {
-		t.Errorf("RemoteWLMMetricsCollection = %v, want 23", RemoteWLMMetricsCollection)
 	}
 	if ReliabilityStarted != 24 {
 		t.Errorf("ReliabilityStarted = %v, want 24", ReliabilityStarted)
@@ -519,12 +507,6 @@ func TestActionConstants(t *testing.T) {
 	}
 	if HANAChangeDiskTypeFinished != 86 {
 		t.Errorf("HANAChangeDiskTypeFinished = %v, want 86", HANAChangeDiskTypeFinished)
-	}
-	if RemoteValidationOTEStarted != 87 {
-		t.Errorf("RemoteValidationOTEStarted = %v, want 87", RemoteValidationOTEStarted)
-	}
-	if RemoteValidationOTEFinished != 88 {
-		t.Errorf("RemoteValidationOTEFinished = %v, want 88", RemoteValidationOTEFinished)
 	}
 	if SupportBundle != 89 {
 		t.Errorf("SupportBundle = %v, want 85", SupportBundle)

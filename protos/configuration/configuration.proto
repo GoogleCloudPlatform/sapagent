@@ -64,7 +64,8 @@ message CollectionConfiguration {
   bool collect_process_metrics = 3;
   int64 process_metrics_frequency = 4;
   int64 process_metrics_send_frequency = 5 [deprecated = true];
-  WorkloadValidationRemoteCollection workload_validation_remote_collection = 6;
+  WorkloadValidationRemoteCollection workload_validation_remote_collection = 6
+      [deprecated = true];
   bool collect_experimental_metrics = 7;
   HANAMetricsConfig hana_metrics_config =
       8;  // HANA DB user credentials for process metrics.
@@ -99,6 +100,9 @@ message AgentProperties {
   bool log_usage_metrics = 3;
 }
 
+// Remote collection of Workload Manager metrics is deprecated and has no
+// effect. This message and the RemoteCollection* messages are kept so that
+// existing configuration files still parse.
 message WorkloadValidationRemoteCollection {
   string remote_collection_binary = 1;
   int64 concurrent_collections = 2;

@@ -50,7 +50,6 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/performancediagnostics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/readmetrics"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/reliability"
-	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/remotevalidation"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/service"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/status"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime/supportbundle"
@@ -96,7 +95,6 @@ func registerSubCommands(ctx context.Context, lp log.Parameters, cloudProps *iip
 		&performancediagnostics.Diagnose{},
 		&readmetrics.ReadMetrics{},
 		&reliability.Reliability{},
-		&remotevalidation.RemoteValidation{},
 		&service.Service{},
 		&status.Status{},
 		&supportbundle.SupportBundle{},

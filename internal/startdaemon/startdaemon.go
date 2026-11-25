@@ -398,7 +398,6 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		Config:            d.config,
 		WorkloadConfig:    cd.GetWorkloadValidation(),
 		WorkloadConfigCh:  chWLM,
-		Remote:            false,
 		TimeSeriesCreator: wlmMetricClient,
 		BackOffs:          cloudmonitoring.NewDefaultBackOffIntervals(),
 		Execute:           execute,
@@ -407,15 +406,6 @@ func (d *Daemon) startServices(ctx context.Context, cancel context.CancelFunc, g
 		GCEService:        gceService,
 		WLMService:        wlmService,
 		Discovery:         systemDiscovery,
-	}
-	if d.config.GetCollectionConfiguration().GetWorkloadValidationRemoteCollection() != nil {
-		// When set to collect workload manager metrics remotely then that is all this runtime will do.
-		wlmparams.Remote = true
-		log.Logger.Info("Collecting Workload Manager metrics remotely, will not start any other services")
-		wmCtx := log.SetCtx(ctx, "context", "WorkloadManagerMetrics")
-		workloadmanager.StartMetricsCollection(wmCtx, wlmparams)
-		waitForShutdown(ctx, shutdownch, cancel, restarting)
-		return
 	}
 
 	// The functions being called below should be asynchronous.

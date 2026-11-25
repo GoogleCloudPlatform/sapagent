@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"go.uber.org/zap/zapcore"
@@ -294,6 +295,47 @@ func TestReadFromFile(t *testing.T) {
 				t.Errorf("ReadFromFile() for path: %s\n(-want +got):\n%s", test.path, cmp.Diff(test.wantPMVersion, gotPMVersion))
 			}
 		})
+	}
+}
+
+func TestRead_WithDeprecatedFields(t *testing.T) {
+	readFunc := func(string) ([]byte, error) {
+		fileContent := `{
+			"collection_configuration": {
+				"workload_validation_remote_collection": {
+					"remote_collection_binary": "/usr/bin/google_cloud_sap_agent",
+					"concurrent_collections": 2,
+					"remote_collection_gcloud": {"ssh_username": "u", "use_internal_ip": true, "tunnel_through_iap": true, "gcloud_args": "a"},
+					"remote_collection_ssh": {"ssh_username": "u", "ssh_private_key_path": "/k"},
+					"remote_collection_instances": [{"project_id": "p", "zone": "z", "instance_id": "i", "instance_name": "n", "ssh_host_address": "h"}]
+				}
+			}
+		}`
+		return []byte(fileContent), nil
+	}
+	// The expected value is in text format so that the test does not reference
+	// the deprecated fields in Go code, which static analysis reports.
+	wantText := `
+		collection_configuration {
+			workload_validation_remote_collection {
+				remote_collection_binary: "/usr/bin/google_cloud_sap_agent"
+				concurrent_collections: 2
+				remote_collection_gcloud { ssh_username: "u" use_internal_ip: true tunnel_through_iap: true gcloud_args: "a" }
+				remote_collection_ssh { ssh_username: "u" ssh_private_key_path: "/k" }
+				remote_collection_instances { project_id: "p" zone: "z" instance_id: "i" instance_name: "n" ssh_host_address: "h" }
+			}
+		}`
+	want := &cpb.Configuration{}
+	if err := prototext.Unmarshal([]byte(wantText), want); err != nil {
+		t.Fatalf("prototext.Unmarshal() failed: %v", err)
+	}
+
+	got, err := Read("", readFunc)
+	if err != nil {
+		t.Fatalf("Read() returned an unexpected error: %v", err)
+	}
+	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+		t.Errorf("Read() returned unexpected diff (-want +got):\n%s", diff)
 	}
 }
 

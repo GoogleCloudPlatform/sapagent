@@ -546,32 +546,6 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
-				Remote:            false,
-				BackOffs:          defaultBackOffIntervals,
-			},
-			wlmInterface: &wlmfake.TestWLM{
-				WriteInsightErrs: []error{nil},
-			},
-			want: true,
-		},
-		{
-			name: "succeedsForRemote",
-			params: Parameters{
-				Config:           defaultConfiguration,
-				WorkloadConfig:   &wlmpb.WorkloadValidation{},
-				WorkloadConfigCh: make(chan *cdpb.CollectionDefinition),
-				Execute: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-					return commandlineexecutor.Result{
-						StdOut: "",
-						StdErr: "",
-					}
-				},
-				Exists:            func(string) bool { return true },
-				ConfigFileReader:  DefaultTestReader,
-				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
-				TimeSeriesCreator: &fake.TimeSeriesCreator{},
-				OSType:            "linux",
-				Remote:            true,
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{
@@ -596,7 +570,6 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
-				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{
@@ -647,7 +620,6 @@ func TestStartMetricsCollection(t *testing.T) {
 				OSStatReader:      func(data string) (os.FileInfo, error) { return nil, nil },
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
-				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 			},
 			wlmInterface: &wlmfake.TestWLM{},
@@ -831,7 +803,6 @@ func TestCollectAndSend_shouldBeatAccordingToHeartbeatSpec(t *testing.T) {
 				},
 				TimeSeriesCreator: &fake.TimeSeriesCreator{},
 				OSType:            "linux",
-				Remote:            false,
 				BackOffs:          defaultBackOffIntervals,
 				WLMService: &wlmfake.TestWLM{
 					T:                t,
