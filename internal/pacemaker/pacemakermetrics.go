@@ -41,7 +41,6 @@ import (
 )
 
 var (
-	sapInstanceRegex               = regexp.MustCompile("Started ([A-Za-z0-9-]+)")
 	sapstartsrvRegex               = regexp.MustCompile("sapstartsrv pf=(?:/sapmnt|/usr/sap)/([A-Z][A-Z0-9]{2})/[/a-zA-Z0-9]*profile/")
 	pacemakerClusterUnhealthyRegex = regexp.MustCompile(`\b(offline|unclean|stopped|failed)\b`)
 	ipAddressRegex                 = regexp.MustCompile(`\(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\)`)
@@ -209,20 +208,29 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 		log.CtxLogger(ctx).Debug("No cloud properties")
 		return 0.0, labels
 	}
+
+	// Parse the Pacemaker configuration XML (required for most metrics).
 	properties := params.Config.GetCloudProperties()
 	projectID := properties.GetProjectId()
 	crmAvailable := params.Exists("crm")
 	pacemakerXMLString := XMLString(ctx, params.Execute, crmAvailable)
-
 	if pacemakerXMLString == nil {
 		log.CtxLogger(ctx).Debug("No pacemaker xml")
 		return 0.0, labels
 	}
 	pacemakerDocument, err := ParseXML([]byte(*pacemakerXMLString))
-
 	if err != nil {
 		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
 		return 0.0, labels
+	}
+
+	// Parse the local Pacemaker node name (not guaranteed to be the same as the instance name).
+	localNodeName := setLocalNodeName(ctx, params.Execute, properties.GetInstanceName())
+
+	// Parse the Pacemaker cluster resource manager (crm_mon) XML.
+	crmMon, err := data(ctx, params.Execute)
+	if err != nil {
+		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker crm_mon xml", "error", err)
 	}
 
 	instances := clusterNodes(pacemakerDocument.Configuration.Nodes)
@@ -230,22 +238,19 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	// This should prevent collisions when searching within a substring.
 	// Ex: instance11, ... , instance1
 	sort.Slice(instances, func(i, j int) bool { return len(instances[i]) > len(instances[j]) })
-
 	results := setPacemakerPrimitives(ctx, labels, pacemakerDocument.Configuration.Resources, instances, params.Config)
-
 	if id, ok := results["projectId"]; ok {
 		projectID = id
 	}
 
-	bearerToken, err := getBearerToken(ctx, results["serviceAccountJsonFile"], params.ConfigFileReader,
-		params.JSONCredentialsGetter, params.DefaultTokenGetter)
+	bearerToken, err := getBearerToken(ctx, results["serviceAccountJsonFile"], params.ConfigFileReader, params.JSONCredentialsGetter, params.DefaultTokenGetter)
 	if err != nil {
-		log.CtxLogger(ctx).Debugw("Could not parse the pacemaker configuration xml", "xml", *pacemakerXMLString, "error", err)
+		log.CtxLogger(ctx).Debugw("Could not obtain fence agent bearer token", "serviceAccountJsonFile", results["serviceAccountJsonFile"], "error", err)
 		return 0.0, labels
 	}
+
 	rscLocations := pacemakerDocument.Configuration.Constraints.RSCLocations
 	locationPreferenceSet := "false"
-
 	for _, rscLocation := range rscLocations {
 		idNode := rscLocation.ID
 		if strings.HasPrefix(idNode, "cli-prefer-") {
@@ -285,7 +290,7 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 
 	setPacemakerStonithClusterProperty(labels, pacemakerDocument.Configuration.CRMConfig.ClusterPropertySets)
 
-	collectASCSInstance(ctx, labels, params.Exists, params.Execute)
+	collectASCSInstance(ctx, labels, pacemakerDocument.Configuration.Resources, crmMon, localNodeName, properties.GetInstanceName())
 	collectEnqueueServer(ctx, labels, params.Execute)
 	setASCSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups, params.Execute)
 	setERSConfigMetrics(ctx, labels, pacemakerDocument.Configuration.Resources.Groups)
@@ -298,6 +303,23 @@ func collectPacemakerValAndLabels(ctx context.Context, params Parameters) (float
 	setHealthCheckInternalLoadBalancerMetrics(labels, pacemakerDocument.Configuration.Resources.Groups)
 
 	return 1.0, labels
+}
+
+// setLocalNodeName returns the local Pacemaker node name for the instance.
+func setLocalNodeName(ctx context.Context, exec commandlineexecutor.Execute, instanceName string) string {
+	var localNodeName string
+	var err error
+	crmNodeResult := exec(ctx, commandlineexecutor.Params{
+		Executable: "crm_node",
+		Args:       []string{"-n"},
+	})
+	if crmNodeResult.Error != nil {
+		log.CtxLogger(ctx).Debugw("Could not obtain local node name from crm_node, falling back to cloud properties", "error", err)
+		localNodeName = instanceName
+	} else {
+		localNodeName = strings.TrimSpace(crmNodeResult.StdOut)
+	}
+	return localNodeName
 }
 
 // clusterNodes returns a list of VM instance names from a list of CIBNode objects.
@@ -647,58 +669,97 @@ func getBearerToken(ctx context.Context, serviceAccountJSONFile string, fileRead
 	return token, err
 }
 
-// collectASCSInstance determines the VM instances serving as the ASCS/ERS resource group.
-func collectASCSInstance(ctx context.Context, labels map[string]string, exists commandlineexecutor.Exists, exec commandlineexecutor.Execute) {
+// collectASCSInstance determines the VM instances currently running the ASCS/SCS and ERS resources
+// by matching SAPInstance primitive IDs (classified via START_PROFILE or InstanceName in the CIB)
+// against active resource placements in crm_mon XML output.
+func collectASCSInstance(ctx context.Context, labels map[string]string, resources Resources, crmMon *CRMMon, localNodeName, instanceName string) {
 	labels["ascs_instance"] = ""
 	labels["ers_instance"] = ""
 
-	var command string
-	switch {
-	case exists("crm"):
-		command = "crm"
-	case exists("pcs"):
-		command = "pcs"
-	default:
-		log.CtxLogger(ctx).Debug("Could not determine Pacemaker command-line tool. Skipping ascs_instance metric collection.")
+	if crmMon == nil {
+		log.CtxLogger(ctx).Debug("could not fetch crm_mon data, skipping metric collection for: ascs_instance, ers_instance")
 		return
 	}
 
-	result := exec(ctx, commandlineexecutor.Params{
-		Executable: command,
-		Args:       []string{"status"},
-	})
-	if result.Error != nil {
-		log.CtxLogger(ctx).Debugw(fmt.Sprintf("Failed to get %s status. Skipping ascs_instance metric collection.", command), "error", result.Error)
+	ascsID, ersID := sapInstancePrimitiveIDs(resources)
+	if ascsID == "" && ersID == "" {
+		log.CtxLogger(ctx).Debug("could not fetch SAPInstance primitive IDs, skipping metric collection for: ascs_instance, ers_instance")
+		return
 	}
 
-	lines := strings.Split(result.StdOut, "\n")
-	inASCSResourceGroup, inERSResourceGroup := false, false
-	for _, line := range lines {
-		switch {
-		case strings.Contains(line, "Resource Group: ascs"):
-			inASCSResourceGroup = true
-			inERSResourceGroup = false
-		case strings.Contains(line, "Resource Group: ers"):
-			inERSResourceGroup = true
-			inASCSResourceGroup = false
-		case strings.Contains(line, "Resource Group:"):
-			inASCSResourceGroup = false
-			inERSResourceGroup = false
-		case inASCSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
-			match := sapInstanceRegex.FindStringSubmatch(line)
-			if len(match) != 2 {
-				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ASCS instance name.", command), "line", line)
-				continue
-			}
-			labels["ascs_instance"] = match[1]
-		case inERSResourceGroup && strings.Contains(line, "ocf::heartbeat:SAPInstance"):
-			match := sapInstanceRegex.FindStringSubmatch(line)
-			if len(match) != 2 {
-				log.CtxLogger(ctx).Debugw(fmt.Sprintf("Unexpected output from %s status: could not parse ERS instance name.", command), "line", line)
-				continue
-			}
-			labels["ers_instance"] = match[1]
+	var crmResources []CRMResource
+	crmResources = append(crmResources, crmMon.Resources.Group...)
+	crmResources = append(crmResources, crmMon.Resources.General...)
+	for _, r := range crmResources {
+		if r.Role != "Started" || r.Node.Name == "" || r.ID == "" {
+			continue
 		}
+		switch r.ID {
+		case ascsID:
+			labels["ascs_instance"] = r.Node.Name
+		case ersID:
+			labels["ers_instance"] = r.Node.Name
+		}
+	}
+
+	if labels["ascs_instance"] == localNodeName {
+		labels["ascs_instance"] = instanceName
+	}
+	if labels["ers_instance"] == localNodeName {
+		labels["ers_instance"] = instanceName
+	}
+}
+
+func sapInstancePrimitiveIDs(resources Resources) (ascsID, ersID string) {
+	var primitives []PrimitiveClass
+	for _, group := range resources.Groups {
+		primitives = append(primitives, group.Primitives...)
+	}
+	primitives = append(primitives, resources.Primitives...)
+
+	for _, primitive := range primitives {
+		if primitive.ClassType != "SAPInstance" || primitive.ID == "" {
+			continue
+		}
+		switch sapInstanceRole(sapInstanceProfileOrName(primitive.InstanceAttributes.NVPairs)) {
+		case "ascs":
+			if ascsID == "" {
+				ascsID = primitive.ID
+			}
+		case "ers":
+			if ersID == "" {
+				ersID = primitive.ID
+			}
+		}
+	}
+	return ascsID, ersID
+}
+
+func sapInstanceProfileOrName(nvPairs []NVPair) string {
+	var instanceName string
+	for _, nvPair := range nvPairs {
+		switch nvPair.Name {
+		case "START_PROFILE":
+			return nvPair.Value
+		case "InstanceName":
+			instanceName = nvPair.Value
+		}
+	}
+	return instanceName
+}
+
+func sapInstanceRole(value string) string {
+	switch {
+	case strings.Contains(value, "_ASCS"), strings.Contains(value, "_SCS"):
+		return "ascs"
+	case strings.Contains(value, "_ERS"):
+		return "ers"
+	case strings.Contains(value, "SCS"):
+		return "ascs"
+	case strings.Contains(value, "ERS"):
+		return "ers"
+	default:
+		return ""
 	}
 }
 
@@ -1113,7 +1174,7 @@ func setHealthCheckInternalLoadBalancerMetrics(labels map[string]string, groups 
 	labels["has_alias_ip"] = "false"
 
 	for _, group := range groups {
-		var settings = make(map[string]string)
+		settings := make(map[string]string)
 		var prefix string
 		for _, primitive := range group.Primitives {
 			switch primitive.ClassType {

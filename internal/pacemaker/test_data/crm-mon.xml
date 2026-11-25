@@ -1,0 +1,40 @@
+<!--
+Copyright 2026 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<?xml version="1.0"?>
+<crm_mon version="2.0.1">
+  <nodes>
+    <node name="sap-posascs11" id="1" online="true" standby="false" standby_onfail="false" maintenance="true" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="true" resources_running="1" type="member" />
+    <node name="sap-posers12" id="2" online="true" standby="false" standby_onfail="false" maintenance="false" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="false" resources_running="1" type="member" />
+    <node name="sap-app01" id="3" online="true" standby="false" standby_onfail="false" maintenance="false" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="false" resources_running="1" type="member" />
+  </nodes>
+  <resources>
+    <group id="grp_RX1_ASCS00" number_resources="1">
+      <resource id="rsc_sap_RX1_ASCS00" resource_agent="ocf::heartbeat:SAPInstance" role="Started" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="sap-posascs11" id="1" cached="false" />
+      </resource>
+    </group>
+    <group id="nw8_ERS10_group" number_resources="1">
+      <resource id="custom_ers_primitive" resource_agent="ocf::heartbeat:SAPInstance" role="Started" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="sap-posers12" id="2" cached="false" />
+      </resource>
+    </group>
+    <group id="sap_app_servers" number_resources="1">
+      <resource id="rsc_sap_RX1_D00" resource_agent="ocf::heartbeat:SAPInstance" role="Started" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="sap-app01" id="3" cached="false" />
+      </resource>
+    </group>
+  </resources>
+</crm_mon>

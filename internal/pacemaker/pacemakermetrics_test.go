@@ -69,6 +69,8 @@ type (
 var (
 	//go:embed test_data/credentials.json
 	defaultCredentials string
+	//go:embed test_data/crm-mon.xml
+	defaultCRMMonXML string
 	//go:embed test_data/metricoverride.yaml
 	testFS embed.FS
 
@@ -526,6 +528,15 @@ func wantSuccessfulAccessPacemakerMetrics(ts *timestamppb.Timestamp, pacemakerEx
 		"cluster_healthy":                   "true",
 		"saphanasr_angi_installed":          "true",
 	}
+}
+
+func mustParseCRMMon(t *testing.T, xmlData string) *CRMMon {
+	t.Helper()
+	crmMon, err := parseCRMMon([]byte(xmlData))
+	if err != nil {
+		t.Fatalf("parseCRMMon() returned unexpected error: %v", err)
+	}
+	return crmMon
 }
 
 func TestCheckAPIAccess(t *testing.T) {
@@ -1538,9 +1549,33 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 		locationPref        string
 	}{
 		{
-			name:                "XMLNotFound",
-			osVendorID:          "rhel",
-			exec:                defaultExec,
+			name:       "NilCloudProperties",
+			osVendorID: "rhel",
+			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
+				return commandlineexecutor.Result{
+					StdOut: pacemakerCloneXML,
+					StdErr: "",
+				}
+			},
+			exists:              defaultExists,
+			config:              defaultPacemakerConfigNoCloudProperties,
+			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
+			wantPacemakerExists: float64(0.0),
+			wantPacemakerLabels: wantNoPropertiesPacemakerMetrics,
+			locationPref:        "false",
+		},
+		{
+			name:       "XMLNotFound",
+			osVendorID: "rhel",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "rpm" {
+					return commandlineexecutor.Result{}
+				}
+				return commandlineexecutor.Result{
+					Error:    errors.New("command not found"),
+					ExitCode: 1,
+				}
+			},
 			exists:              func(string) bool { return false },
 			config:              defaultConfiguration,
 			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
@@ -1552,7 +1587,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
-					StdOut: "Error: Bad XML",
+					StdOut: "Not XML content",
 					StdErr: "",
 				}
 			},
@@ -1582,7 +1617,7 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			wantPacemakerLabels: wantServiceAccountErrorPacemakerMetrics,
 		},
 		{
-			name:       "ServiceAccountReadSuccess",
+			name:       "ServiceAccountReadWithNoAccess",
 			osVendorID: "rhel",
 			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
 				return commandlineexecutor.Result{
@@ -1597,6 +1632,39 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			credGetter:          defaultCredGetter,
 			wantPacemakerExists: float64(1.0),
 			wantPacemakerLabels: wantDefaultPacemakerMetrics,
+			locationPref:        "false",
+		},
+		{
+			name:       "ServiceAccountReadWithAccess",
+			osVendorID: "rhel",
+			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
+				if params.Executable == "curl" {
+					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
+					}
+					if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
+						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}` {
+						return commandlineexecutor.Result{
+							StdOut: jsonHealthyResponse,
+							StdErr: "",
+						}
+					}
+				}
+				return commandlineexecutor.Result{
+					StdOut: pacemakerServiceAccountXML,
+					StdErr: "",
+				}
+			},
+			exists:              defaultExists,
+			config:              defaultConfiguration,
+			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
+			fileReader:          defaultFileReader,
+			credGetter:          defaultCredGetter,
+			wantPacemakerExists: float64(1.0),
+			wantPacemakerLabels: wantSuccessfulAccessPacemakerMetrics,
 			locationPref:        "false",
 		},
 		{
@@ -1669,39 +1737,6 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			locationPref:        "false",
 		},
 		{
-			name:       "ProjectID",
-			osVendorID: "rhel",
-			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
-				if params.Executable == "curl" {
-					if params.Args[2] == "https://compute.googleapis.com/compute/v1/projects/core-connect-dev?fields=id" {
-						return commandlineexecutor.Result{
-							StdOut: jsonHealthyResponse,
-							StdErr: "",
-						}
-					}
-					if params.Args[8] == fmt.Sprintf(`{"dryRun": true, "entries": [{"logName": "projects/%s`, "core-connect-dev")+
-						`/logs/test-log", "resource": {"type": "gce_instance"}, "textPayload": "foo"}]}` {
-						return commandlineexecutor.Result{
-							StdOut: jsonHealthyResponse,
-							StdErr: "",
-						}
-					}
-				}
-				return commandlineexecutor.Result{
-					StdOut: pacemakerServiceAccountXML,
-					StdErr: "",
-				}
-			},
-			exists:              defaultExists,
-			config:              defaultConfiguration,
-			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
-			fileReader:          defaultFileReader,
-			credGetter:          defaultCredGetter,
-			wantPacemakerExists: float64(1.0),
-			wantPacemakerLabels: wantSuccessfulAccessPacemakerMetrics,
-			locationPref:        "false",
-		},
-		{
 			name:       "LocationPref",
 			osVendorID: "sles",
 			exec: func(ctx context.Context, params commandlineexecutor.Params) commandlineexecutor.Result {
@@ -1752,22 +1787,6 @@ func TestCollectPacemakerMetrics(t *testing.T) {
 			tokenGetter:         defaultToxenGetter,
 			wantPacemakerExists: float64(1.0),
 			wantPacemakerLabels: wantClonePacemakerMetrics,
-			locationPref:        "false",
-		},
-		{
-			name:       "NilCloudProperties",
-			osVendorID: "rhel",
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: pacemakerCloneXML,
-					StdErr: "",
-				}
-			},
-			exists:              defaultExists,
-			config:              defaultPacemakerConfigNoCloudProperties,
-			workloadConfig:      collectionDefinition.GetWorkloadValidation(),
-			wantPacemakerExists: float64(0.0),
-			wantPacemakerLabels: wantNoPropertiesPacemakerMetrics,
 			locationPref:        "false",
 		},
 	}
@@ -2042,132 +2061,187 @@ func TestPacemakerHanaTopology(t *testing.T) {
 }
 
 func TestCollectASCSInstance(t *testing.T) {
+	defaultCSResources := Resources{
+		Groups: []Group{
+			{
+				ID: "grp_RX1_ASCS00",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "rsc_sap_RX1_ASCS00",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_ASCS00_rx1ascs"},
+							},
+						},
+					},
+				},
+			},
+			{
+				ID: "nw8_ERS10_group",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "custom_ers_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_ERS10_rx1ers"},
+							},
+						},
+					},
+				},
+			},
+			{
+				ID: "sap_app_servers",
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "rsc_sap_RX1_D00",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/RX1/profile/RX1_D00_rx1app"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	defaultCRMMon := mustParseCRMMon(t, defaultCRMMonXML)
+
 	tests := []struct {
-		name             string
-		exists           commandlineexecutor.Exists
-		exec             commandlineexecutor.Execute
-		wantASCSInstance string
-		wantERSInstance  string
+		name          string
+		resources     Resources
+		crmMon        *CRMMon
+		localNodeName string
+		instanceName  string
+		want          map[string]string
 	}{
 		{
-			name:   "CommandLineToolNotExists",
-			exists: func(string) bool { return false },
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-`,
-				}
+			name:          "NoCRMMonData",
+			resources:     defaultCSResources,
+			localNodeName: "sap-posascs11",
+			instanceName:  "vm-sap-posascs11",
+			crmMon:        nil,
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
 		},
 		{
-			name:   "CommandLineStatusError",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					Error: errors.New("Something went wrong"),
-				}
+			name:          "NoSAPInstancePrimitives",
+			resources:     Resources{},
+			crmMon:        defaultCRMMon,
+			localNodeName: "sap-posascs11",
+			instanceName:  "vm-sap-posascs11",
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
 		},
 		{
-			name:   "ResourceGroupNotFound",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: other_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-`,
-				}
+			name:      "StoppedResources",
+			resources: defaultCSResources,
+			crmMon: &CRMMon{
+				Resources: CRMResources{
+					Group: []CRMResource{
+						{
+							ID:    "grp_RX1_ASCS00",
+							Agent: "ocf::heartbeat:SAPInstance",
+							Role:  "Stopped",
+							Node:  CRMResourceNode{Name: "sap-posascs11"},
+						},
+						{
+							ID:    "nw8_ERS10_group",
+							Agent: "ocf::heartbeat:SAPInstance",
+							Role:  "Stopped",
+							Node:  CRMResourceNode{Name: "sap-posers12"},
+						},
+					},
+				},
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
+			want: map[string]string{
+				"ascs_instance": "",
+				"ers_instance":  "",
+			},
 		},
 		{
-			name:   "InstanceNotFound",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * fs_ascs_POS       (ocf::heartbeat:Filesystem):     Started sap-posascs11 (unmanaged)
-    * gcp_ascs_healthcheck      (ocf::heartbeat:anything):       Started sap-posascs11 (unmanaged)
-    * gcp_ipaddr2_ascs  (ocf::heartbeat:IPaddr2):        Started sap-posascs11 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * fs_ers_POS        (ocf::heartbeat:Filesystem):     Started sap-posers12 (unmanaged)
-    * gcp_ers_healthcheck       (ocf::heartbeat:anything):       Started sap-posers12 (unmanaged)
-    * gcp_ipaddr2_ers   (ocf::heartbeat:IPaddr2):        Started sap-posers12 (unmanaged)
-`,
-				}
+			name:          "ASCSInstanceNameSubstitution",
+			resources:     defaultCSResources,
+			crmMon:        defaultCRMMon,
+			localNodeName: "sap-posascs11",
+			instanceName:  "vm-sap-posascs11",
+			want: map[string]string{
+				"ascs_instance": "vm-sap-posascs11",
+				"ers_instance":  "sap-posers12",
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
 		},
 		{
-			name:   "InstanceParseError",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Stopped sap-posascs11 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Stopped sap-posers12 (unmanaged)
-`,
-				}
+			name:          "ERSInstanceNameSubstitution",
+			resources:     defaultCSResources,
+			crmMon:        defaultCRMMon,
+			localNodeName: "sap-posers12",
+			instanceName:  "vm-sap-posers12",
+			want: map[string]string{
+				"ascs_instance": "sap-posascs11",
+				"ers_instance":  "vm-sap-posers12",
 			},
-			wantASCSInstance: "",
-			wantERSInstance:  "",
 		},
 		{
-			name:   "Success",
-			exists: defaultExists,
-			exec: func(context.Context, commandlineexecutor.Params) commandlineexecutor.Result {
-				return commandlineexecutor.Result{
-					StdOut: `
-Full List of Resources:
-  * gce_stonith_sap-posers12    (stonith:fence_gce):     Started sap-posascs11 (unmanaged)
-  * gce_stonith_sap-posascs11   (stonith:fence_gce):     Started sap-posers12 (unmanaged)
-  * Resource Group: ers_resource_group (unmanaged):
-    * gcp_ers_instance  (ocf::heartbeat:SAPInstance):    Started sap-posers12 (unmanaged)
-  * Resource Group: ascs_resource_group (unmanaged):
-    * gcp_ascs_instance (ocf::heartbeat:SAPInstance):    Started sap-posascs11 (unmanaged)
-`,
-				}
+			name: "JavaSCSInstanceNameFallbackAndUngroupedResources",
+			resources: Resources{
+				Primitives: []PrimitiveClass{
+					{
+						ID:        "java_scs_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "InstanceName", Value: "ERS_SCS01_ax1scs"},
+							},
+						},
+					},
+					{
+						ID:        "java_ers_primitive",
+						ClassType: "SAPInstance",
+						InstanceAttributes: ClusterPropertySet{
+							NVPairs: []NVPair{
+								{Name: "START_PROFILE", Value: "/sapmnt/SCS/profile/SCS_ERS10_ax1ers"},
+							},
+						},
+					},
+				},
 			},
-			wantASCSInstance: "sap-posascs11",
-			wantERSInstance:  "sap-posers12",
+			crmMon: &CRMMon{
+				Resources: CRMResources{
+					General: []CRMResource{
+						{
+							ID:    "java_scs_primitive",
+							Agent: "ocf::heartbeat:SAPInstance",
+							Role:  "Started",
+							Node:  CRMResourceNode{Name: "sap-javascs01"},
+						},
+						{
+							ID:    "java_ers_primitive",
+							Agent: "ocf::heartbeat:SAPInstance",
+							Role:  "Started",
+							Node:  CRMResourceNode{Name: "sap-javaers02"},
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"ascs_instance": "sap-javascs01",
+				"ers_instance":  "sap-javaers02",
+			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			got := map[string]string{}
-			collectASCSInstance(context.Background(), got, test.exists, test.exec)
-			if got["ascs_instance"] != test.wantASCSInstance {
-				t.Errorf("collectASCSInstance() got %v, want %v", got["ascs_instance"], test.wantASCSInstance)
-			}
-			if got["ers_instance"] != test.wantERSInstance {
-				t.Errorf("collectASCSInstance() got %v, want %v", got["ers_instance"], test.wantERSInstance)
+			collectASCSInstance(t.Context(), got, tc.resources, tc.crmMon, tc.localNodeName, tc.instanceName)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("collectASCSInstance(%v) returned unexpected diff (-want +got):\n%s", tc.resources, diff)
 			}
 		})
 	}
