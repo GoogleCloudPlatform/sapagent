@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	"github.com/GoogleCloudPlatform/sapagent/internal/usagemetrics"
 	bpb "github.com/GoogleCloudPlatform/sapagent/protos/backint"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
@@ -43,6 +45,23 @@ var hdbbackintScript []byte
 
 // DateTimeMinutes is a reference for timestamps to minute granularity.
 const DateTimeMinutes = "2006-01-02T15:04"
+
+const (
+	// agentBinary is the installed path of the Google Cloud Agent for SAP binary.
+	agentBinary = "/usr/bin/google_cloud_sap_agent"
+
+	// sidAdmMarkerEnv is set in the environment of the installbackint run that
+	// a root run starts as <sid>adm. It stops that run from starting another one.
+	sidAdmMarkerEnv = "GOOGLE_CLOUD_SAP_AGENT_INSTALLBACKINT_SIDADM_MARKER"
+
+	// sidAdmTimeoutSec is the time limit, in seconds, for the installbackint
+	// run as <sid>adm.
+	sidAdmTimeoutSec = 300
+)
+
+// sidRegex matches a SAP system ID: three letters or digits, starting with a
+// letter.
+var sidRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9]{2}$`)
 
 type (
 	// mkdirFunc provides a testable replacement for os.MkdirAll.
@@ -87,6 +106,7 @@ type InstallBackint struct {
 	readFile  readFileFunc
 	chmod     chmodFunc
 	chown     chownFunc
+	exec      commandlineexecutor.Execute
 	oteLogger *onetime.OTELogger
 }
 
@@ -139,6 +159,10 @@ func (b *InstallBackint) Run(ctx context.Context, runOpts *onetime.RunOptions) s
 			return subcommands.ExitUsageError
 		}
 	}
+	if !sidRegex.MatchString(b.SID) {
+		b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", fmt.Errorf("%q is not a valid sid, it must be three letters or digits and start with a letter\n%s", b.SID, b.Usage()))
+		return subcommands.ExitUsageError
+	}
 
 	b.mkdir = os.MkdirAll
 	b.writeFile = os.WriteFile
@@ -151,12 +175,66 @@ func (b *InstallBackint) Run(ctx context.Context, runOpts *onetime.RunOptions) s
 	// Lchown works similar to chown except it can change
 	// the uid and gid of symbolic links as well.
 	b.chown = os.Lchown
+	b.exec = commandlineexecutor.ExecuteCommand
+
+	// installbackint only changes files that <sid>adm owns, so it never needs
+	// root. Root must not operate on paths that <sid>adm controls, so a root
+	// run hands the installation over to <sid>adm.
+	if os.Geteuid() == 0 {
+		exitStatus, err := b.runAsSIDAdm(ctx)
+		if err != nil {
+			b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", err)
+			b.oteLogger.LogUsageError(usagemetrics.InstallBackintFailure)
+		}
+		return exitStatus
+	}
 	if err := b.installBackintHandler(ctx, fmt.Sprintf("/usr/sap/%s/SYS/global/hdb/opt", b.SID)); err != nil {
 		b.oteLogger.LogErrorToFileAndConsole(ctx, "Backint installation: FAILED", err)
 		b.oteLogger.LogUsageError(usagemetrics.InstallBackintFailure)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
+}
+
+// runAsSIDAdm runs installbackint again as the <sid>adm user, which is the
+// user that the public documentation says to run it as. It reports the output
+// of that run and returns its exit status.
+//
+// runAsSIDAdm returns an error if it could not run installbackint as <sid>adm.
+// A run that started and then failed is not an error: that run reports its own
+// failure, and runAsSIDAdm returns its exit status.
+func (b *InstallBackint) runAsSIDAdm(ctx context.Context) (subcommands.ExitStatus, error) {
+	user := strings.ToLower(b.SID) + "adm"
+	if os.Getenv(sidAdmMarkerEnv) != "" {
+		// This is already the run as <sid>adm, and it is still root.
+		return subcommands.ExitFailure, fmt.Errorf("installbackint is still root after switching to user %s, run installbackint as user %s", user, user)
+	}
+	args := []string{b.Name(), "-sid=" + b.SID}
+	if b.logLevel != "" {
+		args = append(args, "-loglevel="+b.logLevel)
+	}
+	if b.logPath != "" {
+		args = append(args, "-log-path="+b.logPath)
+	}
+
+	b.oteLogger.LogMessageToFileAndConsole(ctx, fmt.Sprintf("installbackint does not need root, running it as user %s.", user))
+	result := b.exec(ctx, commandlineexecutor.Params{
+		Executable: agentBinary,
+		Args:       args,
+		User:       user,
+		Env:        []string{sidAdmMarkerEnv + "=true"},
+		Timeout:    sidAdmTimeoutSec,
+	})
+	for _, output := range []string{result.StdOut, result.StdErr} {
+		if output = strings.TrimSpace(output); output != "" {
+			b.oteLogger.LogMessageToFileAndConsole(ctx, output)
+		}
+	}
+	if result.Error != nil && !result.ExitStatusParsed {
+		return subcommands.ExitFailure, fmt.Errorf("running installbackint as user %s, ensure the sid is correct or run it as that user: %v", user, result.Error)
+	}
+	// installbackint ran as <sid>adm. If it failed, it reported that itself.
+	return subcommands.ExitStatus(result.ExitCode), nil
 }
 
 // installBackintHandler creates directories, files, and symlinks

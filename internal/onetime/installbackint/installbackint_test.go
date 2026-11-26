@@ -18,6 +18,7 @@ package installbackint
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/google/subcommands"
 	"github.com/GoogleCloudPlatform/sapagent/internal/onetime"
 	ipb "github.com/GoogleCloudPlatform/sapagent/protos/instanceinfo"
+	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/commandlineexecutor"
 	"github.com/GoogleCloudPlatform/workloadagentplatform/sharedlibraries/log"
 )
 
@@ -157,6 +159,143 @@ func defaultStatNotExist(numNil int) func(string, *unix.Stat_t) error {
 			return nil
 		}
 		return os.ErrNotExist
+	}
+}
+
+// sidAdmCommand returns the command that runAsSIDAdm runs as user, with args.
+func sidAdmCommand(user string, args ...string) []commandlineexecutor.Params {
+	return []commandlineexecutor.Params{{
+		Executable: "/usr/bin/google_cloud_sap_agent",
+		Args:       args,
+		User:       user,
+		Env:        []string{"GOOGLE_CLOUD_SAP_AGENT_INSTALLBACKINT_SIDADM_MARKER=true"},
+		Timeout:    300,
+	}}
+}
+
+func TestRunAsSIDAdm(t *testing.T) {
+	tests := []struct {
+		name         string
+		b            InstallBackint
+		sidAdmMarker string
+		result       commandlineexecutor.Result
+		want         subcommands.ExitStatus
+		wantErr      error
+		wantParams   []commandlineexecutor.Params
+	}{
+		{
+			name:         "FailStillRootAsSIDAdm",
+			b:            InstallBackint{SID: "TST"},
+			sidAdmMarker: "true",
+			want:         subcommands.ExitFailure,
+			wantErr:      cmpopts.AnyError,
+		},
+		{
+			name:       "FailStartInstallBackint",
+			b:          InstallBackint{SID: "TST"},
+			result:     commandlineexecutor.Result{Error: errors.New("failed to fetch IDs")},
+			want:       subcommands.ExitFailure,
+			wantErr:    cmpopts.AnyError,
+			wantParams: sidAdmCommand("tstadm", "installbackint", "-sid=TST"),
+		},
+		{
+			name:       "InstallBackintFailure",
+			b:          InstallBackint{SID: "TST"},
+			result:     commandlineexecutor.Result{StdErr: "Backint installation: FAILED\n", Error: errors.New("exit status 1"), ExitCode: 1, ExitStatusParsed: true},
+			want:       subcommands.ExitFailure,
+			wantParams: sidAdmCommand("tstadm", "installbackint", "-sid=TST"),
+		},
+		{
+			name:       "InstallBackintUsageError",
+			b:          InstallBackint{SID: "TST"},
+			result:     commandlineexecutor.Result{Error: errors.New("exit status 2"), ExitCode: 2, ExitStatusParsed: true},
+			want:       subcommands.ExitUsageError,
+			wantParams: sidAdmCommand("tstadm", "installbackint", "-sid=TST"),
+		},
+		{
+			name:       "Success",
+			b:          InstallBackint{SID: "TST"},
+			result:     commandlineexecutor.Result{StdOut: "Backint installation: SUCCESS\n"},
+			want:       subcommands.ExitSuccess,
+			wantParams: sidAdmCommand("tstadm", "installbackint", "-sid=TST"),
+		},
+		{
+			name:       "SuccessLowercaseSID",
+			b:          InstallBackint{SID: "deh"},
+			want:       subcommands.ExitSuccess,
+			wantParams: sidAdmCommand("dehadm", "installbackint", "-sid=deh"),
+		},
+		{
+			name: "SuccessWithLogFlags",
+			b: InstallBackint{
+				SID:      "TST",
+				logLevel: "debug",
+				logPath:  "/tmp/installbackint.log",
+			},
+			want:       subcommands.ExitSuccess,
+			wantParams: sidAdmCommand("tstadm", "installbackint", "-sid=TST", "-loglevel=debug", "-log-path=/tmp/installbackint.log"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(sidAdmMarkerEnv, test.sidAdmMarker)
+			var gotParams []commandlineexecutor.Params
+			test.b.exec = func(_ context.Context, p commandlineexecutor.Params) commandlineexecutor.Result {
+				gotParams = append(gotParams, p)
+				return test.result
+			}
+			test.b.oteLogger = onetime.CreateOTELogger(false)
+
+			got, gotErr := test.b.runAsSIDAdm(t.Context())
+
+			if got != test.want || !cmp.Equal(gotErr, test.wantErr, cmpopts.EquateErrors()) {
+				t.Errorf("runAsSIDAdm() with sid %q, $%s %q, command result %+v = (%v, %v), want (%v, %v)", test.b.SID, sidAdmMarkerEnv, test.sidAdmMarker, test.result, got, gotErr, test.want, test.wantErr)
+			}
+			if diff := cmp.Diff(test.wantParams, gotParams); diff != "" {
+				t.Errorf("runAsSIDAdm() with sid %q, $%s %q ran unexpected commands (-want +got):\n%s", test.b.SID, sidAdmMarkerEnv, test.sidAdmMarker, diff)
+			}
+		})
+	}
+}
+
+func TestRunInvalidSID(t *testing.T) {
+	tests := []struct {
+		name   string
+		sid    string
+		envSID string
+	}{
+		{
+			name: "PathTraversal",
+			sid:  "../../tmp",
+		},
+		{
+			name: "TooLong",
+			sid:  "TEST",
+		},
+		{
+			name: "TooShort",
+			sid:  "TS",
+		},
+		{
+			name: "StartsWithDigit",
+			sid:  "1ST",
+		},
+		{
+			name:   "FromEnvironment",
+			envSID: "T/T",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("SAPSYSTEMNAME", test.envSID)
+			b := InstallBackint{SID: test.sid}
+
+			got := b.Run(t.Context(), onetime.CreateRunOptions(nil, false))
+
+			if got != subcommands.ExitUsageError {
+				t.Errorf("Run() with sid %q, $SAPSYSTEMNAME %q = %v, want %v", test.sid, test.envSID, got, subcommands.ExitUsageError)
+			}
+		})
 	}
 }
 
